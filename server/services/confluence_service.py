@@ -170,6 +170,14 @@ class ConfluenceService:
         except Exception as e:
             print(f"Error in get_page_contents for parent {parent_page_id}: {e}")
             return []
+    
+    def get_ancestors(self, page_id: str) -> List[Ancestor]:
+        try:
+            ancestors_data = self.confluence.get_page_ancestors(page_id)
+            return [Ancestor(id=a['id'], title=a['title']) for a in ancestors_data]
+        except Exception as e:
+            print(f"Error fetching ancestors for page ID {page_id}: {e}")
+            return []
 
     def get_article_by_id(self, page_id: str) -> Article:
         try:
