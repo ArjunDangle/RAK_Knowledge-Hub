@@ -11,6 +11,7 @@ interface SiteHeaderProps {
   variant?: 'landing' | 'knowledge';
 }
 
+// The "export" keyword here is the crucial part that was likely missing.
 export function SiteHeader({ showSidebarToggle = false, onSidebarToggle, variant = 'landing' }: SiteHeaderProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();

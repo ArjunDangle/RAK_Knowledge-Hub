@@ -45,3 +45,9 @@ class Article(BaseModel):
 
 # NEW: Define a type that can be either a Subsection or an Article
 PageContentItem = Union[Subsection, Article]
+
+# Add this class to the end of the file
+
+class Ancestor(BaseModel):
+    id: str
+    title: str

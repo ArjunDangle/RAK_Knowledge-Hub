@@ -93,3 +93,9 @@ export async function getAllTags(): Promise<Tag[]> {
     { id: '3', name: 'Troubleshooting', slug: 'troubleshooting' },
   ]);
 }
+
+export async function getAncestors(pageId: string): Promise<{ id: string; title: string }[]> {
+  if (!pageId) return [];
+  const response = await fetch(`${API_BASE_URL}/ancestors/${pageId}`);
+  return handleResponse<{ id: string; title: string }[]>(response);
+}

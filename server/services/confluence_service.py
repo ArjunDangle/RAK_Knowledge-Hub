@@ -4,7 +4,8 @@ from typing import List, Dict, Union
 from atlassian import Confluence
 from bs4 import BeautifulSoup
 from config import Settings
-from schemas.content_schemas import Article, Tag, Subsection, GroupInfo, PageContentItem
+# --- THIS IS THE CORRECTED LINE ---
+from schemas.content_schemas import Article, Tag, Subsection, GroupInfo, PageContentItem, Ancestor
 
 class ConfluenceService:
     def __init__(self, settings: Settings):
@@ -15,10 +16,7 @@ class ConfluenceService:
             password=self.settings.confluence_api_token,
             cloud=True
         )
-        # This stores {'departments': '123', 'tools': '456', ...}
         self.root_page_ids: Dict[str, str] = self._discover_root_pages()
-        # --- NEW: Create a reverse map for easy lookup ---
-        # This will store {'123': 'departments', '456': 'tools', ...}
         self.id_to_group_slug_map: Dict[str, str] = {v: k for k, v in self.root_page_ids.items()}
         
         if not self.root_page_ids:
@@ -40,7 +38,7 @@ class ConfluenceService:
                     parent_info = results[0]['content'].get('parent')
                     if parent_info is None:
                         page_id = results[0]['content']['id']
-                        discovered_ids[slug] = page_id # Use the correct plural slug as the key
+                        discovered_ids[slug] = page_id
                         print(f"  -> MATCH FOUND: '{title}' -> ID: {page_id}")
                     else:
                         print(f"  -> WARNING: Found page '{title}' but it is not a top-level page. Skipping.")
@@ -62,17 +60,13 @@ class ConfluenceService:
         soup = BeautifulSoup(html_content, 'html.parser')
         return soup.get_text(" ", strip=True)
         
-    # --- COMPLETELY REWRITTEN HELPER FUNCTION ---
-    # This now uses the reliable page ID to find the group, not the title.
     def _get_group_from_ancestors(self, ancestors: List[Dict]) -> str:
-        # Get the list of known root page IDs we found at startup
         known_root_ids = self.id_to_group_slug_map.keys()
         for ancestor in ancestors:
             ancestor_id = ancestor.get('id')
             if ancestor_id in known_root_ids:
-                # If the ancestor's ID is a known root ID, return its proper slug (e.g., 'departments')
                 return self.id_to_group_slug_map[ancestor_id]
-        return "" # Return empty string if no match is found
+        return ""
 
     def _transform_page_to_article(self, page_data: dict, group_slug: str, subsection_slug: str) -> Article:
         html_content = page_data.get("body", {}).get("view", {}).get("value", "")
@@ -176,6 +170,14 @@ class ConfluenceService:
         except Exception as e:
             print(f"Error fetching page ID {page_id}: {e}")
             return None
+
+    def get_ancestors(self, page_id: str) -> List[Ancestor]:
+        try:
+            ancestors_data = self.confluence.get_page_ancestors(page_id)
+            return [Ancestor(id=a['id'], title=a['title']) for a in ancestors_data]
+        except Exception as e:
+            print(f"Error fetching ancestors for page ID {page_id}: {e}")
+            return []
     
     def get_whats_new(self, limit: int = 20) -> List[Article]:
         cql = f'space = "{self.settings.confluence_space_key}" and type = page order by lastModified desc'

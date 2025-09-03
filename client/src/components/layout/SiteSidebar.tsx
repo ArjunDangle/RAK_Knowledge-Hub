@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, Tag, Clock, TrendingUp, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Tag, Clock, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { getSubsectionsByGroup } from "@/lib/api/api-client";
+import { SidebarNode } from "./SidebarNode";
 
 interface SidebarProps {
   isCollapsed: boolean;
@@ -21,19 +22,15 @@ const quickLinks = [
 
 const topTags = ["Getting Started", "Configuration", "Best Practices", "API", "Security"];
 
-// This is our new dynamic section component
-const DynamicNavSection = ({ title, group }: { title: string, group: 'departments' | 'resource-centre' | 'tools' }) => {
-  const location = useLocation();
+const SidebarSection = ({ group }: { group: 'departments' | 'resource-centre' | 'tools' }) => {
   const { data: items, isLoading } = useQuery({
     queryKey: ['sidebar-subsections', group],
     queryFn: () => getSubsectionsByGroup(group)
   });
 
-  const isActiveRoute = (href: string) => location.pathname === href;
-
   if (isLoading) {
     return (
-      <div className="space-y-2 px-3">
+      <div className="space-y-2">
         {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
       </div>
     );
@@ -41,20 +38,7 @@ const DynamicNavSection = ({ title, group }: { title: string, group: 'department
 
   return (
     <div className="space-y-1">
-      {items?.map((item) => (
-        <Link
-          key={item.id}
-          to={`/page/${item.id}`} // <-- CORRECT ID-BASED LINK
-          className={cn(
-            "flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors",
-            "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-            isActiveRoute(`/page/${item.id}`) && "bg-sidebar-primary text-sidebar-primary-foreground"
-          )}
-        >
-          <span className="truncate">{item.title}</span>
-          <Badge variant="secondary" className="ml-2 h-5 text-xs">{item.articleCount}</Badge>
-        </Link>
-      ))}
+      {items?.map((item) => <SidebarNode key={item.id} item={item} level={0} />)}
     </div>
   );
 };
@@ -86,7 +70,7 @@ export function SiteSidebar({ isCollapsed, onCollapseChange }: SidebarProps) {
   ];
 
   return (
-    <aside className={cn("flex flex-col bg-sidebar border-r border-sidebar-border transition-all duration-300", isCollapsed ? "w-16" : "w-64")}>
+    <aside className={cn("flex flex-col bg-sidebar border-r border-sidebar-border transition-colors duration-300 w-full h-full")}>
       <div className="flex items-center justify-between p-4 border-b border-sidebar-border">
         {!isCollapsed && <h2 className="font-semibold text-sidebar-foreground">Navigation</h2>}
         <Button variant="ghost" size="sm" onClick={() => onCollapseChange(!isCollapsed)} className="h-8 w-8 p-0 text-sidebar-foreground hover:bg-sidebar-accent">
@@ -94,25 +78,25 @@ export function SiteSidebar({ isCollapsed, onCollapseChange }: SidebarProps) {
         </Button>
       </div>
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-6">
+        <div className="p-2 space-y-4">
           {navSections.map((section) => (
             <div key={section.title}>
-              <Button variant="ghost" onClick={() => !isCollapsed && toggleSection(section.title)} className={cn("w-full justify-start text-sidebar-foreground font-medium mb-2", isCollapsed && "justify-center px-0")}>
+              <Button variant="ghost" onClick={() => !isCollapsed && toggleSection(section.title)} className={cn("w-full justify-start text-sidebar-foreground font-medium mb-1", isCollapsed && "justify-center px-0")}>
                 {!isCollapsed && (
                   <>
-                    <span>{section.title}</span>
+                    <span className="text-sm">{section.title}</span>
                     <ChevronDown className={cn("ml-auto h-4 w-4 transition-transform", !expandedSections[section.title] && "-rotate-90")} />
                   </>
                 )}
-                {isCollapsed && <div className="h-2 w-2 rounded-full bg-sidebar-primary" />}
+                {isCollapsed && <div className="h-1.5 w-1.5 rounded-full bg-sidebar-primary" />}
               </Button>
-              {(!isCollapsed && expandedSections[section.title]) && <DynamicNavSection title={section.title} group={section.group} />}
+              {(!isCollapsed && expandedSections[section.title]) && <SidebarSection group={section.group} />}
             </div>
           ))}
           {!isCollapsed && (
             <>
               <div>
-                <h3 className="font-medium text-sidebar-foreground mb-2">Quick Links</h3>
+                <h3 className="font-medium text-sidebar-foreground mb-2 px-3 text-sm">Quick Links</h3>
                 <div className="space-y-1">
                   {quickLinks.map((link) => (
                     <Link key={link.href} to={link.href} className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors">
@@ -122,8 +106,8 @@ export function SiteSidebar({ isCollapsed, onCollapseChange }: SidebarProps) {
                 </div>
               </div>
               <div>
-                <div className="flex items-center gap-2 mb-2"><Tag className="h-4 w-4 text-sidebar-foreground" /><h3 className="font-medium text-sidebar-foreground">Popular Tags</h3></div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex items-center gap-2 mb-2 px-3"><Tag className="h-4 w-4 text-sidebar-foreground" /><h3 className="font-medium text-sidebar-foreground text-sm">Popular Tags</h3></div>
+                <div className="flex flex-wrap gap-2 px-3">
                   {topTags.map((tag) => (
                     <Link key={tag} to={`/search?tags=${encodeURIComponent(tag.toLowerCase().replace(/\s+/g, '-'))}`}>
                       <Badge variant="outline" className="text-xs cursor-pointer hover:bg-sidebar-accent transition-colors">{tag}</Badge>

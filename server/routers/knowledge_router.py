@@ -39,6 +39,11 @@ def get_page_by_id(page_id: str):
         raise HTTPException(status_code=404, detail=f"Page with ID '{page_id}' not found.")
     return page
 
+@router.get("/ancestors/{page_id}", response_model=List[content_schemas.Ancestor], tags=["Knowledge Hub"])
+def get_ancestors(page_id: str):
+    """Gets the ancestor path for a given page ID."""
+    return confluence_service.get_ancestors(page_id)
+
 @router.get("/search", response_model=List[content_schemas.Article], tags=["Knowledge Hub"])
 def search_knowledge_hub(q: str = Query(..., min_length=3), tags: List[str] = Query(None)):
     return confluence_service.search_content(query=q, labels=tags)
