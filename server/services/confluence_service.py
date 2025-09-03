@@ -15,10 +15,7 @@ class ConfluenceService:
             password=self.settings.confluence_api_token,
             cloud=True
         )
-        # This stores {'departments': '123', 'tools': '456', ...}
         self.root_page_ids: Dict[str, str] = self._discover_root_pages()
-        # --- NEW: Create a reverse map for easy lookup ---
-        # This will store {'123': 'departments', '456': 'tools', ...}
         self.id_to_group_slug_map: Dict[str, str] = {v: k for k, v in self.root_page_ids.items()}
         
         if not self.root_page_ids:
@@ -33,19 +30,16 @@ class ConfluenceService:
 
         for title, slug in expected_titles.items():
             try:
-                cql = f'space = "{space_key}" and title = "{title}"'
-                results = self.confluence.cql(cql, limit=1).get('results', [])
+                # Using a direct GET request for better reliability
+                search_path = f'/rest/api/content?spaceKey={space_key}&title={title}&limit=1'
+                results = self.confluence.get(search_path).get('results', [])
                 
-                if results:
-                    parent_info = results[0]['content'].get('parent')
-                    if parent_info is None:
-                        page_id = results[0]['content']['id']
-                        discovered_ids[slug] = page_id # Use the correct plural slug as the key
-                        print(f"  -> MATCH FOUND: '{title}' -> ID: {page_id}")
-                    else:
-                        print(f"  -> WARNING: Found page '{title}' but it is not a top-level page. Skipping.")
+                if results and not results[0].get('parent'):
+                    page_id = results[0]['id']
+                    discovered_ids[slug] = page_id
+                    print(f"  -> MATCH FOUND: '{title}' -> ID: {page_id}")
                 else:
-                    print(f"  -> WARNING: Could not find a page with the exact title '{title}' in space '{space_key}'.")
+                    print(f"  -> WARNING: Could not find a top-level page with the exact title '{title}'.")
             except Exception as e:
                 print(f"Error searching for page titled '{title}': {e}")
         
@@ -62,19 +56,23 @@ class ConfluenceService:
         soup = BeautifulSoup(html_content, 'html.parser')
         return soup.get_text(" ", strip=True)
         
-    # --- COMPLETELY REWRITTEN HELPER FUNCTION ---
-    # This now uses the reliable page ID to find the group, not the title.
     def _get_group_from_ancestors(self, ancestors: List[Dict]) -> str:
-        # Get the list of known root page IDs we found at startup
         known_root_ids = self.id_to_group_slug_map.keys()
         for ancestor in ancestors:
             ancestor_id = ancestor.get('id')
             if ancestor_id in known_root_ids:
-                # If the ancestor's ID is a known root ID, return its proper slug (e.g., 'departments')
                 return self.id_to_group_slug_map[ancestor_id]
-        return "" # Return empty string if no match is found
+        return ""
 
-    def _transform_page_to_article(self, page_data: dict, group_slug: str, subsection_slug: str) -> Article:
+    def _transform_page_to_article(self, page_data: dict) -> Article:
+        ancestors = page_data.get('ancestors', [])
+        if not ancestors: return None
+
+        group_slug = self._get_group_from_ancestors(ancestors)
+        if not group_slug: return None
+        
+        subsection_slug = self._slugify(ancestors[-1]['title']) if ancestors else ""
+        
         html_content = page_data.get("body", {}).get("view", {}).get("value", "")
         plain_text = self._get_plain_text(html_content)
         word_count = len(plain_text.split())
@@ -88,7 +86,13 @@ class ConfluenceService:
         article_data = { "id": page_data["id"], "slug": self._slugify(page_data["title"]), "title": page_data["title"], "excerpt": excerpt, "html": html_content, "tags": tags, "group": group_slug, "subsection": subsection_slug, "updatedAt": page_data["version"]["when"], "views": 0, "readMinutes": read_minutes, "author": author_name }
         return Article.model_validate(article_data)
 
-    def _transform_page_to_subsection(self, page_data: dict, group_slug: str) -> Subsection:
+    def _transform_page_to_subsection(self, page_data: dict) -> Subsection:
+        ancestors = page_data.get('ancestors', [])
+        if not ancestors: return None
+
+        group_slug = self._get_group_from_ancestors(ancestors)
+        if not group_slug: return None
+
         raw_labels = page_data.get("metadata", {}).get("labels", {}).get("results", [])
         tags = [Tag(id=label["id"], name=label["name"], slug=self._slugify(label["name"])) for label in raw_labels]
         html_content = page_data.get("body", {}).get("view", {}).get("value", "")
@@ -100,6 +104,22 @@ class ConfluenceService:
         
         subsection_data = { "id": page_data["id"], "slug": self._slugify(page_data["title"]), "title": page_data["title"], "description": description or "No description available.", "group": group_slug, "tags": tags, "articleCount": article_count, "updatedAt": page_data["version"]["when"], }
         return Subsection.model_validate(subsection_data)
+
+    def _fetch_and_transform_articles_from_cql(self, cql: str, limit: int) -> List[Article]:
+        """A more reliable helper to fetch and transform articles from a CQL query."""
+        try:
+            search_path = f'/rest/api/content/search?cql={cql}&limit={limit}&expand=body.view,version,metadata.labels,ancestors'
+            results = self.confluence.get(search_path).get('results', [])
+            
+            articles = []
+            for page_data in results:
+                transformed_article = self._transform_page_to_article(page_data)
+                if transformed_article:
+                    articles.append(transformed_article)
+            return articles
+        except Exception as e:
+            print(f"Error during CQL fetch and transform: {e}")
+            return []
         
     def get_groups(self) -> List[GroupInfo]:
         return [
@@ -112,40 +132,38 @@ class ConfluenceService:
         root_page_id = self.root_page_ids.get(group_slug)
         if not root_page_id: return []
         
-        subsection_stubs = list(self.confluence.get_child_pages(root_page_id))
-        if not subsection_stubs: return []
-        
-        detailed_subsections = []
-        for stub in subsection_stubs:
-            try:
-                page_details = self.confluence.get_page_by_id(stub['id'], expand="version,metadata.labels,body.view")
+        try:
+            child_pages_stubs = list(self.confluence.get_child_pages(root_page_id))
+            
+            subsections = []
+            for stub in child_pages_stubs:
+                page_details = self.confluence.get_page_by_id(stub['id'], expand="version,metadata.labels,body.view,ancestors")
                 if page_details:
-                    detailed_subsections.append(page_details)
-            except Exception as e:
-                print(f"Could not fetch details for child page {stub['id']}: {e}")
-        
-        return [self._transform_page_to_subsection(page, group_slug) for page in detailed_subsections]
+                    transformed_subsection = self._transform_page_to_subsection(page_details)
+                    if transformed_subsection:
+                        subsections.append(transformed_subsection)
+            return subsections
+        except Exception as e:
+            print(f"Could not fetch subsections for group '{group_slug}': {e}")
+            return []
 
     def get_page_contents(self, parent_page_id: str) -> List[PageContentItem]:
         try:
-            ancestors = self.confluence.get_page_ancestors(parent_page_id)
-            if not ancestors: return []
-
-            group_slug = self._get_group_from_ancestors(ancestors)
-            
-            parent_page = self.confluence.get_page_by_id(parent_page_id)
-            parent_slug = self._slugify(parent_page['title'])
             child_page_stubs = list(self.confluence.get_child_pages(parent_page_id))
             
             content_items = []
             for stub in child_page_stubs:
-                page = self.confluence.get_page_by_id(stub['id'], expand="body.view,version,metadata.labels")
+                page = self.confluence.get_page_by_id(stub['id'], expand="body.view,version,metadata.labels,ancestors")
+                
+                # Check if the page has its own children to determine if it's a subsection or article
                 grand_children = list(self.confluence.get_child_pages(page['id']))
                 
                 if len(grand_children) > 0:
-                    content_items.append(self._transform_page_to_subsection(page, group_slug))
+                    subsection = self._transform_page_to_subsection(page)
+                    if subsection: content_items.append(subsection)
                 else:
-                    content_items.append(self._transform_page_to_article(page, group_slug, parent_slug))
+                    article = self._transform_page_to_article(page)
+                    if article: content_items.append(article)
             
             return content_items
         except Exception as e:
@@ -155,12 +173,7 @@ class ConfluenceService:
     def get_article_by_id(self, page_id: str) -> Article:
         try:
             article_page = self.confluence.get_page_by_id(page_id, expand="body.view,version,metadata.labels,ancestors")
-            ancestors = article_page.get('ancestors', [])
-            if not ancestors: return None
-            
-            group_slug = self._get_group_from_ancestors(ancestors)
-            subsection_slug = self._slugify(ancestors[-1]['title'])
-            return self._transform_page_to_article(article_page, group_slug, subsection_slug)
+            return self._transform_page_to_article(article_page)
         except Exception as e:
             print(f"Error fetching article ID {page_id}: {e}")
             return None
@@ -168,42 +181,30 @@ class ConfluenceService:
     def get_page_by_id(self, page_id: str) -> Subsection:
         try:
             page_data = self.confluence.get_page_by_id(page_id, expand="version,metadata.labels,body.view,ancestors")
-            ancestors = page_data.get('ancestors', [])
-            if not ancestors: return None
-                
-            group_slug = self._get_group_from_ancestors(ancestors)
-            return self._transform_page_to_subsection(page_data, group_slug)
+            return self._transform_page_to_subsection(page_data)
         except Exception as e:
             print(f"Error fetching page ID {page_id}: {e}")
             return None
     
-    def get_whats_new(self, limit: int = 20) -> List[Article]:
+    def get_recent_articles(self, limit: int = 6) -> List[Article]:
+        """Fetches the most recently modified articles."""
         cql = f'space = "{self.settings.confluence_space_key}" and type = page order by lastModified desc'
-        results = self.confluence.cql(cql, limit=limit, expand="body.view,version,metadata.labels,ancestors")
-        if not results or 'results' not in results: return []
-        articles = []
-        for result in results['results']:
-            article_page = result['content']
-            ancestors = article_page.get('ancestors', [])
-            if not ancestors: continue
-            group_slug = self._get_group_from_ancestors(ancestors)
-            if not group_slug: continue
-            subsection_slug = self._slugify(ancestors[-1]['title'])
-            articles.append(self._transform_page_to_article(article_page, group_slug, subsection_slug))
-        return articles
+        return self._fetch_and_transform_articles_from_cql(cql, limit)
+
+    def get_popular_articles(self, limit: int = 6) -> List[Article]:
+        """
+        Fetches popular articles by creation date as a proxy.
+        NOTE: Confluence API does not support sorting by views.
+        """
+        cql = f'space = "{self.settings.confluence_space_key}" and type = page order by created desc'
+        return self._fetch_and_transform_articles_from_cql(cql, limit)
+
+    def get_whats_new(self, limit: int = 20) -> List[Article]:
+        """Fetches content for the 'What's New' page, typically recent articles."""
+        return self.get_recent_articles(limit)
 
     def search_content(self, query: str, labels: List[str] = None) -> List[Article]:
-        label_cql = f" and label in ({','.join(f"'{l}'" for l in labels)})" if labels else ""
+        label_cql = f" and label in ({','.join(f'\"{l}\"' for l in labels)})" if labels else ""
         cql = f'space = "{self.settings.confluence_space_key}" and type = page and text ~ "{query}"{label_cql} order by lastModified desc'
-        results = self.confluence.cql(cql, limit=50, expand="body.view,version,metadata.labels,ancestors")
-        if not results or 'results' not in results: return []
-        articles = []
-        for result in results['results']:
-            article_page = result['content']
-            ancestors = article_page.get('ancestors', [])
-            if not ancestors: continue
-            group_slug = self._get_group_from_ancestors(ancestors)
-            if not group_slug: continue
-            subsection_slug = self._slugify(ancestors[-1]['title'])
-            articles.append(self._transform_page_to_article(article_page, group_slug, subsection_slug))
-        return articles
+        return self._fetch_and_transform_articles_from_cql(cql, 50)
+

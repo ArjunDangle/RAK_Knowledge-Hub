@@ -1,5 +1,4 @@
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card";
 import { Building2, BookOpen, Wrench, ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Group, Subsection } from "@/lib/types/content";
@@ -12,63 +11,58 @@ interface CategoryCardProps {
   subsection?: Subsection;
   articleCount?: number;
   updatedAt?: string;
-  href: string; // This will now be an ID-based URL
+  href: string;
   className?: string;
 }
 
 const groupIcons = {
   departments: Building2,
   'resource-centre': BookOpen,
-  tools: Wrench
+  tools: Wrench,
 };
 
-export function CategoryCard({ title, description, group, subsection, articleCount, updatedAt, href, className }: CategoryCardProps) {
-  const IconComponent = group ? groupIcons[group] : ChevronRight;
-  
-  const formatDate = (dateString: string) => {
+export function CategoryCard({ title, description, group, articleCount, updatedAt, href, className }: CategoryCardProps) {
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return '';
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric'
     });
   };
 
+  const IconComponent = group ? groupIcons[group] : ChevronRight;
+
   return (
     <Card className={cn(
-      "group transition-all duration-200 hover:shadow-md hover:-translate-y-1 border-border bg-card",
-      "hover:border-primary/20 cursor-pointer",
+      "group flex flex-col transition-all duration-300 bg-card border-border hover:border-primary/40 hover:shadow-lg",
+      "cursor-pointer overflow-hidden",
       className
     )}>
-      {/* --- LINK NOW USES THE ID-BASED HREF PROP --- */}
-      <Link to={href} className="block h-full">
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10 text-primary group-hover:bg-primary/20 transition-colors">
-                <IconComponent className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-card-foreground group-hover:text-primary transition-colors">{title}</h3>
-                {subsection && (
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {subsection.tags.slice(0, 2).map((tag) => (
-                      <Badge key={tag.id} variant="secondary" className="text-xs px-2 py-0">{tag.name}</Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
+      <Link to={href} className="flex flex-col h-full">
+        <CardHeader className="flex flex-row items-start justify-between gap-4 p-4">
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0 p-3 rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+              <IconComponent className="h-6 w-6" />
             </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+            <h3 className="font-semibold text-lg text-card-foreground transition-colors group-hover:text-primary pt-1">{title}</h3>
           </div>
+          <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary flex-shrink-0 mt-2" />
         </CardHeader>
         
-        <CardContent className="pt-0">
-          <p className="text-muted-foreground text-sm leading-relaxed mb-4">{description}</p>
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            {articleCount !== undefined && (<span>{articleCount} {articleCount === 1 ? 'item' : 'items'}</span>)}
-            {updatedAt && (<span>Updated {formatDate(updatedAt)}</span>)}
-          </div>
+        <CardContent className="flex-grow px-4 pb-4">
+          <p className="text-muted-foreground text-sm leading-relaxed">{description}</p>
         </CardContent>
+
+        <CardFooter className="flex items-center justify-between text-xs text-muted-foreground p-4 mt-auto bg-surface-variant/50 border-t border-border">
+          {articleCount !== undefined && (
+            <span>{articleCount} {articleCount === 1 ? 'item' : 'items'}</span>
+          )}
+          {updatedAt && (
+            <span>Updated {formatDate(updatedAt)}</span>
+          )}
+        </CardFooter>
       </Link>
     </Card>
   );
 }
+
