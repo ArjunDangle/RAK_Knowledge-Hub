@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { formatRelativeTime } from "@/lib/utils/date";
+import ChatbotWidget from "@/components/chatbot/ChatbotWidget"
 
 export default function Landing() {
   const { data: groups, isLoading: groupsLoading } = useQuery({ queryKey: ['groups'], queryFn: getGroups });
