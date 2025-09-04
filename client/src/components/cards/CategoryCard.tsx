@@ -34,14 +34,14 @@ export function CategoryCard({ title, description, group, articleCount, updatedA
 
   return (
     <Card className={cn(
-      "group flex flex-col transition-all duration-300 bg-card border-border hover:border-primary/40 hover:shadow-lg",
+      "group flex flex-col transition-all duration-300 bg-card border border-border shadow-md hover:shadow-xl hover:border-primary hover:-translate-y-1",
       "cursor-pointer overflow-hidden",
       className
     )}>
       <Link to={href} className="flex flex-col h-full">
         <CardHeader className="flex flex-row items-start justify-between gap-4 p-4">
           <div className="flex items-start gap-4">
-            <div className="flex-shrink-0 p-3 rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+            <div className="flex-shrink-0 p-3 rounded-lg bg-primary text-primary-foreground">
               <IconComponent className="h-6 w-6" />
             </div>
             <h3 className="font-semibold text-lg text-card-foreground transition-colors group-hover:text-primary pt-1">{title}</h3>
@@ -53,7 +53,7 @@ export function CategoryCard({ title, description, group, articleCount, updatedA
           <p className="text-muted-foreground text-sm leading-relaxed">{description}</p>
         </CardContent>
 
-        <CardFooter className="flex items-center justify-between text-xs text-muted-foreground p-4 mt-auto bg-surface-variant/50 border-t border-border">
+        <CardFooter className="flex items-center justify-between text-xs text-muted-foreground p-4 mt-auto bg-muted/50 border-t border-border">
           {articleCount !== undefined && (
             <span>{articleCount} {articleCount === 1 ? 'item' : 'items'}</span>
           )}
@@ -65,4 +65,3 @@ export function CategoryCard({ title, description, group, articleCount, updatedA
     </Card>
   );
 }
-

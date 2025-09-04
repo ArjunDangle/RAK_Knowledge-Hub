@@ -8,11 +8,9 @@ import { cn } from "@/lib/utils";
 interface SiteHeaderProps {
   showSidebarToggle?: boolean;
   onSidebarToggle?: () => void;
-  variant?: 'landing' | 'knowledge';
 }
 
-// The "export" keyword here is the crucial part that was likely missing.
-export function SiteHeader({ showSidebarToggle = false, onSidebarToggle, variant = 'landing' }: SiteHeaderProps) {
+export function SiteHeader({ showSidebarToggle = false, onSidebarToggle }: SiteHeaderProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
   
@@ -26,13 +24,10 @@ export function SiteHeader({ showSidebarToggle = false, onSidebarToggle, variant
   return (
     <header className={cn(
       "sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
-      "border-b border-border"
+      "shadow-sm"
     )}>
-      <div className={cn(
-        "flex h-16 items-center gap-4",
-        variant === 'landing' ? "container max-w-7xl mx-auto px-6" : "px-6"
-      )}>
-        {/* Sidebar Toggle (Knowledge Layout) */}
+      <div className="container max-w-7xl mx-auto flex h-16 items-center gap-4 px-6">
+        {/* Sidebar Toggle for mobile in Knowledge Layout */}
         {showSidebarToggle && onSidebarToggle && (
           <Button
             variant="ghost"
@@ -46,10 +41,10 @@ export function SiteHeader({ showSidebarToggle = false, onSidebarToggle, variant
         )}
         
         {/* Logo */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 mr-auto">
           <Link to="/" className="flex items-center space-x-3">
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">R</span>
+            <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center">
+              <span className="text-secondary-foreground font-bold text-sm">R</span>
             </div>
             <div className="hidden sm:block">
               <div className="font-semibold text-foreground">RAKwireless</div>
@@ -58,41 +53,38 @@ export function SiteHeader({ showSidebarToggle = false, onSidebarToggle, variant
           </Link>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex items-center space-x-6 text-sm font-medium ml-auto">
-          <Link
-            to="/whats-new"
-            className="text-muted-foreground hover:text-foreground transition-colors"
-          >
-            What's New
-          </Link>
-        </nav>
+        {/* Navigation & Search */}
+        <div className="flex items-center gap-4">
+          <nav className="hidden md:flex items-center">
+            <Button variant="ghost" asChild>
+              <Link
+                to="/whats-new"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                What's New
+              </Link>
+            </Button>
+          </nav>
 
-        {/* Search (compact for knowledge layout) */}
-        {variant === 'knowledge' && (
-          <form onSubmit={handleSearch} className="flex items-center space-x-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 w-64 h-9"
-              />
-            </div>
+          {/* Unified Search Bar */}
+          <form onSubmit={handleSearch} className="hidden md:flex items-center rounded-full bg-muted/60 px-3 h-9">
+            <Search className="h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-2 w-52 h-full bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            />
           </form>
-        )}
-
-        {/* Search Icon (landing layout) */}
-        {variant === 'landing' && (
-          <Button variant="ghost" size="sm" asChild>
+          {/* Search Icon for mobile */}
+          <Button variant="ghost" size="icon" className="md:hidden" asChild>
             <Link to="/search">
               <Search className="h-5 w-5" />
               <span className="sr-only">Search</span>
             </Link>
           </Button>
-        )}
+        </div>
       </div>
     </header>
   );

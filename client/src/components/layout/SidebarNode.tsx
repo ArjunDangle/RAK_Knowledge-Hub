@@ -62,22 +62,10 @@ export function SidebarNode({ item, level }: SidebarNodeProps) {
           )}
         </div>
 
-        <Link to={linkUrl} className="flex-1 py-2 truncate" title={item.title}>
+        {/* --- CLASS UPDATED TO ALLOW TEXT WRAPPING --- */}
+        <Link to={linkUrl} className="flex-1 py-2 whitespace-normal break-words" title={item.title}>
           {item.title}
         </Link>
-        
-        {/* --- THIS BLOCK HAS BEEN REMOVED ---
-        
-        {isFolder && (
-          <Badge
-            variant={isCurrentPage ? "default" : "secondary"}
-            className="mr-2 h-5 text-xs flex-shrink-0"
-          >
-            {item.articleCount}
-          </Badge>
-        )}
-
-        --- END OF REMOVED BLOCK --- */}
       </div>
 
       {isExpanded && isFolder && (

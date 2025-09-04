@@ -8,22 +8,22 @@ import { ArticleCard } from "@/components/cards/ArticleCard";
 import { ArticleCardSkeleton } from "@/components/ui/loading-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KnowledgeLayout } from "./KnowledgeLayout";
-import { getArticleById, getRelatedArticles } from "@/lib/api/api-client"; // <-- CHANGED
+import { getArticleById, getRelatedArticles } from "@/lib/api/api-client";
 import { toast } from "@/components/ui/sonner";
 
 export default function ArticlePage() {
-  const { pageId } = useParams<{ pageId: string }>(); // <-- CHANGED from slug
+  const { pageId } = useParams<{ pageId: string }>();
 
   const { data: article, isLoading: articleLoading, isError: articleError } = useQuery({
-    queryKey: ['article', pageId], // <-- CHANGED
-    queryFn: () => pageId ? getArticleById(pageId) : Promise.resolve(null), // <-- CHANGED
+    queryKey: ['article', pageId],
+    queryFn: () => pageId ? getArticleById(pageId) : Promise.resolve(null),
     enabled: !!pageId,
     retry: false,
   });
 
   const { data: relatedArticles, isLoading: relatedLoading } = useQuery({
     queryKey: ['relatedArticles', article?.id],
-    queryFn: () => article ? getRelatedArticles(article.tags, article.id) : Promise.resolve([]), // <-- CHANGED
+    queryFn: () => article ? getRelatedArticles(article.tags, article.id) : Promise.resolve([]),
     enabled: !!article,
   });
 
@@ -36,20 +36,19 @@ export default function ArticlePage() {
   }
 
   const groupLabels: { [key: string]: string } = { departments: 'Departments', 'resource-centre': 'Resource Centre', tools: 'Tools' };
-
   const breadcrumbs = [
     { label: groupLabels[article.group] || article.group, href: `/category/${article.group}` },
-    { label: article.subsection.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) }, // This won't be a link for now
+    { label: article.subsection.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) },
     { label: article.title }
   ];
 
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-
+  
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);
     toast.success("Link copied to clipboard!");
   };
-
+  
   const handlePrint = () => window.print();
 
   return (
@@ -71,7 +70,9 @@ export default function ArticlePage() {
         </header>
 
         <Separator className="mb-8" />
-        <article className="prose prose-gray dark:prose-invert max-w-none mb-12" dangerouslySetInnerHTML={{ __html: article.html }} />
+        
+        {/* --- CLASS UPDATED TO USE YOUR NEW CUSTOM TEMPLATE --- */}
+        <article className="prose dark:prose-invert max-w-none mb-12" dangerouslySetInnerHTML={{ __html: article.html }} />
 
         {relatedArticles && relatedArticles.length > 0 && (
           <section>

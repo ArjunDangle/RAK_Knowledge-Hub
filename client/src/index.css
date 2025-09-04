@@ -4,131 +4,105 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Google-inspired Knowledge Hub Design System */
 @layer base {
   :root {
-    /* Google-like neutral palette */
-    --background: 0 0% 100%;
-    --foreground: 220 9% 20%;
+    /* Backgrounds & Surfaces */
+    --background: 0 0% 98%; /* Lighter Platinum */
+    --foreground: 0 0% 21%; /* Jet */
+    --card: 0 0% 100%; /* White */
+    --card-foreground: 0 0% 21%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 21%;
+    --surface: 0 0% 100%;
+    --surface-variant: 0 0% 96%;
     
-    /* Surface colors */
-    --card: 0 0% 100%;
-    --card-foreground: 220 9% 20%;
-    --surface: 0 0% 99%;
-    --surface-variant: 220 13% 96%;
+    /* Primary (Caribbean Current) */
+    --primary: 184 31% 34%; /* Caribbean Current */
+    --primary-hover: 184 31% 29%;
+    --primary-foreground: 0 0% 100%; /* White */
+    --primary-subtle: 184 31% 95%;
+
+    /* Secondary (Indigo Dye) */
+    --secondary: 208 42% 27%; /* Indigo Dye */
+    --secondary-foreground: 0 0% 100%; /* White */
+    --secondary-hover: 208 42% 22%;
+
+    /* Muted */
+    --muted: 0 0% 96%; /* Platinum */
+    --muted-foreground: 0 0% 40%;
+    --muted-hover: 0 0% 92%;
     
-    /* Interactive elements */
-    --primary: 221 83% 53%;  /* Google Blue */
-    --primary-hover: 221 83% 48%;
-    --primary-foreground: 0 0% 100%;
-    --primary-subtle: 221 100% 97%;
+    /* Accent (Subtle Platinum) */
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 21%;
+    --accent-subtle: 0 0% 98%;
+
+    /* Borders & Inputs */
+    --border: 0 0% 85%; /* Platinum */
+    --border-strong: 0 0% 80%;
+    --input: 0 0% 94%;
+    --ring: 184 31% 34%; /* Caribbean Current */
     
-    /* Secondary & muted */
-    --secondary: 220 13% 96%;
-    --secondary-foreground: 220 9% 20%;
-    --secondary-hover: 220 13% 91%;
-    
-    --muted: 220 13% 96%;
-    --muted-foreground: 220 9% 46%;
-    --muted-hover: 220 13% 91%;
-    
-    /* Accent for highlights */
-    --accent: 45 100% 51%;  /* Warm accent */
-    --accent-foreground: 220 9% 20%;
-    --accent-subtle: 45 100% 96%;
-    
-    /* Status colors */
+    /* Status Colors */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-subtle: 0 84% 96%;
     --success: 142 76% 36%;
     --success-subtle: 142 76% 96%;
     --warning: 38 92% 50%;
     --warning-subtle: 38 92% 95%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --destructive-subtle: 0 84% 96%;
-    
-    /* Borders & inputs */
-    --border: 220 13% 91%;
-    --border-strong: 220 13% 80%;
-    --input: 220 13% 91%;
-    --ring: 221 83% 53%;
-    
-    /* Shadows */
-    --shadow-sm: 0 1px 2px 0 hsl(220 13% 69% / 0.05);
-    --shadow: 0 1px 3px 0 hsl(220 13% 69% / 0.1), 0 1px 2px -1px hsl(220 13% 69% / 0.1);
-    --shadow-md: 0 4px 6px -1px hsl(220 13% 69% / 0.1), 0 2px 4px -2px hsl(220 13% 69% / 0.1);
-    --shadow-lg: 0 10px 15px -3px hsl(220 13% 69% / 0.1), 0 4px 6px -4px hsl(220 13% 69% / 0.1);
-    --shadow-xl: 0 20px 25px -5px hsl(220 13% 69% / 0.1), 0 8px 10px -6px hsl(220 13% 69% / 0.1);
-    
-    /* Layout */
+
+    /* Sidebar (Dark Theme) */
+    --sidebar-background: 208 42% 27%; /* Indigo Dye */
+    --sidebar-foreground: 0 0% 100%; /* White */
+    --sidebar-border: 208 42% 32%;
+    /* --- UPDATED ACTIVE ITEM STYLES --- */
+    --sidebar-primary: 184 31% 34%; /* Caribbean Current */
+    --sidebar-primary-foreground: 0 0% 100%; /* White */
+    --sidebar-accent: 208 42% 30%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-ring: 0 0% 90%;
+
+    /* Shadows & Radius */
+    --shadow-sm: 0 1px 2px 0 hsl(0 0% 21% / 0.05);
+    --shadow: 0 1px 3px 0 hsl(0 0% 21% / 0.1), 0 1px 2px -1px hsl(0 0% 21% / 0.1);
+    --shadow-md: 0 4px 6px -1px hsl(0 0% 21% / 0.1), 0 2px 4px -2px hsl(0 0% 21% / 0.1);
+    --shadow-lg: 0 10px 15px -3px hsl(0 0% 21% / 0.1), 0 4px 6px -4px hsl(0 0% 21% / 0.1);
+    --shadow-xl: 0 20px 25px -5px hsl(0 0% 21% / 0.1), 0 8px 10px -6px hsl(0 0% 21% / 0.1);
     --radius: 8px;
-    --radius-sm: 4px;
-    --radius-lg: 12px;
-    --radius-xl: 16px;
-    
-    /* Sidebar specific */
-    --sidebar-background: 0 0% 99%;
-    --sidebar-foreground: 220 9% 20%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-primary: 221 83% 53%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 13% 96%;
-    --sidebar-accent-foreground: 220 9% 20%;
-    --sidebar-ring: 221 83% 53%;
   }
 
   .dark {
-    --background: 220 27% 8%;
-    --foreground: 220 9% 98%;
-    
-    --card: 220 27% 10%;
-    --card-foreground: 220 9% 98%;
-    --surface: 220 27% 9%;
-    --surface-variant: 220 27% 12%;
-    
-    --primary: 221 83% 63%;
-    --primary-hover: 221 83% 68%;
-    --primary-foreground: 220 27% 8%;
-    --primary-subtle: 221 83% 15%;
-    
-    --secondary: 220 27% 12%;
-    --secondary-foreground: 220 9% 98%;
-    --secondary-hover: 220 27% 15%;
-    
-    --muted: 220 27% 12%;
-    --muted-foreground: 220 9% 70%;
-    --muted-hover: 220 27% 15%;
-    
-    --accent: 45 100% 60%;
-    --accent-foreground: 220 27% 8%;
-    --accent-subtle: 45 100% 12%;
-    
-    --success: 142 76% 50%;
-    --success-subtle: 142 76% 12%;
-    --warning: 38 92% 60%;
-    --warning-subtle: 38 92% 12%;
-    --destructive: 0 84% 65%;
-    --destructive-foreground: 0 0% 100%;
-    --destructive-subtle: 0 84% 12%;
-    
-    --border: 220 27% 18%;
-    --border-strong: 220 27% 25%;
-    --input: 220 27% 18%;
-    --ring: 221 83% 63%;
-    
-    --shadow-sm: 0 1px 2px 0 hsl(220 27% 4% / 0.3);
-    --shadow: 0 1px 3px 0 hsl(220 27% 4% / 0.4), 0 1px 2px -1px hsl(220 27% 4% / 0.4);
-    --shadow-md: 0 4px 6px -1px hsl(220 27% 4% / 0.4), 0 2px 4px -2px hsl(220 27% 4% / 0.4);
-    --shadow-lg: 0 10px 15px -3px hsl(220 27% 4% / 0.4), 0 4px 6px -4px hsl(220 27% 4% / 0.4);
-    --shadow-xl: 0 20px 25px -5px hsl(220 27% 4% / 0.4), 0 8px 10px -6px hsl(220 27% 4% / 0.4);
-    
-    --sidebar-background: 220 27% 9%;
-    --sidebar-foreground: 220 9% 98%;
-    --sidebar-border: 220 27% 18%;
-    --sidebar-primary: 221 83% 63%;
-    --sidebar-primary-foreground: 220 27% 8%;
-    --sidebar-accent: 220 27% 12%;
-    --sidebar-accent-foreground: 220 9% 98%;
-    --sidebar-ring: 221 83% 63%;
+    --background: 0 0% 15%; /* Dark Jet */
+    --foreground: 0 0% 85%; /* Platinum */
+    --card: 0 0% 21%; /* Jet */
+    --card-foreground: 0 0% 90%;
+    --popover: 0 0% 15%;
+    --popover-foreground: 0 0% 90%;
+    --surface: 0 0% 18%;
+    --surface-variant: 0 0% 23%;
+
+    --primary: 184 31% 44%; /* Lighter Caribbean Current */
+    --primary-hover: 184 31% 49%;
+    --primary-foreground: 0 0% 100%;
+    --primary-subtle: 184 31% 15%;
+
+    --secondary: 208 42% 37%; /* Lighter Indigo Dye */
+    --secondary-foreground: 0 0% 100%;
+    --secondary-hover: 208 42% 42%;
+
+    --muted: 0 0% 23%;
+    --muted-foreground: 0 0% 60%;
+    --muted-hover: 0 0% 28%;
+
+    --accent: 0 0% 23%;
+    --accent-foreground: 0 0% 95%;
+    --accent-subtle: 184 31% 15%;
+
+    --border: 0 0% 30%;
+    --border-strong: 0 0% 40%;
+    --input: 0 0% 30%;
+    --ring: 184 31% 44%;
   }
 }
 
