@@ -45,7 +45,6 @@ export function SearchBar({
     if (onSearch) {
       onSearch(trimmedQuery, mode);
     } else {
-      // Navigate to search page
       const params = new URLSearchParams();
       if (trimmedQuery) params.append('q', trimmedQuery);
       params.append('mode', mode);
@@ -66,7 +65,6 @@ export function SearchBar({
         className
       )}
     >
-      {/* Mode Selector */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -101,7 +99,6 @@ export function SearchBar({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Search Input */}
       <div className="flex-1 relative">
         <Input
           type="search"
@@ -109,7 +106,7 @@ export function SearchBar({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className={cn(
-            "border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0",
+            "border-0 bg-transparent text-foreground focus-visible:ring-0 focus-visible:ring-offset-0",
             variant === 'hero' 
               ? "h-14 px-4 text-base placeholder:text-muted-foreground" 
               : "h-10 px-3 placeholder:text-muted-foreground"
@@ -117,7 +114,6 @@ export function SearchBar({
         />
       </div>
 
-      {/* Search Button */}
       <Button
         type="submit"
         variant="ghost"

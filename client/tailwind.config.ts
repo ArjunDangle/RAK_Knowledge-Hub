@@ -137,7 +137,7 @@ export default {
             '--tw-prose-pre-bg': 'hsl(var(--foreground))',
             '--tw-prose-th-borders': 'hsl(var(--border-strong))',
             '--tw-prose-td-borders': 'hsl(var(--border))',
-            '--tw-prose-invert-body': 'hsl(var(--foreground))',
+            '--tw-prose-invert-body': 'hsl(var(--primary-foreground))', // <-- THIS IS THE CHANGED LINE
             '--tw-prose-invert-headings': 'hsl(var(--secondary-foreground))',
             '--tw-prose-invert-lead': 'hsl(var(--muted-foreground))',
             '--tw-prose-invert-links': 'hsl(var(--primary))',
