@@ -5,7 +5,8 @@ import { CategoryCard } from "@/components/cards/CategoryCard";
 import { ArticleCard } from "@/components/cards/ArticleCard";
 import { CategoryCardSkeleton, ArticleCardSkeleton } from "@/components/ui/loading-skeleton";
 import { getGroups, getSubsectionsByGroup, getPopularArticles, getRecentArticles } from "@/lib/api/api-client";
-import { Group, Subsection } from "@/lib/types/content";
+import { Subsection } from "@/lib/types/content";
+import ChatbotWidget from "@/components/chatbot/ChatbotWidget";
 
 export default function Landing() {
   const { data: groups, isLoading: groupsLoading } = useQuery({ queryKey: ['groups'], queryFn: getGroups });
@@ -90,6 +91,7 @@ export default function Landing() {
         {renderArticleSection("Popular Articles", "Most viewed content across all categories", popularArticles, popularLoading)}
         {renderArticleSection("Recently Updated", "Latest updates and new content", recentArticles, recentLoading)}
       </main>
+      <ChatbotWidget />
     </div>
   );
 }

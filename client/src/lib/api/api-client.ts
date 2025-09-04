@@ -64,6 +64,10 @@ export async function getRelatedArticles(tags: Tag[], currentId: string, limit =
 export async function searchContent(filters: SearchFilters): Promise<Article[]> {
   const params = new URLSearchParams();
   if (filters.query) params.append('q', filters.query);
+  
+  // MODIFIED: Ensure the 'mode' parameter is always included in the API call
+  if (filters.mode) params.append('mode', filters.mode);
+  
   filters.tags.forEach(tag => params.append('tags', tag));
   if (filters.sort !== 'relevance') params.set('sort', filters.sort);
 

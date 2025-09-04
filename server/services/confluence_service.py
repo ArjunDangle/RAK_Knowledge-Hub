@@ -212,8 +212,32 @@ class ConfluenceService:
         """Fetches content for the 'What's New' page, typically recent articles."""
         return self.get_recent_articles(limit)
 
-    def search_content(self, query: str, labels: List[str] = None) -> List[Article]:
+    # MODIFIED: This method now builds a dynamic query based on the 'mode'.
+    def search_content(self, query: str, labels: List[str] = None, mode: str = "all") -> List[Article]:
+        cql_search_field = ""
+        
+        if mode == "title":
+            cql_search_field = f'title ~ "{query}"'
+        elif mode == "content":
+            cql_search_field = f'text ~ "{query}"'
+        elif mode == "tags":
+            # For tag search, we must search broadly and then filter in Python
+            # as CQL does not support searching for labels with a query string.
+            cql_search_field = f'text ~ "{query}"'
+        else:  # mode == "all"
+            cql_search_field = f'text ~ "{query}"'
+            
         label_cql = f" and label in ({','.join(f'\"{l}\"' for l in labels)})" if labels else ""
-        cql = f'space = "{self.settings.confluence_space_key}" and type = page and text ~ "{query}"{label_cql} order by lastModified desc'
-        return self._fetch_and_transform_articles_from_cql(cql, 50)
+        cql = f'space = "{self.settings.confluence_space_key}" and type = page and {cql_search_field}{label_cql} order by lastModified desc'
+        
+        articles = self._fetch_and_transform_articles_from_cql(cql, 50)
 
+        # If the mode was 'tags', we perform the post-fetch filtering here.
+        if mode == "tags":
+            filtered_articles = [
+                article for article in articles
+                if any(query.lower() in tag.name.lower() for tag in article.tags)
+            ]
+            return filtered_articles
+
+        return articles
