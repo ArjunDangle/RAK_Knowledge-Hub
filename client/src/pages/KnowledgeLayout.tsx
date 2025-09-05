@@ -40,6 +40,7 @@ export function KnowledgeLayout({ breadcrumbs, children }: KnowledgeLayoutProps)
           variant="knowledge"
           showSidebarToggle={true}
           onSidebarToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+          logoSrc="/rak-logo.png"
         />
         <ResizablePanelGroup direction="horizontal" className="h-[calc(100vh-4rem)]">
           {/* --- DEFAULT SIZE UPDATED TO 25% --- */}

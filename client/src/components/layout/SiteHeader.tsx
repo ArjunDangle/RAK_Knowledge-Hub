@@ -8,9 +8,14 @@ import { cn } from "@/lib/utils";
 interface SiteHeaderProps {
   showSidebarToggle?: boolean;
   onSidebarToggle?: () => void;
+  logoSrc?: string;
 }
 
-export function SiteHeader({ showSidebarToggle = false, onSidebarToggle }: SiteHeaderProps) {
+export function SiteHeader({ 
+  showSidebarToggle = false, 
+  onSidebarToggle, 
+  logoSrc 
+}: SiteHeaderProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
   
@@ -43,9 +48,16 @@ export function SiteHeader({ showSidebarToggle = false, onSidebarToggle }: SiteH
         {/* Logo */}
         <div className="flex items-center space-x-2 mr-auto">
           <Link to="/" className="flex items-center space-x-3">
-            <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center">
-              <span className="text-secondary-foreground font-bold text-sm">R</span>
-            </div>
+            {/* This will display your image or fall back to the "R" icon */}
+            {logoSrc ? (
+              <img src={logoSrc} alt="RAKwireless Logo" className="h-10 w-auto" />
+            ) : (
+              <div className="h-8 w-8 rounded-lg bg-secondary flex items-center justify-center">
+                <span className="text-secondary-foreground font-bold text-sm">R</span>
+              </div>
+            )}
+            
+            {/* --- THIS IS THE RESTORED TEXT --- */}
             <div className="hidden sm:block">
               <div className="font-semibold text-foreground">RAKwireless</div>
               <div className="text-xs text-muted-foreground -mt-1">Knowledge Hub</div>

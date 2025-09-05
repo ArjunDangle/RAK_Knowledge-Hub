@@ -66,7 +66,7 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-background">
-      <SiteHeader />
+      <SiteHeader logoSrc="/rak-logo.png"/>
       <div style={{ backgroundColor: 'hsl(var(--foreground))', color: 'hsl(var(--background))' }}>
         <div className="container max-w-7xl mx-auto px-6 py-12 md:py-20">
           <section className="text-center mb-16">
