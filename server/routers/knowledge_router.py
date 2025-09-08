@@ -70,3 +70,8 @@ def get_recent_articles(limit: int = 6):
 @router.get("/whats-new", response_model=List[content_schemas.Article], tags=["Knowledge Hub"])
 def get_whats_new():
     return confluence_service.get_whats_new()
+
+@router.get("/tags", response_model=List[content_schemas.Tag], tags=["Knowledge Hub"])
+def get_all_tags_endpoint():
+    """Gets all unique tags from the Confluence space."""
+    return confluence_service.get_all_tags()

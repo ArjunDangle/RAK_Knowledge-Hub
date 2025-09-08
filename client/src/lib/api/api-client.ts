@@ -49,7 +49,8 @@ export async function getRecentArticles(limit = 6): Promise<Article[]> {
 }
 
 export async function getRelatedArticles(tags: Tag[], currentId: string, limit = 4): Promise<Article[]> {
-  const tagNames = tags.map(t => t.name).slice(0, 5); // Use first 5 tags for relevance
+  const tagNames = tags.map(t => t.name).slice(0, 5);
+  // Use first 5 tags for relevance
   if (tagNames.length === 0) return [];
   
   const searchParams = new URLSearchParams();
@@ -57,7 +58,6 @@ export async function getRelatedArticles(tags: Tag[], currentId: string, limit =
   
   const response = await fetch(`${API_BASE_URL}/search?q=${tagNames.join(' ')}&${searchParams.toString()}`);
   const allArticles = await handleResponse<Article[]>(response);
-
   return allArticles.filter(a => a.id !== currentId).slice(0, limit);
 }
 
@@ -67,7 +67,6 @@ export async function searchContent(filters: SearchFilters): Promise<Article[]> 
   
   // MODIFIED: Ensure the 'mode' parameter is always included in the API call
   if (filters.mode) params.append('mode', filters.mode);
-  
   filters.tags.forEach(tag => params.append('tags', tag));
   if (filters.sort !== 'relevance') params.set('sort', filters.sort);
 
@@ -78,7 +77,6 @@ export async function searchContent(filters: SearchFilters): Promise<Article[]> 
 export async function getWhatsNew(): Promise<UpdateEntry[]> {
   const response = await fetch(`${API_BASE_URL}/whats-new`);
   const articles = await handleResponse<Article[]>(response);
-
   return articles.map(article => ({
     id: article.id,
     type: 'update',
@@ -91,11 +89,8 @@ export async function getWhatsNew(): Promise<UpdateEntry[]> {
 }
 
 export async function getAllTags(): Promise<Tag[]> {
-  return Promise.resolve([
-    { id: '1', name: 'Getting Started', slug: 'getting-started' },
-    { id: '2', name: 'Advanced', slug: 'advanced' },
-    { id: '3', name: 'Troubleshooting', slug: 'troubleshooting' },
-  ]);
+  const response = await fetch(`${API_BASE_URL}/tags`);
+  return handleResponse<Tag[]>(response);
 }
 
 export async function getAncestors(pageId: string): Promise<{ id: string; title: string }[]> {

@@ -7,16 +7,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { SearchMode } from "@/lib/types/content";
 import { cn } from "@/lib/utils";
 
 interface SearchBarProps {
   variant?: 'hero' | 'compact';
-  defaultMode?: SearchMode;
-  defaultQuery?: string;
-  onSearch?: (query: string, mode: SearchMode) => void;
+  query: string;
+  onQueryChange: (query: string) => void;
+  mode: SearchMode;
+  onModeChange: (mode: SearchMode) => void;
+  onSearch: () => void;
   className?: string;
 }
 
@@ -27,39 +27,29 @@ const searchModes: { value: SearchMode; label: string; description: string }[] =
   { value: 'content', label: 'Content', description: 'Search in content' },
 ];
 
-export function SearchBar({ 
-  variant = 'hero', 
-  defaultMode = 'all', 
-  defaultQuery = '',
+export function SearchBar({
+  variant = 'hero',
+  query,
+  onQueryChange,
+  mode,
+  onModeChange,
   onSearch,
-  className 
+  className
 }: SearchBarProps) {
-  const [query, setQuery] = useState(defaultQuery);
-  const [mode, setMode] = useState<SearchMode>(defaultMode);
-  const navigate = useNavigate();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmedQuery = query.trim();
-    
-    if (onSearch) {
-      onSearch(trimmedQuery, mode);
-    } else {
-      const params = new URLSearchParams();
-      if (trimmedQuery) params.append('q', trimmedQuery);
-      params.append('mode', mode);
-      navigate(`/search?${params.toString()}`);
-    }
+    onSearch();
   };
 
   const selectedMode = searchModes.find(m => m.value === mode) || searchModes[0];
 
   return (
-    <form 
+    <form
       onSubmit={handleSubmit}
       className={cn(
         "flex items-center",
-        variant === 'hero' 
+        variant === 'hero'
           ? "w-full max-w-2xl mx-auto bg-card rounded-xl border border-border shadow-lg"
           : "w-full max-w-md bg-card rounded-lg border border-border shadow-sm",
         className
@@ -84,7 +74,7 @@ export function SearchBar({
           {searchModes.map((searchMode) => (
             <DropdownMenuItem
               key={searchMode.value}
-              onClick={() => setMode(searchMode.value)}
+              onClick={() => onModeChange(searchMode.value)}
               className={cn(
                 "flex flex-col items-start gap-1 py-3 cursor-pointer",
                 mode === searchMode.value && "bg-primary/10 text-primary"
@@ -104,11 +94,11 @@ export function SearchBar({
           type="search"
           placeholder="Search knowledge base..."
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => onQueryChange(e.target.value)}
           className={cn(
             "border-0 bg-transparent text-foreground focus-visible:ring-0 focus-visible:ring-offset-0",
-            variant === 'hero' 
-              ? "h-14 px-4 text-base placeholder:text-muted-foreground" 
+            variant === 'hero'
+              ? "h-14 px-4 text-base placeholder:text-muted-foreground"
               : "h-10 px-3 placeholder:text-muted-foreground"
           )}
         />

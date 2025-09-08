@@ -211,33 +211,46 @@ class ConfluenceService:
     def get_whats_new(self, limit: int = 20) -> List[Article]:
         """Fetches content for the 'What's New' page, typically recent articles."""
         return self.get_recent_articles(limit)
+    
+    def get_all_tags(self) -> List[Tag]:
+        """Fetches all unique labels from the Confluence space."""
+        try:
+            path = f'/rest/api/space/{self.settings.confluence_space_key}/label'
+            labels_data = self.confluence.get(path, params={'limit': 200}).get('results', [])
 
-    # MODIFIED: This method now builds a dynamic query based on the 'mode'.
-    def search_content(self, query: str, labels: List[str] = None, mode: str = "all") -> List[Article]:
-        cql_search_field = ""
-        
-        if mode == "title":
-            cql_search_field = f'title ~ "{query}"'
-        elif mode == "content":
-            cql_search_field = f'text ~ "{query}"'
-        elif mode == "tags":
-            # For tag search, we must search broadly and then filter in Python
-            # as CQL does not support searching for labels with a query string.
-            cql_search_field = f'text ~ "{query}"'
-        else:  # mode == "all"
-            cql_search_field = f'text ~ "{query}"'
-            
-        label_cql = f" and label in ({','.join(f'\"{l}\"' for l in labels)})" if labels else ""
-        cql = f'space = "{self.settings.confluence_space_key}" and type = page and {cql_search_field}{label_cql} order by lastModified desc'
-        
-        articles = self._fetch_and_transform_articles_from_cql(cql, 50)
-
-        # If the mode was 'tags', we perform the post-fetch filtering here.
-        if mode == "tags":
-            filtered_articles = [
-                article for article in articles
-                if any(query.lower() in tag.name.lower() for tag in article.tags)
+            tags = [
+                Tag(id=label["id"], name=label["name"], slug=self._slugify(label["name"]))
+                for label in labels_data
             ]
-            return filtered_articles
+            unique_tags = {tag.name: tag for tag in tags}.values()
+            return sorted(list(unique_tags), key=lambda t: t.name)
+        except Exception as e:
+            print(f"Error fetching all tags: {e}")
+            return []
 
-        return articles
+    def search_content(self, query: str, labels: List[str] = None, mode: str = "all") -> List[Article]:
+        cql_parts = [f'space = "{self.settings.confluence_space_key}"', 'type = page']
+
+        if mode == "tags":
+            tag_list = query.strip().split()
+            if not tag_list:
+                return []
+            
+            # Create an individual 'label = "tag"' clause for each tag to enforce AND logic
+            label_clauses = [f'label = "{tag}"' for tag in tag_list]
+            cql_parts.extend(label_clauses)
+        
+        elif mode == "title":
+            cql_parts.append(f'title ~ "{query}"')
+        
+        else:  # "all" or "content"
+            cql_parts.append(f'text ~ "{query}"')
+        
+        if labels:
+            # This part is not currently used by the UI but kept for API flexibility
+            label_clauses_from_param = [f'label = "{l}"' for l in labels]
+            cql_parts.extend(label_clauses_from_param)
+
+        cql = ' and '.join(cql_parts) + ' order by lastModified desc'
+        
+        return self._fetch_and_transform_articles_from_cql(cql, 50)
