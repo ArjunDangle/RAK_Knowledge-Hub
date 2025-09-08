@@ -5,24 +5,34 @@ import { CategoryCard } from "@/components/cards/CategoryCard";
 import { ArticleCard } from "@/components/cards/ArticleCard";
 import { CategoryCardSkeleton, ArticleCardSkeleton } from "@/components/ui/loading-skeleton";
 import { getGroups, getSubsectionsByGroup, getPopularArticles, getRecentArticles } from "@/lib/api/api-client";
-import { Group, Subsection, Article } from "@/lib/types/content";
+import { Group, Subsection, Article, SearchMode } from "@/lib/types/content";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { formatRelativeTime } from "@/lib/utils/date";
-import ChatbotWidget from "@/components/chatbot/ChatbotWidget"
+import ChatbotWidget from "@/components/chatbot/ChatbotWidget";
+import { useState } from "react";
 
 export default function Landing() {
   const { data: groups, isLoading: groupsLoading } = useQuery({ queryKey: ['groups'], queryFn: getGroups });
   const { data: departmentSubs, isLoading: deptLoading } = useQuery({ queryKey: ['subsections', 'departments'], queryFn: () => getSubsectionsByGroup('departments') });
   const { data: resourceSubs, isLoading: resourceLoading } = useQuery({ queryKey: ['subsections', 'resource-centre'], queryFn: () => getSubsectionsByGroup('resource-centre') });
   const { data: toolSubs, isLoading: toolsLoading } = useQuery({ queryKey: ['subsections', 'tools'], queryFn: () => getSubsectionsByGroup('tools') });
-  
-  // --- UPDATED TO FETCH 4 POPULAR ARTICLES ---
   const { data: popularArticles, isLoading: popularLoading } = useQuery({ queryKey: ['articles', 'popular'], queryFn: () => getPopularArticles(4) });
-  
-  // --- UPDATED TO FETCH 7 RECENT ARTICLES ---
   const { data: recentArticles, isLoading: recentLoading } = useQuery({ queryKey: ['articles', 'recent'], queryFn: () => getRecentArticles(7) });
+
+  const navigate = useNavigate();
+  const [query, setQuery] = useState('');
+  const [mode, setMode] = useState<SearchMode>('all');
+
+  const handleSearch = () => {
+    if (query.trim()) {
+      const params = new URLSearchParams();
+      params.append('q', query.trim());
+      params.append('mode', mode);
+      navigate(`/search?${params.toString()}`);
+    }
+  };
 
   const renderCategorySection = (
     title: string, description: string, subsections: Subsection[] | undefined, loading: boolean
@@ -74,13 +84,21 @@ export default function Landing() {
               <h1 className="text-4xl md:text-5xl font-bold mb-4" style={{ color: 'hsl(var(--background))' }}>RAKwireless Knowledge Hub</h1>
               <p className="text-xl leading-relaxed" style={{ color: 'hsl(var(--border))' }}>Your comprehensive resource for documentation, guides, and technical knowledge.</p>
             </div>
-            <SearchBar variant="hero" />
+            <SearchBar 
+              variant="hero"
+              query={query}
+              onQueryChange={setQuery}
+              mode={mode}
+              onModeChange={setMode}
+              onSearch={handleSearch}
+            />
           </section>
         </div>
       </div>
       
       <main className="container max-w-7xl mx-auto px-6 py-12">
-        {groupsLoading ? <p>Loading categories...</p> : groups?.map(groupInfo => (
+        {groupsLoading ? 
+          <p>Loading categories...</p> : groups?.map(groupInfo => (
           <div key={groupInfo.id}>
             {renderCategorySection(
               groupInfo.title,
