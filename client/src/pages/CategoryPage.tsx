@@ -6,7 +6,7 @@ import { ArticleCardSkeleton, CategoryCardSkeleton } from "@/components/ui/loadi
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { KnowledgeLayout } from "./KnowledgeLayout";
-import { getSubsectionsByGroup, getPageContents, getPageById } from "@/lib/api/api-client";
+import { getSubsectionsByGroup, getPageContents, getPageById, getAncestors } from "@/lib/api/api-client";
 import { Group } from "@/lib/types/content";
 
 const groupInfo = {
@@ -17,7 +17,7 @@ const groupInfo = {
 
 export default function CategoryPage() {
   const { group, pageId } = useParams<{ group?: Group; pageId?: string }>();
-
+  
   const isTopLevelPage = !!group && !pageId;
   const isNestedPage = !!pageId;
 
@@ -32,11 +32,17 @@ export default function CategoryPage() {
     queryFn: () => getPageContents(pageId!),
     enabled: isNestedPage,
   });
-  
+
   const { data: topLevelSubsections, isLoading: subsectionsLoading } = useQuery({
     queryKey: ['topLevelSubsections', group],
     queryFn: () => getSubsectionsByGroup(group!),
     enabled: isTopLevelPage,
+  });
+
+  const { data: ancestors } = useQuery({
+    queryKey: ['ancestors', pageId],
+    queryFn: () => getAncestors(pageId!),
+    enabled: isNestedPage,
   });
 
   const currentGroup = isNestedPage ? currentPageData?.group as Group : group;
@@ -49,13 +55,16 @@ export default function CategoryPage() {
   }
   
   const info = groupInfo[currentGroup];
-  
-  const breadcrumbs = [ { label: info.title, href: isNestedPage ? `/category/${currentGroup}` : undefined } ];
-  if (isNestedPage && currentPageData) {
-    breadcrumbs.push({ label: currentPageData.title });
-  } else if (isNestedPage && pageDetailsLoading) {
-    breadcrumbs.push({ label: 'Loading...' });
-  }
+
+  // Dynamically build detailed breadcrumbs
+  const breadcrumbs = isNestedPage 
+    ? (ancestors || []).map((ancestor, index) => {
+        if (index === 0) {
+          return { label: ancestor.title, href: `/category/${currentGroup}` };
+        }
+        return { label: ancestor.title, href: `/page/${ancestor.id}` };
+      }).concat(currentPageData ? [{ label: currentPageData.title }] : [])
+    : [{ label: info.title }];
 
   if (isNestedPage) {
     return (
@@ -78,7 +87,6 @@ export default function CategoryPage() {
           ) : contents && contents.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {contents.map((item) => item.type === 'subsection' ? (
-                // --- THIS IS THE FIX ---
                 <CategoryCard key={item.id} title={item.title} description={item.description} subsection={item} articleCount={item.articleCount} updatedAt={item.updatedAt} href={`/page/${item.id}`} />
               ) : (
                 <ArticleCard key={item.id} article={item} />
@@ -104,7 +112,6 @@ export default function CategoryPage() {
         ) : topLevelSubsections && topLevelSubsections.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {topLevelSubsections.map((subsection) => (
-               // --- THIS IS THE FIX ---
               <CategoryCard key={subsection.id} title={subsection.title} description={subsection.description} subsection={subsection} articleCount={subsection.articleCount} updatedAt={subsection.updatedAt} href={`/page/${subsection.id}`} />
             ))}
           </div>

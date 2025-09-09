@@ -117,67 +117,70 @@ export default {
                 'accordion-down': 'accordion-down 0.2s ease-out',
                 'accordion-up': 'accordion-up 0.2s ease-out'
             },
-      typography: ({ theme }) => ({
-        DEFAULT: {
-          css: {
-            '--tw-prose-body': 'hsl(var(--foreground))',
-            '--tw-prose-headings': 'hsl(var(--secondary))',
-            '--tw-prose-lead': 'hsl(var(--muted-foreground))',
-            '--tw-prose-links': 'hsl(var(--primary))',
-            '--tw-prose-bold': 'hsl(var(--foreground))',
-            '--tw-prose-counters': 'hsl(var(--muted-foreground))',
-            '--tw-prose-bullets': 'hsl(var(--muted-foreground))',
-            '--tw-prose-hr': 'hsl(var(--border))',
-            '--tw-prose-quotes': 'hsl(var(--foreground))',
-            '--tw-prose-quote-borders': 'hsl(var(--primary))',
-            '--tw-prose-captions': 'hsl(var(--muted-foreground))',
-            '--tw-prose-code': 'hsl(var(--primary))',
-            '--tw-prose-pre-code': 'hsl(var(--card))',
-            '--tw-prose-pre-bg': 'hsl(var(--foreground))',
-            '--tw-prose-th-borders': 'hsl(var(--border-strong))',
-            '--tw-prose-td-borders': 'hsl(var(--border))',
-            // '--tw-prose-invert-body': 'hsl(var(--foreground))',
-            '--tw-prose-invert-body': 'hsl(var(--primary-foreground))',
-            '--tw-prose-invert-headings': 'hsl(var(--secondary-foreground))',
-            '--tw-prose-invert-lead': 'hsl(var(--muted-foreground))',
-            '--tw-prose-invert-links': 'hsl(var(--primary))',
-            '--tw-prose-invert-bold': 'hsl(var(--secondary-foreground))',
-            '--tw-prose-invert-counters': 'hsl(var(--muted-foreground))',
-            '--tw-prose-invert-bullets': 'hsl(var(--muted-foreground))',
-            '--tw-prose-invert-hr': 'hsl(var(--border))',
-            '--tw-prose-invert-quotes': 'hsl(var(--secondary-foreground))',
-            '--tw-prose-invert-quote-borders': 'hsl(var(--primary))',
-            '--tw-prose-invert-captions': 'hsl(var(--muted-foreground))',
-            '--tw-prose-invert-code': 'hsl(var(--primary))',
-            '--tw-prose-invert-pre-code': 'hsl(var(--card-foreground))',
-            '--tw-prose-invert-pre-bg': 'hsl(var(--card))',
-            '--tw-prose-invert-th-borders': 'hsl(var(--border-strong))',
-            '--tw-prose-invert-td-borders': 'hsl(var(--border))',
-
-            // --- NEW DETAILED TABLE STYLES ---
-            'thead': {
-              borderBottomColor: 'hsl(var(--border-strong))',
-            },
-            'thead th': {
-              color: 'hsl(var(--foreground))',
-              fontWeight: '600',
-            },
-            'tbody tr:nth-child(even)': {
-              backgroundColor: 'hsl(var(--muted))',
-            },
-            'tbody tr:nth-child(odd)': {
-              backgroundColor: 'hsl(var(--background))',
-            },
-            'tbody code': {
-              fontWeight: '600',
-            },
-          },
-        },
-      }),
+            typography: ({ theme }: any) => ({
+                DEFAULT: {
+                  css: {
+                    '--tw-prose-body': 'hsl(var(--foreground))',
+                    '--tw-prose-headings': 'hsl(var(--secondary))',
+                    '--tw-prose-lead': 'hsl(var(--muted-foreground))',
+                    '--tw-prose-links': 'hsl(var(--primary))',
+                    '--tw-prose-bold': 'hsl(var(--foreground))',
+                    '--tw-prose-counters': 'hsl(var(--muted-foreground))',
+                    '--tw-prose-bullets': 'hsl(var(--muted-foreground))',
+                    '--tw-prose-hr': 'hsl(var(--border))',
+                    '--tw-prose-quotes': 'hsl(var(--foreground))',
+                    '--tw-prose-quote-borders': 'hsl(var(--primary))',
+                    '--tw-prose-captions': 'hsl(var(--muted-foreground))',
+                    '--tw-prose-code': 'hsl(var(--primary))',
+                    '--tw-prose-pre-code': 'hsl(var(--card))',
+                    '--tw-prose-pre-bg': 'hsl(var(--foreground))',
+                    '--tw-prose-th-borders': 'hsl(var(--border-strong))',
+                    '--tw-prose-td-borders': 'hsl(var(--border))',
+                    '--tw-prose-invert-body': 'hsl(var(--primary-foreground))',
+                    '--tw-prose-invert-headings': 'hsl(var(--secondary-foreground))',
+                    '--tw-prose-invert-lead': 'hsl(var(--muted-foreground))',
+                    '--tw-prose-invert-links': 'hsl(var(--primary))',
+                    '--tw-prose-invert-bold': 'hsl(var(--secondary-foreground))',
+                    '--tw-prose-invert-counters': 'hsl(var(--muted-foreground))',
+                    '--tw-prose-invert-bullets': 'hsl(var(--muted-foreground))',
+                    '--tw-prose-invert-hr': 'hsl(var(--border))',
+                    '--tw-prose-invert-quotes': 'hsl(var(--secondary-foreground))',
+                    '--tw-prose-invert-quote-borders': 'hsl(var(--primary))',
+                    '--tw-prose-invert-captions': 'hsl(var(--muted-foreground))',
+                    '--tw-prose-invert-code': 'hsl(var(--primary))',
+                    '--tw-prose-invert-pre-code': 'hsl(var(--card-foreground))',
+                    '--tw-prose-invert-pre-bg': 'hsl(var(--card))',
+                    '--tw-prose-invert-th-borders': 'hsl(var(--border-strong))',
+                    '--tw-prose-invert-td-borders': 'hsl(var(--border))',
+        
+                    img: {
+                      margin: 'auto',
+                      cursor: 'pointer', // Make images appear clickable
+                    },
+        
+                    'thead': {
+                      borderBottomColor: 'hsl(var(--border-strong))',
+                    },
+                    'thead th': {
+                      color: 'hsl(var(--foreground))',
+                      fontWeight: '600',
+                    },
+                    'tbody tr:nth-child(even)': {
+                      backgroundColor: 'hsl(var(--muted))',
+                    },
+                    'tbody tr:nth-child(odd)': {
+                      backgroundColor: 'hsl(var(--background))',
+                    },
+                    'tbody code': {
+                      fontWeight: '600',
+                    },
+                  },
+                },
+              }),
         }
     },
     plugins: [
-    require("tailwindcss-animate"),
-    require("@tailwindcss/typography")
-  ],
+        require("tailwindcss-animate"),
+        require("@tailwindcss/typography")
+    ],
 } satisfies Config;

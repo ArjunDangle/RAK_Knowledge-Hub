@@ -2,7 +2,6 @@ import { ChevronRight, Home } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
-// This interface is the key. 'href' is now marked as optional with a '?'.
 interface BreadcrumbItem {
   label: string;
   href?: string;
@@ -18,7 +17,7 @@ export function Breadcrumbs({ items, className }: BreadcrumbsProps) {
     <nav className={cn("flex items-center space-x-2 text-sm", className)} aria-label="Breadcrumb">
       <Link
         to="/"
-        className="flex items-center text-muted-foreground hover:text-foreground transition-colors"
+        className="flex items-center text-muted-foreground transition-colors hover:text-foreground"
       >
         <Home className="h-4 w-4" />
         <span className="sr-only">Home</span>
@@ -27,20 +26,24 @@ export function Breadcrumbs({ items, className }: BreadcrumbsProps) {
       {items.map((item, index) => (
         <div key={index} className="flex items-center space-x-2">
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          {/* This logic correctly handles items with or without an href */}
           {item.href && index < items.length - 1 ? (
             <Link
               to={item.href}
-              className="text-muted-foreground hover:text-foreground transition-colors"
+              title={item.label}
+              className="block max-w-40 truncate text-muted-foreground transition-colors hover:text-foreground"
             >
               {item.label}
             </Link>
           ) : (
-            <span className={cn(
-              index === items.length - 1 
-                ? "text-foreground font-medium" 
-                : "text-muted-foreground"
-            )}>
+            <span
+              title={item.label}
+              className={cn(
+                "block max-w-40 truncate",
+                index === items.length - 1 
+                  ? "text-foreground font-medium" 
+                  : "text-muted-foreground"
+              )}
+            >
               {item.label}
             </span>
           )}

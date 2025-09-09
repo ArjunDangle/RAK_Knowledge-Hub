@@ -68,14 +68,14 @@ export function SiteHeader({
         {/* Navigation & Search */}
         <div className="flex items-center gap-4">
           <nav className="hidden md:flex items-center">
-            <Button variant="ghost" asChild>
+            {/* <Button variant="ghost" asChild>
               <Link
                 to="/whats-new"
                 className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
               >
                 What's New
               </Link>
-            </Button>
+            </Button> */}
           </nav>
 
           {/* Unified Search Bar */}
