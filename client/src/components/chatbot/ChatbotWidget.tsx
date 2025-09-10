@@ -22,7 +22,7 @@ const PRODUCT_CATEGORIES = [
   "WisGate", "WisHat", "WisLink", "WisNode", "WisTrio",
 ];
 
-const API_URL = "http://127.0.0.1:8180/api/chat";
+const API_URL = "https://rak-chatbot-api-backend.rak-development.net/api/chat";
 
 const ChatbotWidget: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
