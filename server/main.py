@@ -1,4 +1,5 @@
 # main.py
+import os
 from fastapi import FastAPI
 from routers import knowledge_router
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,6 +16,10 @@ origins = [
     "http://localhost:8080",
     "http://127.0.0.1:8080",
 ]
+
+FRONTEND_URL = os.environ.get("FRONTEND_URL")
+if FRONTEND_URL:
+    origins.append(FRONTEND_URL)
 
 app.add_middleware(
     CORSMiddleware,
