@@ -23,8 +23,6 @@ class ConfluenceService:
         if not self.root_page_ids:
             print("CRITICAL: Could not discover any root page IDs. Please check SPACE_KEY and top-level page titles.")
 
-    # ... ( _discover_root_pages, _slugify, _get_plain_text, _get_group_from_ancestors methods are unchanged) ...
-
     def _discover_root_pages(self) -> Dict[str, str]:
         space_key = self.settings.confluence_space_key
         print(f"Attempting to discover root pages in space: '{space_key}'...")
@@ -67,7 +65,6 @@ class ConfluenceService:
                 return self.id_to_group_slug_map[ancestor_id]
         return ""
 
-    # --- START: MODIFIED METHOD ---
     def _transform_page_to_article(self, page_data: dict) -> Article:
         ancestors = page_data.get('ancestors', [])
         if not ancestors: return None
@@ -87,18 +84,6 @@ class ConfluenceService:
         author_info = page_data.get("version", {}).get("by", {})
         author_name = author_info.get("displayName") if author_info else "Unknown"
         
-        # --- NEW LOGIC TO FIND PDF ATTACHMENT ---
-        pdf_attachment_name = None
-        try:
-            attachments = self.confluence.get_attachments_from_content(page_id=page_data["id"], limit=50)
-            for attachment in attachments['results']:
-                if attachment['title'].lower().endswith('.pdf'):
-                    pdf_attachment_name = attachment['title']
-                    break # Use the first PDF found
-        except Exception as e:
-            print(f"Could not check for attachments on page {page_data['id']}: {e}")
-        # --- END NEW LOGIC ---
-
         article_data = { 
             "id": page_data["id"], 
             "slug": self._slugify(page_data["title"]), 
@@ -111,11 +96,9 @@ class ConfluenceService:
             "updatedAt": page_data["version"]["when"], 
             "views": 0, 
             "readMinutes": read_minutes, 
-            "author": author_name,
-            "pdfAttachmentName": pdf_attachment_name # Add the new field
+            "author": author_name
         }
         return Article.model_validate(article_data)
-    # --- END: MODIFIED METHOD ---
 
     def _transform_page_to_subsection(self, page_data: dict) -> Subsection:
         ancestors = page_data.get('ancestors', [])
@@ -136,8 +119,6 @@ class ConfluenceService:
         subsection_data = { "id": page_data["id"], "slug": self._slugify(page_data["title"]), "title": page_data["title"], "description": description or "No description available.", "group": group_slug, "tags": tags, "articleCount": article_count, "updatedAt": page_data["version"]["when"], }
         return Subsection.model_validate(subsection_data)
 
-    # ... (rest of the file remains the same) ...
-    
     def _fetch_and_transform_articles_from_cql(self, cql: str, limit: int) -> List[Article]:
         try:
             search_path = f'/rest/api/content/search?cql={cql}&limit={limit}&expand=body.view,version,metadata.labels,ancestors'

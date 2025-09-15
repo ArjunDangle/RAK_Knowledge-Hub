@@ -12,7 +12,7 @@ import { getArticleById, getRelatedArticles, getAncestors, API_BASE_URL } from "
 import { toast } from "@/components/ui/sonner";
 import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { PdfSlideshow } from "@/components/pdf/PdfSlideshow"; // Import the new component
+import { PdfSlideshow } from "@/components/pdf/PdfSlideshow";
 
 export default function ArticlePage() {
   const { pageId } = useParams<{ pageId: string }>();
@@ -25,29 +25,44 @@ export default function ArticlePage() {
     retry: false,
   });
 
-  const { processedHtml, embeddedPdfFile } = useMemo(() => {
-    if (!article) {
-      return { processedHtml: null, embeddedPdfFile: null };
-    }
+  // New, more robust logic to handle multiple content blocks
+  const contentBlocks = useMemo(() => {
+    if (!article) return [];
 
     const fullHtml = article.html;
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = fullHtml;
 
-    const pdfViewerDiv = tempDiv.querySelector('div[data-macro-name="viewpdf"]');
-    
-    if (pdfViewerDiv) {
-      const attachmentName = pdfViewerDiv.querySelector('div[data-attachment-name]')?.getAttribute('data-attachment-name');
-      if (attachmentName) {
-        pdfViewerDiv.remove();
-        return {
-          processedHtml: tempDiv.innerHTML,
-          embeddedPdfFile: attachmentName
-        };
+    const blocks: { type: 'html' | 'pdf'; content?: string; fileName?: string }[] = [];
+    let currentHtml = '';
+
+    tempDiv.childNodes.forEach(node => {
+      // Check if the node is an element and is a Confluence PDF macro placeholder
+      if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).matches('div[data-macro-name="viewpdf"]')) {
+        // If we have accumulated HTML, push it to the blocks array first
+        if (currentHtml.trim() !== '') {
+          blocks.push({ type: 'html', content: currentHtml });
+          currentHtml = ''; // Reset the accumulator
+        }
+        
+        // Now, process and push the PDF block
+        const pdfDiv = node as HTMLElement;
+        const attachmentName = pdfDiv.querySelector('div[data-attachment-name]')?.getAttribute('data-attachment-name');
+        if (attachmentName) {
+          blocks.push({ type: 'pdf', fileName: attachmentName });
+        }
+      } else {
+        // If it's not a PDF macro, accumulate its HTML content
+        currentHtml += (node as any).outerHTML || node.textContent;
       }
+    });
+
+    // Add any final, remaining HTML content at the end
+    if (currentHtml.trim() !== '') {
+      blocks.push({ type: 'html', content: currentHtml });
     }
 
-    return { processedHtml: fullHtml, embeddedPdfFile: null };
+    return blocks.length > 0 ? blocks : [{ type: 'html', content: fullHtml }];
   }, [article]);
 
 
@@ -121,13 +136,21 @@ export default function ArticlePage() {
         </header>
         <Separator className="mb-8" />
         
-        {embeddedPdfFile && pageId && (
-            <PdfSlideshow fileUrl={`${API_BASE_URL}/attachment/${pageId}/${embeddedPdfFile}`} />
-        )}
-
-        <div className="prose dark:prose-invert max-w-none mb-12"
-          dangerouslySetInnerHTML={{ __html: processedHtml || '' }} 
-        />
+        {contentBlocks.map((block, index) => {
+          if (block.type === 'pdf' && pageId && block.fileName) {
+            return <PdfSlideshow key={`pdf-${index}`} fileUrl={`${API_BASE_URL}/attachment/${pageId}/${block.fileName}`} />;
+          }
+          if (block.type === 'html' && block.content) {
+            return (
+              <div 
+                key={`html-${index}`}
+                className="prose dark:prose-invert max-w-none mb-12"
+                dangerouslySetInnerHTML={{ __html: block.content }} 
+              />
+            );
+          }
+          return null;
+        })}
 
         {relatedArticles && relatedArticles.length > 0 && (
           <section>

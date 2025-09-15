@@ -39,7 +39,6 @@ class Article(BaseModel):
     views: int
     readMinutes: int
     author: Optional[str] = None
-    pdfAttachmentName: Optional[str] = None # <-- ADD THIS LINE
 
     class Config:
         from_attributes = True
