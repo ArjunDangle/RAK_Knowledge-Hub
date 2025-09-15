@@ -10,12 +10,22 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# --- CORRECTED CORS MIDDLEWARE SECTION ---
-# This allows all origins, which is standard for development to solve issues
-# like the one you are facing with the iframe.
+# --- SECURE CORS MIDDLEWARE FOR PRODUCTION ---
+# This list specifies which frontend domains are allowed to make requests to your API.
+origins = [
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+    "https://rak-knowledge-hub.vercel.app",
+]
+
+# This allows you to add another URL via environment variables for flexibility (e.g., for a staging server)
+FRONTEND_URL = os.environ.get("FRONTEND_URL")
+if FRONTEND_URL:
+    origins.append(FRONTEND_URL)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # This allows all origins
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -23,15 +33,6 @@ app.add_middleware(
 # -----------------------------------------
 
 app.include_router(knowledge_router.router)
-
-# ADD THESE THREE LINES:
-@app.get("/test-cors", tags=["Health Check"])
-def test_cors_endpoint():
-    return {"message": "CORS test successful!"}
-
-@app.get("/", tags=["Health Check"])
-def read_root():
-    return {"status": "Knowledge Hub API is running!"}
 
 @app.get("/", tags=["Health Check"])
 def read_root():
