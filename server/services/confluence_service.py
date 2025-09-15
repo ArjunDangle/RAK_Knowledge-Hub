@@ -4,8 +4,9 @@ from typing import List, Dict, Union
 from atlassian import Confluence
 from bs4 import BeautifulSoup
 from config import Settings
-# --- THIS IS THE CORRECTED LINE ---
 from schemas.content_schemas import Article, Tag, Subsection, GroupInfo, PageContentItem, Ancestor
+from fastapi.responses import StreamingResponse
+import io
 
 class ConfluenceService:
     def __init__(self, settings: Settings):
@@ -22,6 +23,8 @@ class ConfluenceService:
         if not self.root_page_ids:
             print("CRITICAL: Could not discover any root page IDs. Please check SPACE_KEY and top-level page titles.")
 
+    # ... ( _discover_root_pages, _slugify, _get_plain_text, _get_group_from_ancestors methods are unchanged) ...
+
     def _discover_root_pages(self) -> Dict[str, str]:
         space_key = self.settings.confluence_space_key
         print(f"Attempting to discover root pages in space: '{space_key}'...")
@@ -31,7 +34,6 @@ class ConfluenceService:
 
         for title, slug in expected_titles.items():
             try:
-                # Using a direct GET request for better reliability
                 search_path = f'/rest/api/content?spaceKey={space_key}&title={title}&limit=1'
                 results = self.confluence.get(search_path).get('results', [])
                 
@@ -65,6 +67,7 @@ class ConfluenceService:
                 return self.id_to_group_slug_map[ancestor_id]
         return ""
 
+    # --- START: MODIFIED METHOD ---
     def _transform_page_to_article(self, page_data: dict) -> Article:
         ancestors = page_data.get('ancestors', [])
         if not ancestors: return None
@@ -84,8 +87,35 @@ class ConfluenceService:
         author_info = page_data.get("version", {}).get("by", {})
         author_name = author_info.get("displayName") if author_info else "Unknown"
         
-        article_data = { "id": page_data["id"], "slug": self._slugify(page_data["title"]), "title": page_data["title"], "excerpt": excerpt, "html": html_content, "tags": tags, "group": group_slug, "subsection": subsection_slug, "updatedAt": page_data["version"]["when"], "views": 0, "readMinutes": read_minutes, "author": author_name }
+        # --- NEW LOGIC TO FIND PDF ATTACHMENT ---
+        pdf_attachment_name = None
+        try:
+            attachments = self.confluence.get_attachments_from_content(page_id=page_data["id"], limit=50)
+            for attachment in attachments['results']:
+                if attachment['title'].lower().endswith('.pdf'):
+                    pdf_attachment_name = attachment['title']
+                    break # Use the first PDF found
+        except Exception as e:
+            print(f"Could not check for attachments on page {page_data['id']}: {e}")
+        # --- END NEW LOGIC ---
+
+        article_data = { 
+            "id": page_data["id"], 
+            "slug": self._slugify(page_data["title"]), 
+            "title": page_data["title"], 
+            "excerpt": excerpt, 
+            "html": html_content, 
+            "tags": tags, 
+            "group": group_slug, 
+            "subsection": subsection_slug, 
+            "updatedAt": page_data["version"]["when"], 
+            "views": 0, 
+            "readMinutes": read_minutes, 
+            "author": author_name,
+            "pdfAttachmentName": pdf_attachment_name # Add the new field
+        }
         return Article.model_validate(article_data)
+    # --- END: MODIFIED METHOD ---
 
     def _transform_page_to_subsection(self, page_data: dict) -> Subsection:
         ancestors = page_data.get('ancestors', [])
@@ -106,8 +136,9 @@ class ConfluenceService:
         subsection_data = { "id": page_data["id"], "slug": self._slugify(page_data["title"]), "title": page_data["title"], "description": description or "No description available.", "group": group_slug, "tags": tags, "articleCount": article_count, "updatedAt": page_data["version"]["when"], }
         return Subsection.model_validate(subsection_data)
 
+    # ... (rest of the file remains the same) ...
+    
     def _fetch_and_transform_articles_from_cql(self, cql: str, limit: int) -> List[Article]:
-        """A more reliable helper to fetch and transform articles from a CQL query."""
         try:
             search_path = f'/rest/api/content/search?cql={cql}&limit={limit}&expand=body.view,version,metadata.labels,ancestors'
             results = self.confluence.get(search_path).get('results', [])
@@ -135,7 +166,6 @@ class ConfluenceService:
         
         try:
             child_pages_stubs = list(self.confluence.get_child_pages(root_page_id))
-            
             subsections = []
             for stub in child_pages_stubs:
                 page_details = self.confluence.get_page_by_id(stub['id'], expand="version,metadata.labels,body.view,ancestors")
@@ -156,7 +186,6 @@ class ConfluenceService:
             for stub in child_page_stubs:
                 page = self.confluence.get_page_by_id(stub['id'], expand="body.view,version,metadata.labels,ancestors")
                 
-                # Check if the page has its own children to determine if it's a subsection or article
                 grand_children = list(self.confluence.get_child_pages(page['id']))
                 
                 if len(grand_children) > 0:
@@ -195,25 +224,43 @@ class ConfluenceService:
             print(f"Error fetching page ID {page_id}: {e}")
             return None
     
+    def get_attachment_data(self, page_id: str, file_name: str) -> StreamingResponse:
+        try:
+            attachments = self.confluence.get_attachments_from_content(page_id=page_id, limit=200)
+            
+            target_attachment = None
+            for attachment in attachments['results']:
+                if attachment['title'] == file_name:
+                    target_attachment = attachment
+                    break
+            
+            if not target_attachment:
+                print(f"Attachment '{file_name}' not found on page '{page_id}'")
+                return None
+
+            download_link = self.settings.confluence_url + target_attachment['_links']['download']
+            
+            response = self.confluence.session.get(download_link, stream=True)
+            response.raise_for_status()
+
+            return StreamingResponse(io.BytesIO(response.content), media_type='application/pdf')
+
+        except Exception as e:
+            print(f"Error fetching attachment '{file_name}' for page ID {page_id}: {e}")
+            return None
+
     def get_recent_articles(self, limit: int = 6) -> List[Article]:
-        """Fetches the most recently modified articles."""
         cql = f'space = "{self.settings.confluence_space_key}" and type = page order by lastModified desc'
         return self._fetch_and_transform_articles_from_cql(cql, limit)
 
     def get_popular_articles(self, limit: int = 6) -> List[Article]:
-        """
-        Fetches popular articles by creation date as a proxy.
-        NOTE: Confluence API does not support sorting by views.
-        """
         cql = f'space = "{self.settings.confluence_space_key}" and type = page order by created desc'
         return self._fetch_and_transform_articles_from_cql(cql, limit)
 
     def get_whats_new(self, limit: int = 20) -> List[Article]:
-        """Fetches content for the 'What's New' page, typically recent articles."""
         return self.get_recent_articles(limit)
     
     def get_all_tags(self) -> List[Tag]:
-        """Fetches all unique labels from the Confluence space."""
         try:
             path = f'/rest/api/space/{self.settings.confluence_space_key}/label'
             labels_data = self.confluence.get(path, params={'limit': 200}).get('results', [])
@@ -236,7 +283,6 @@ class ConfluenceService:
             if not tag_list:
                 return []
             
-            # Create an individual 'label = "tag"' clause for each tag to enforce AND logic
             label_clauses = [f'label = "{tag}"' for tag in tag_list]
             cql_parts.extend(label_clauses)
         
@@ -247,7 +293,6 @@ class ConfluenceService:
             cql_parts.append(f'text ~ "{query}"')
         
         if labels:
-            # This part is not currently used by the UI but kept for API flexibility
             label_clauses_from_param = [f'label = "{l}"' for l in labels]
             cql_parts.extend(label_clauses_from_param)
 

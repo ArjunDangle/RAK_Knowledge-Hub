@@ -1,6 +1,6 @@
 import { SearchFilters, Article, Subsection, UpdateEntry, Group, Tag, GroupInfo, ContentItem } from '../types/content';
 
-const API_BASE_URL = "https://rak-knowledge-hub-backend.onrender.com";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://rak-knowledge-hub-backend.onrender.com";
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -25,14 +25,12 @@ export async function getPageContents(parentId: string): Promise<ContentItem[]> 
   return handleResponse<ContentItem[]>(response);
 }
 
-// --- REPLACED SLUG FUNCTION WITH ID FUNCTION ---
 export async function getArticleById(pageId: string): Promise<Article | null> {
   const response = await fetch(`${API_BASE_URL}/article/${pageId}`);
   if (response.status === 404) return null;
   return handleResponse<Article>(response);
 }
 
-// --- REPLACED SLUG FUNCTION WITH ID FUNCTION ---
 export async function getPageById(pageId: string): Promise<Subsection> {
   const response = await fetch(`${API_BASE_URL}/page/${pageId}`);
   return handleResponse<Subsection>(response);
@@ -50,7 +48,6 @@ export async function getRecentArticles(limit = 6): Promise<Article[]> {
 
 export async function getRelatedArticles(tags: Tag[], currentId: string, limit = 4): Promise<Article[]> {
   const tagNames = tags.map(t => t.name).slice(0, 5);
-  // Use first 5 tags for relevance
   if (tagNames.length === 0) return [];
   
   const searchParams = new URLSearchParams();
@@ -64,8 +61,6 @@ export async function getRelatedArticles(tags: Tag[], currentId: string, limit =
 export async function searchContent(filters: SearchFilters): Promise<Article[]> {
   const params = new URLSearchParams();
   if (filters.query) params.append('q', filters.query);
-  
-  // MODIFIED: Ensure the 'mode' parameter is always included in the API call
   if (filters.mode) params.append('mode', filters.mode);
   filters.tags.forEach(tag => params.append('tags', tag));
   if (filters.sort !== 'relevance') params.set('sort', filters.sort);
@@ -83,7 +78,7 @@ export async function getWhatsNew(): Promise<UpdateEntry[]> {
     title: article.title,
     summary: article.excerpt,
     date: article.updatedAt,
-    articleSlug: article.slug, // Slug can still be used for display/context if needed
+    articleSlug: article.slug,
     group: article.group as Group
   }));
 }

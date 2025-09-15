@@ -1,7 +1,7 @@
 # schemas/content_schemas.py
 from pydantic import BaseModel
 from typing import List, Optional, Union
-from typing_extensions import Literal # <-- ADDED THIS IMPORT
+from typing_extensions import Literal
 
 class Tag(BaseModel):
     id: str
@@ -15,7 +15,7 @@ class GroupInfo(BaseModel):
     icon: str
 
 class Subsection(BaseModel):
-    type: Literal["subsection"] = "subsection" # <-- ADDED THIS LINE
+    type: Literal["subsection"] = "subsection"
     id: str
     slug: str
     title: str
@@ -26,7 +26,7 @@ class Subsection(BaseModel):
     updatedAt: str
 
 class Article(BaseModel):
-    type: Literal["article"] = "article" # <-- ADDED THIS LINE
+    type: Literal["article"] = "article"
     id: str
     slug: str
     title: str
@@ -39,14 +39,12 @@ class Article(BaseModel):
     views: int
     readMinutes: int
     author: Optional[str] = None
+    pdfAttachmentName: Optional[str] = None # <-- ADD THIS LINE
 
     class Config:
         from_attributes = True
 
-# NEW: Define a type that can be either a Subsection or an Article
 PageContentItem = Union[Subsection, Article]
-
-# Add this class to the end of the file
 
 class Ancestor(BaseModel):
     id: str

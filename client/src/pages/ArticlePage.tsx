@@ -8,15 +8,15 @@ import { ArticleCard } from "@/components/cards/ArticleCard";
 import { ArticleCardSkeleton } from "@/components/ui/loading-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KnowledgeLayout } from "./KnowledgeLayout";
-import { getArticleById, getRelatedArticles, getAncestors } from "@/lib/api/api-client";
+import { getArticleById, getRelatedArticles, getAncestors, API_BASE_URL } from "@/lib/api/api-client";
 import { toast } from "@/components/ui/sonner";
-import { useState, useEffect, useRef } from "react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { useState, useEffect, useMemo } from "react";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { PdfSlideshow } from "@/components/pdf/PdfSlideshow"; // Import the new component
 
 export default function ArticlePage() {
   const { pageId } = useParams<{ pageId: string }>();
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const articleRef = useRef<HTMLElement>(null);
 
   const { data: article, isLoading: articleLoading, isError: articleError } = useQuery({
     queryKey: ['article', pageId],
@@ -25,36 +25,58 @@ export default function ArticlePage() {
     retry: false,
   });
 
+  const { processedHtml, embeddedPdfFile } = useMemo(() => {
+    if (!article) {
+      return { processedHtml: null, embeddedPdfFile: null };
+    }
+
+    const fullHtml = article.html;
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = fullHtml;
+
+    const pdfViewerDiv = tempDiv.querySelector('div[data-macro-name="viewpdf"]');
+    
+    if (pdfViewerDiv) {
+      const attachmentName = pdfViewerDiv.querySelector('div[data-attachment-name]')?.getAttribute('data-attachment-name');
+      if (attachmentName) {
+        pdfViewerDiv.remove();
+        return {
+          processedHtml: tempDiv.innerHTML,
+          embeddedPdfFile: attachmentName
+        };
+      }
+    }
+
+    return { processedHtml: fullHtml, embeddedPdfFile: null };
+  }, [article]);
+
+
   const { data: relatedArticles, isLoading: relatedLoading } = useQuery({
     queryKey: ['relatedArticles', article?.id],
     queryFn: () => article ? getRelatedArticles(article.tags, article.id) : Promise.resolve([]),
     enabled: !!article,
   });
 
-  // Fetch the full ancestor path for detailed breadcrumbs
   const { data: ancestors } = useQuery({
     queryKey: ['ancestors', pageId],
     queryFn: () => pageId ? getAncestors(pageId) : Promise.resolve([]),
     enabled: !!pageId,
   });
 
-  // Effect to handle image clicks within the rendered HTML content
   useEffect(() => {
-    if (articleLoading || !article) return;
-    const articleElement = articleRef.current;
-    if (!articleElement) return;
-
     const handleImageClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
-      if (target.tagName === 'IMG') {
+      if (target.tagName === 'IMG' && target.closest('.prose')) {
         event.preventDefault();
         const src = target.getAttribute('src');
         if (src) setSelectedImage(src);
       }
     };
-    articleElement.addEventListener('click', handleImageClick);
-    return () => articleElement.removeEventListener('click', handleImageClick);
-  }, [article, articleLoading]);
+    
+    document.addEventListener('click', handleImageClick);
+    return () => document.removeEventListener('click', handleImageClick);
+  }, []);
+
 
   if (articleLoading) {
     return <KnowledgeLayout><div className="max-w-4xl mx-auto py-8 space-y-4"><Skeleton className="h-10 w-3/4" /><Skeleton className="h-5 w-1/2" /><div className="space-y-4"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-[90%]" /></div></div></KnowledgeLayout>;
@@ -64,15 +86,16 @@ export default function ArticlePage() {
     return <KnowledgeLayout><div className="text-center py-20"><h1 className="text-2xl font-bold">Article Not Found</h1><p className="text-muted-foreground">The article you're looking for doesn't exist or has been moved.</p></div></KnowledgeLayout>;
   }
 
-  // Dynamically build detailed breadcrumbs from ancestors
   const breadcrumbs = ancestors
-    ? ancestors.map((ancestor, index) => {
-        // The first ancestor is the top-level group
-        if (index === 0) {
-          return { label: ancestor.title, href: `/category/${article.group}` };
-        }
-        return { label: ancestor.title, href: `/page/${ancestor.id}` };
-      }).concat({ label: article.title }) // Add the current article title at the end
+    ? [
+        ...ancestors.map((ancestor, index) => {
+          if (index === 0) {
+            return { label: ancestor.title, href: `/category/${article.group}` };
+          }
+          return { label: ancestor.title, href: `/page/${ancestor.id}` };
+        }),
+        { label: article.title },
+      ]
     : [];
 
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -97,7 +120,15 @@ export default function ArticlePage() {
           </div>
         </header>
         <Separator className="mb-8" />
-        <article ref={articleRef} className="prose dark:prose-invert max-w-none mb-12" dangerouslySetInnerHTML={{ __html: article.html }} />
+        
+        {embeddedPdfFile && pageId && (
+            <PdfSlideshow fileUrl={`${API_BASE_URL}/attachment/${pageId}/${embeddedPdfFile}`} />
+        )}
+
+        <div className="prose dark:prose-invert max-w-none mb-12"
+          dangerouslySetInnerHTML={{ __html: processedHtml || '' }} 
+        />
+
         {relatedArticles && relatedArticles.length > 0 && (
           <section>
             <Separator className="mb-8" />
@@ -112,6 +143,8 @@ export default function ArticlePage() {
       </div>
       <Dialog open={!!selectedImage} onOpenChange={(isOpen) => !isOpen && setSelectedImage(null)}>
         <DialogContent className="sm:max-w-4xl p-2 bg-transparent border-none shadow-none">
+          <DialogTitle className="sr-only">Enlarged Image</DialogTitle>
+          <DialogDescription className="sr-only">An enlarged view of the image from the article content.</DialogDescription>
           <img src={selectedImage || ''} alt="Enlarged view" className="w-full h-auto max-h-[90vh] object-contain" />
         </DialogContent>
       </Dialog>
