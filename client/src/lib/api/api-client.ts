@@ -1,6 +1,6 @@
 import { SearchFilters, Article, Subsection, UpdateEntry, Group, Tag, GroupInfo, ContentItem } from '../types/content';
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://rak-knowledge-hub-backend.onrender.com";
+export const API_BASE_URL = "https://rak-knowledge-hub-backend.onrender.com";
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
