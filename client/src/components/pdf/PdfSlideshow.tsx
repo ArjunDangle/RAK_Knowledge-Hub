@@ -65,7 +65,17 @@ export function PdfSlideshow({ fileUrl }: PdfSlideshowProps) {
             loading={<Skeleton style={{ width: containerWidth || '100%', aspectRatio: '16/9' }} />}
             error={<p>Failed to load PDF file.</p>}
           >
-            <Page pageNumber={pageNumber} width={containerWidth} renderTextLayer={false} renderAnnotationLayer={false} />
+            {/* ===== MODIFICATION START ===== */}
+            <Page 
+              pageNumber={pageNumber} 
+              width={containerWidth} 
+              renderTextLayer={false} 
+              renderAnnotationLayer={false} 
+              // This prop shows a skeleton while an individual page is rendering,
+              // improving perceived performance when navigating between pages.
+              loading={<Skeleton style={{ width: containerWidth, height: containerWidth * 9/16, backgroundColor: 'hsl(var(--muted))' }} />}
+            />
+            {/* ===== MODIFICATION END ===== */}
           </Document>
         </div>
         
@@ -88,15 +98,17 @@ export function PdfSlideshow({ fileUrl }: PdfSlideshowProps) {
           <DialogDescription className="sr-only">An expanded view of page {modalPageNumber}.</DialogDescription>
           
           <div className="relative w-full h-full flex items-center justify-center">
-            {/* Expanded PDF Page - sizing classes removed to allow it to fill the space */}
             <Document file={fileUrl} loading={<Skeleton className="w-[80vw] h-[80vh]" />}>
+              {/* ===== MODIFICATION START ===== */}
               <Page 
                 pageNumber={modalPageNumber} 
                 className="flex justify-center [&>canvas]:max-w-full [&>canvas]:max-h-full [&>canvas]:h-auto [&>canvas]:w-auto"
+                // This provides a simple text loader for the fullscreen modal view.
+                loading={<p className="text-white text-lg">Loading page...</p>}
               />
+              {/* ===== MODIFICATION END ===== */}
             </Document>
             
-            {/* Modal Navigation Buttons - size increased */}
             {numPages && (
               <>
                 <Button 
@@ -123,7 +135,6 @@ export function PdfSlideshow({ fileUrl }: PdfSlideshowProps) {
               </>
             )}
 
-            {/* Bigger Exit Button */}
             <DialogClose asChild>
               <Button
                 variant="ghost"

@@ -224,7 +224,12 @@ class ConfluenceService:
             response = self.confluence.session.get(download_link, stream=True)
             response.raise_for_status()
 
-            return StreamingResponse(io.BytesIO(response.content), media_type='application/pdf')
+            # ===== MODIFICATION START =====
+            # This is the optimized code. Instead of loading the whole file with response.content,
+            # we stream it in chunks directly to the client. This allows the PDF viewer
+            # to start rendering much faster.
+            return StreamingResponse(response.iter_content(chunk_size=8192), media_type='application/pdf')
+            # ===== MODIFICATION END =====
 
         except Exception as e:
             print(f"Error fetching attachment '{file_name}' for page ID {page_id}: {e}")
