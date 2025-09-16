@@ -7,6 +7,7 @@ from config import Settings
 from schemas.content_schemas import Article, Tag, Subsection, GroupInfo, PageContentItem, Ancestor
 from fastapi.responses import StreamingResponse
 import io
+import mimetypes # <--- I'll add this import
 
 class ConfluenceService:
     def __init__(self, settings: Settings):
@@ -225,10 +226,13 @@ class ConfluenceService:
             response.raise_for_status()
 
             # ===== MODIFICATION START =====
-            # This is the optimized code. Instead of loading the whole file with response.content,
-            # we stream it in chunks directly to the client. This allows the PDF viewer
-            # to start rendering much faster.
-            return StreamingResponse(response.iter_content(chunk_size=8192), media_type='application/pdf')
+            # Guess the MIME type of the file based on its extension.
+            # Provide a default if the type cannot be determined.
+            mimetype, _ = mimetypes.guess_type(file_name)
+            media_type = mimetype or 'application/octet-stream'
+
+            # Stream the content with the determined media type.
+            return StreamingResponse(response.iter_content(chunk_size=8192), media_type=media_type)
             # ===== MODIFICATION END =====
 
         except Exception as e:

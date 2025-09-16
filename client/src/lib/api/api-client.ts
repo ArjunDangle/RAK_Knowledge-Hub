@@ -1,6 +1,7 @@
 import { SearchFilters, Article, Subsection, UpdateEntry, Group, Tag, GroupInfo, ContentItem } from '../types/content';
 
 export const API_BASE_URL = "https://rak-knowledge-hub-backend.onrender.com";
+// export const API_BASE_URL = "http://127.0.0.1:8000";
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {

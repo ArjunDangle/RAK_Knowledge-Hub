@@ -13,6 +13,7 @@ import { toast } from "@/components/ui/sonner";
 import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { PdfSlideshow } from "@/components/pdf/PdfSlideshow";
+import { VideoPlayer } from "@/components/video/VideoPlayer";
 
 export default function ArticlePage() {
   const { pageId } = useParams<{ pageId: string }>();
@@ -25,7 +26,6 @@ export default function ArticlePage() {
     retry: false,
   });
 
-  // New, more robust logic to handle multiple content blocks
   const contentBlocks = useMemo(() => {
     if (!article) return [];
 
@@ -33,31 +33,52 @@ export default function ArticlePage() {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = fullHtml;
 
-    const blocks: { type: 'html' | 'pdf'; content?: string; fileName?: string }[] = [];
+    const blocks: { type: 'html' | 'pdf' | 'video'; content?: string; fileName?: string }[] = [];
     let currentHtml = '';
 
     tempDiv.childNodes.forEach(node => {
-      // Check if the node is an element and is a Confluence PDF macro placeholder
-      if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).matches('div[data-macro-name="viewpdf"]')) {
-        // If we have accumulated HTML, push it to the blocks array first
-        if (currentHtml.trim() !== '') {
-          blocks.push({ type: 'html', content: currentHtml });
-          currentHtml = ''; // Reset the accumulator
-        }
+      let nodeReplaced = false;
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const element = node as HTMLElement;
         
-        // Now, process and push the PDF block
-        const pdfDiv = node as HTMLElement;
-        const attachmentName = pdfDiv.querySelector('div[data-attachment-name]')?.getAttribute('data-attachment-name');
-        if (attachmentName) {
-          blocks.push({ type: 'pdf', fileName: attachmentName });
+        const isPdfMacro = element.matches('div[data-macro-name="viewpdf"]');
+        const isVideoMacro = element.matches('div[data-macro-name="multimedia"]');
+        
+        // ===== MODIFICATION START =====
+        // This now checks for the specific SPAN wrapper Confluence uses for file links.
+        const isVideoFileLink = element.matches('span.confluence-embedded-file-wrapper') && element.querySelector('a[href*=".mp4"]');
+        // ===== MODIFICATION END =====
+
+        if (isPdfMacro || isVideoMacro || isVideoFileLink) {
+          if (currentHtml.trim() !== '') {
+            blocks.push({ type: 'html', content: currentHtml });
+            currentHtml = '';
+          }
+          
+          let attachmentName: string | null = null;
+          if (isVideoFileLink) {
+            const link = element.querySelector('a');
+            const href = link?.getAttribute('href') || '';
+            const parts = href.split('/');
+            const lastPart = parts[parts.length - 1];
+            attachmentName = decodeURIComponent(lastPart.split('?')[0]);
+          } else {
+            attachmentName = element.querySelector('div[data-attachment-name]')?.getAttribute('data-attachment-name');
+          }
+
+          if (attachmentName) {
+            const type = isPdfMacro ? 'pdf' : 'video';
+            blocks.push({ type, fileName: attachmentName });
+          }
+          nodeReplaced = true;
         }
-      } else {
-        // If it's not a PDF macro, accumulate its HTML content
+      }
+      
+      if (!nodeReplaced) {
         currentHtml += (node as any).outerHTML || node.textContent;
       }
     });
 
-    // Add any final, remaining HTML content at the end
     if (currentHtml.trim() !== '') {
       blocks.push({ type: 'html', content: currentHtml });
     }
@@ -139,6 +160,9 @@ export default function ArticlePage() {
         {contentBlocks.map((block, index) => {
           if (block.type === 'pdf' && pageId && block.fileName) {
             return <PdfSlideshow key={`pdf-${index}`} fileUrl={`${API_BASE_URL}/attachment/${pageId}/${block.fileName}`} />;
+          }
+          if (block.type === 'video' && pageId && block.fileName) {
+            return <VideoPlayer key={`video-${index}`} fileUrl={`${API_BASE_URL}/attachment/${pageId}/${block.fileName}`} />;
           }
           if (block.type === 'html' && block.content) {
             return (
