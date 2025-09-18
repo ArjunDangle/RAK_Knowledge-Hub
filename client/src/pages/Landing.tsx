@@ -5,13 +5,14 @@ import { CategoryCard } from "@/components/cards/CategoryCard";
 import { ArticleCard } from "@/components/cards/ArticleCard";
 import { CategoryCardSkeleton, ArticleCardSkeleton } from "@/components/ui/loading-skeleton";
 import { getGroups, getSubsectionsByGroup, getPopularArticles, getRecentArticles } from "@/lib/api/api-client";
-import { Group, Subsection, Article, SearchMode } from "@/lib/types/content";
+import { Subsection, Article, SearchMode } from "@/lib/types/content";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link, useNavigate } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { formatRelativeTime } from "@/lib/utils/date";
 import ChatbotWidget from "@/components/chatbot/ChatbotWidget";
 import { useState } from "react";
+import { getColorFromId } from "@/lib/utils/visual-utils";
 
 export default function Landing() {
   const { data: groups, isLoading: groupsLoading } = useQuery({ queryKey: ['groups'], queryFn: getGroups });
@@ -77,12 +78,12 @@ export default function Landing() {
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader logoSrc="/rak-logo.png"/>
-      <div style={{ backgroundColor: 'hsl(var(--foreground))', color: 'hsl(var(--background))' }}>
+      <div className="bg-black text-white">
         <div className="container max-w-7xl mx-auto px-6 py-12 md:py-20">
           <section className="text-center mb-16">
             <div className="max-w-3xl mx-auto mb-8">
-              <h1 className="text-4xl md:text-5xl font-bold mb-4" style={{ color: 'hsl(var(--background))' }}>RAKwireless Knowledge Hub</h1>
-              <p className="text-xl leading-relaxed" style={{ color: 'hsl(var(--border))' }}>Your comprehensive resource for documentation, guides, and technical knowledge.</p>
+              <h1 className="text-4xl md:text-5xl font-bold mb-4">RAKwireless Knowledge Hub</h1>
+              <p className="text-xl leading-relaxed text-white/80">Your comprehensive resource for documentation, guides, and technical knowledge.</p>
             </div>
             <SearchBar 
               variant="hero"
@@ -97,8 +98,7 @@ export default function Landing() {
       </div>
       
       <main className="container max-w-7xl mx-auto px-6 py-12">
-        {groupsLoading ? 
-          <p>Loading categories...</p> : groups?.map(groupInfo => (
+        {groupsLoading ? <p>Loading categories...</p> : groups?.map(groupInfo => (
           <div key={groupInfo.id}>
             {renderCategorySection(
               groupInfo.title,
@@ -124,7 +124,11 @@ export default function Landing() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {popularArticles?.map((article) => (
-                    <ArticleCard key={article.id} article={article} showGroup={true} />
+                    <ArticleCard 
+                      key={article.id} 
+                      article={article} 
+                      showGroup={true} 
+                      pastelColor={getColorFromId(article.id)} />
                   ))}
                 </div>
               )}

@@ -1,5 +1,5 @@
-import { useState, ReactNode, createContext, useContext, useEffect, useRef } from "react";
-import { useParams, useLocation } from "react-router-dom";
+import { useState, ReactNode, createContext, useContext, useRef } from "react";
+import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteSidebar } from "@/components/layout/SiteSidebar";
@@ -10,13 +10,11 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { ImperativePanelHandle } from "react-resizable-panels";
 
-// --- CONTEXT ---
 interface LayoutContextType {
   activePath: string[];
 }
 const LayoutContext = createContext<LayoutContextType>({ activePath: [] });
 export const useLayout = () => useContext(LayoutContext);
-// --- END CONTEXT ---
 
 interface KnowledgeLayoutProps {
   breadcrumbs?: Array<{ label: string; href?: string }>;
@@ -104,8 +102,6 @@ export function KnowledgeLayout({ breadcrumbs, children }: KnowledgeLayoutProps)
           >
             <SiteSidebar
               isCollapsed={sidebarCollapsed}
-              // ===== THE FIX IS HERE =====
-              // We now pass the correct toggle function
               onToggle={toggleSidebar}
             />
           </ResizablePanel>

@@ -6,9 +6,10 @@ import { ArticleCardSkeleton, CategoryCardSkeleton } from "@/components/ui/loadi
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { KnowledgeLayout } from "./KnowledgeLayout";
+import { KnowledgeLayout } from "@/pages/KnowledgeLayout";
 import { getSubsectionsByGroup, getPageContents, getPageById, getAncestors } from "@/lib/api/api-client";
 import { Group } from "@/lib/types/content";
+import { getColorFromId } from "@/lib/utils/visual-utils";
 
 const groupInfo = {
   departments: { title: "Departments", description: "Resources organized by team functions" },
@@ -18,7 +19,7 @@ const groupInfo = {
 
 export default function CategoryPage() {
   const { group, pageId } = useParams<{ group?: Group; pageId?: string }>();
-  
+
   const isTopLevelPage = !!group && !pageId;
   const isNestedPage = !!pageId;
 
@@ -104,7 +105,7 @@ export default function CategoryPage() {
               {contents.map((item) => item.type === 'subsection' ? (
                 <CategoryCard key={item.id} title={item.title} description={item.description} subsection={item} articleCount={item.articleCount} updatedAt={item.updatedAt} href={`/page/${item.id}`} />
               ) : (
-                <ArticleCard key={item.id} article={item} />
+                <ArticleCard key={item.id} article={item} pastelColor={getColorFromId(item.id)} />
               ))}
             </div>
           ) : !pageDetailsLoading && (
@@ -138,13 +139,10 @@ export default function CategoryPage() {
                 key={subsection.id} 
                 title={subsection.title} 
                 description={subsection.description} 
-                group={subsection.group} 
-                // ===== FIX IS HERE =====
-                // We now pass the 'subsection' object and fix the 'updatedAt' typo
                 subsection={subsection}
                 articleCount={subsection.articleCount} 
                 updatedAt={subsection.updatedAt} 
-                href={`/page/${subsection.id}`} 
+                href={`/page/${subsection.id}`}
               />
             ))}
           </div>

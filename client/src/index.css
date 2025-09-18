@@ -8,16 +8,16 @@
   :root {
     /* Backgrounds & Surfaces */
     --background: 0 0% 98%; /* Lighter Platinum */
-    --foreground: 0 0% 21%; /* Jet */
+    --foreground: 0 0% 9%; /* Near Black */
     --card: 0 0% 100%; /* White */
     --card-foreground: 0 0% 21%;
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 21%;
     --surface: 0 0% 100%;
     --surface-variant: 0 0% 96%;
-    
+
     /* Primary (Caribbean Current) */
-    --primary: 184 31% 34%; /* Caribbean Current */
+    --primary: 184 31% 34%;
     --primary-hover: 184 31% 29%;
     --primary-foreground: 0 0% 100%; /* White */
     --primary-subtle: 184 31% 95%;
@@ -31,7 +31,7 @@
     --muted: 0 0% 96%; /* Platinum */
     --muted-foreground: 0 0% 40%;
     --muted-hover: 0 0% 92%;
-    
+
     /* Accent (Subtle Platinum) */
     --accent: 0 0% 96%;
     --accent-foreground: 0 0% 21%;
@@ -53,13 +53,12 @@
     --warning-subtle: 38 92% 95%;
 
     /* Sidebar (Dark Theme) */
-    --sidebar-background: 208 42% 27%; /* Indigo Dye */
-    --sidebar-foreground: 0 0% 100%; /* White */
-    --sidebar-border: 208 42% 32%;
-    /* --- UPDATED ACTIVE ITEM STYLES --- */
+    --sidebar-background: 0 0% 9%; /* Near Black */
+    --sidebar-foreground: 0 0% 98%; /* Near White */
+    --sidebar-border: 0 0% 100% / 0.1; /* Transparent White */
     --sidebar-primary: 184 31% 34%; /* Caribbean Current */
     --sidebar-primary-foreground: 0 0% 100%; /* White */
-    --sidebar-accent: 208 42% 30%;
+    --sidebar-accent: 0 0% 100% / 0.07; /* Transparent White */
     --sidebar-accent-foreground: 0 0% 100%;
     --sidebar-ring: 0 0% 90%;
 
@@ -73,9 +72,9 @@
   }
 
   .dark {
-    --background: 0 0% 15%; /* Dark Jet */
-    --foreground: 0 0% 85%; /* Platinum */
-    --card: 0 0% 21%; /* Jet */
+    --background: 0 0% 9%; /* Near Black */
+    --foreground: 0 0% 98%; /* Near White */
+    --card: 0 0% 15%; /* Dark Jet */
     --card-foreground: 0 0% 90%;
     --popover: 0 0% 15%;
     --popover-foreground: 0 0% 90%;

@@ -9,7 +9,7 @@ import ArticlePage from "./pages/ArticlePage";
 import SearchPage from "./pages/SearchPage";
 import WhatsNewPage from "./pages/WhatsNewPage";
 import NotFound from "./pages/NotFound";
-import ScrollToTop from "./components/ScrollToTop"; // ===== 1. IMPORT THE NEW COMPONENT =====
+import ScrollToTop from "./components/ScrollToTop";
 
 const queryClient = new QueryClient();
 
@@ -19,7 +19,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <ScrollToTop /> {/* ===== 2. ADD THE COMPONENT HERE ===== */}
+        <ScrollToTop />
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/search" element={<SearchPage />} />

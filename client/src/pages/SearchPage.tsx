@@ -14,6 +14,7 @@ import { searchContent, getAllTags } from "@/lib/api/api-client";
 import { SearchMode, SearchFilters, Group, Tag } from "@/lib/types/content";
 import { X, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getColorFromId } from "@/lib/utils/visual-utils";
 
 export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -49,7 +50,8 @@ export default function SearchPage() {
     allTags.forEach(tag => {
         const firstLetter = tag.name[0]?.toUpperCase();
         if (firstLetter >= 'A' && firstLetter <= 'C') groups['A-C'].push(tag);
-        else if (firstLetter >= 'D' && firstLetter <= 'L') groups['D-L'].push(tag);
+        else if (firstLetter >= 'D' && firstLetter 
+ <= 'L') groups['D-L'].push(tag);
         else if (firstLetter >= 'M' && firstLetter <= 'R') groups['M-R'].push(tag);
         else if (firstLetter >= 'S' && firstLetter <= 'Z') groups['S-Z'].push(tag);
     });
@@ -64,7 +66,7 @@ export default function SearchPage() {
     if (filters.sort !== 'relevance') params.set('sort', filters.sort);
     setSearchParams(params, { replace: true });
   }, [filters, setSearchParams]);
-  
+
   // Sync the search bar inputs when filters are updated
   useEffect(() => {
     setQuery(filters.query);
@@ -86,7 +88,8 @@ export default function SearchPage() {
   // Syncs temporary modal state when it opens
   const handleModalOpen = (isOpen: boolean) => {
     if (isOpen) {
-        const currentTagsInQuery = (mode === 'tags' && query) ? query.split(' ').filter(Boolean) : [];
+        const currentTagsInQuery = (mode === 'tags' && query) ?
+ query.split(' ').filter(Boolean) : [];
         setTemporarySelectedTags(new Set(currentTagsInQuery));
     }
     setDialogOpen(isOpen);
@@ -106,7 +109,8 @@ export default function SearchPage() {
 
   const handleApplyTagSelection = () => {
     const newQuery = Array.from(temporarySelectedTags).join(' ');
-    const newMode = newQuery ? 'tags' : 'all';
+    const newMode = newQuery ?
+ 'tags' : 'all';
     setQuery(newQuery);
     setMode(newMode);
     setFilters(prev => ({ ...prev, query: newQuery, mode: newMode }));
@@ -120,7 +124,7 @@ export default function SearchPage() {
     setMode(newMode);
     setFilters(prev => ({ ...prev, query: updatedQuery, mode: newMode }));
   };
-  
+
   const currentSelectedTags = useMemo(() => {
     return (mode === 'tags' && query) ? query.split(' ').filter(Boolean) : [];
   }, [query, mode]);
@@ -135,11 +139,13 @@ export default function SearchPage() {
           <SearchBar variant="compact" query={query} onQueryChange={setQuery} mode={mode} onModeChange={setMode} onSearch={handleExecuteSearch} className="max-w-2xl"/>
           
           {currentSelectedTags.length > 0 && (
-              <div className="mt-4 flex flex-wrap gap-2 items-center max-w-2xl">
+              <div className="mt-4 
+ flex flex-wrap gap-2 items-center max-w-2xl">
                   {currentSelectedTags.map((tagName) => (
                       <Badge key={tagName} variant="default" className="cursor-pointer group/badge" onClick={() => handleRemoveTag(tagName)}>
                           {tagName}
-                          <X className="ml-1.5 h-3 w-3 rounded-full group-hover/badge:bg-destructive-foreground/20" />
+                     
+           <X className="ml-1.5 h-3 w-3 rounded-full group-hover/badge:bg-destructive-foreground/20" />
                       </Badge>
                   ))}
               </div>
@@ -147,83 +153,102 @@ export default function SearchPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          <aside className="lg:col-span-1 space-y-6">
+     
+           <aside className="lg:col-span-1 space-y-6">
             <div>
               <h3 className="font-semibold text-foreground mb-3">Sort by</h3>
               <Select value={sort} onValueChange={handleSortChange}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="relevance">Relevance</SelectItem>
+              
+               <SelectItem value="relevance">Relevance</SelectItem>
                   <SelectItem value="date">Recently Updated</SelectItem>
                   <SelectItem value="views">Most Viewed</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            {allTags && (
+            {allTags 
+ && (
               <div>
                 <Dialog open={dialogOpen} onOpenChange={handleModalOpen}>
                   <DialogTrigger asChild>
                     <div className="w-full">
-                        <h3 className="font-semibold text-foreground mb-3">Filter by Tag</h3>
+                        <h3 className="font-semibold text-foreground 
+ mb-3">Filter by Tag</h3>
                         <Button variant="outline" className="w-full justify-start">Select one or more tags...</Button>
                     </div>
                   </DialogTrigger>
                   <DialogContent className="sm:max-w-2xl">
-                    <DialogHeader>
+          
+                     <DialogHeader>
                       <DialogTitle>Filter by Tag</DialogTitle>
                     </DialogHeader>
                     <Alert>
                       <Info className="h-4 w-4" />
-                      <AlertDescription>
-                        Select one or more tags to add them to your search query. The search mode will automatically be set to "Tags".
+ 
+                       <AlertDescription>
+                        Select one or more tags to add them to your search query.
+ The search mode will automatically be set to "Tags".
                       </AlertDescription>
                     </Alert>
                     <div className="grid grid-cols-4 gap-x-6 gap-y-4 py-4">
                       {Object.entries(groupedTags).map(([groupName, tagsInGroup]) => (
-                        <div key={groupName} className="space-y-2">
+                     
+       <div key={groupName} className="space-y-2">
                           <h4 className="font-semibold text-sm text-muted-foreground border-b pb-1 mb-2">{groupName}</h4>
                           <div className="flex flex-col items-start space-y-1">
                             {tagsInGroup.map(tag => (
-                              <button
+   
+                               <button
                                 key={tag.id}
                                 onClick={() => handleTemporaryTagToggle(tag.name)}
-                                className={cn(
+       
+                                 className={cn(
                                   "text-sm text-foreground text-left rounded-sm px-1 -mx-1 hover:bg-accent w-full",
-                                  temporarySelectedTags.has(tag.name) && "underline text-primary font-semibold"
+                                  
+  temporarySelectedTags.has(tag.name) && "underline text-primary font-semibold"
                                 )}
                               >
                                 {tag.name}
-                              </button>
+  
+                               </button>
                             ))}
                           </div>
-                        </div>
+                  
+             </div>
                       ))}
                     </div>
                     <DialogFooter>
                         <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
-                        <Button onClick={handleApplyTagSelection}>Done</Button>
+      
+                         <Button onClick={handleApplyTagSelection}>Done</Button>
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
               </div>
             )}
-          </aside>
+ 
+             </aside>
           <div className="lg:col-span-3">
-            {searchLoading ? (
+            {searchLoading ?
+ (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {Array.from({ length: 6 }).map((_, i) => <ArticleCardSkeleton key={i} />)}
               </div>
-            ) : searchResults && searchResults.length > 0 ? (
+            ) : searchResults && searchResults.length > 0 ?
+ (
               <div className="space-y-6">
                 <p className="text-muted-foreground">{searchResults.length} {searchResults.length === 1 ? 'result' : 'results'} found {filters.query && ` for "${filters.query}"`}</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {searchResults.map((article) => (<ArticleCard key={article.id} article={article} showGroup={true} />))}
-                </div>
+                  {searchResults.map((article) => (<ArticleCard key={article.id} article={article} showGroup={true} pastelColor={getColorFromId(article.id)} />))}
+           
+           </div>
               </div>
             ) : (
               <div className="text-center py-12 bg-muted/20 rounded-lg h-full flex flex-col justify-center">
                 <h3 className="text-lg font-semibold text-foreground mb-2">{filters.query ? 'No results found' : 'Start a search'}</h3>
-                <p className="text-muted-foreground">{filters.query ? 'Try adjusting your search terms.' : 'Use the search bar above to find articles.'}</p>
+                <p 
+ className="text-muted-foreground">{filters.query ? 'Try adjusting your search terms.' : 'Use the search bar above to find articles.'}</p>
               </div>
             )}
           </div>

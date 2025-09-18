@@ -1,20 +1,7 @@
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-} from "@/components/ui/card";
-import {
-  Building2,
-  BookOpen,
-  Wrench,
-  ChevronRight,
-  Eye,
-  FileText,
-  Folder,
-} from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Eye, FileText, Folder } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Group, Subsection } from "@/lib/types/content";
+import { Subsection } from "@/lib/types/content";
 import { cn } from "@/lib/utils";
 import {
   HoverCard,
@@ -27,23 +14,17 @@ import { getPageContents } from "@/lib/api/api-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { getCardHeaderImage, getCardIcon } from "@/lib/utils/visual-utils";
 
 interface CategoryCardProps {
   title: string;
   description: string;
-  group?: Group;
   subsection?: Subsection;
   articleCount?: number;
   updatedAt?: string;
   href: string;
   className?: string;
 }
-
-const groupIcons = {
-  departments: Building2,
-  "resource-centre": BookOpen,
-  tools: Wrench,
-};
 
 function CategoryPreviewContent({ subsectionId }: { subsectionId: string }) {
   const { data: children, isLoading } = useQuery({
@@ -93,7 +74,6 @@ function CategoryPreviewContent({ subsectionId }: { subsectionId: string }) {
 export function CategoryCard({
   title,
   description,
-  group,
   subsection,
   articleCount,
   updatedAt,
@@ -108,72 +88,70 @@ export function CategoryCard({
     });
   };
 
-  const IconComponent = group ? groupIcons[group] : ChevronRight;
+  const id = subsection?.id || title;
+  const headerImage = getCardHeaderImage(id);
+  const Icon = getCardIcon(id);
 
   return (
     <Card
       className={cn(
-        // ===== THE FIX IS HERE: `hover:-translate-y-1` has been removed =====
-        "group flex flex-col transition-all duration-300 bg-card border border-border shadow-md hover:shadow-xl hover:border-primary",
-        "overflow-hidden",
+        "group relative flex h-80 flex-col justify-end transition-all duration-300 shadow-lg hover:scale-105 hover:shadow-xl overflow-hidden bg-cover bg-center border border-black/10 dark:border-white/10 hover:border-secondary",
         className
       )}
+      style={{ backgroundImage: `url(${headerImage})` }}
     >
-      <Link to={href} className="flex flex-col h-full">
-        <CardHeader className="flex flex-row items-start justify-between gap-4 p-4">
-          <div className="flex items-start gap-4">
-            <div className="flex-shrink-0 p-3 rounded-lg bg-primary text-primary-foreground">
-              <IconComponent className="h-6 w-6" />
-            </div>
-            <h3 className="font-semibold text-lg text-card-foreground transition-colors group-hover:text-primary pt-1">
-              {title}
+      <Link to={href} className="contents">
+        <div className="relative flex h-full flex-col p-4 text-center">
+          
+          <div className="flex-grow flex flex-col items-center justify-center">
+            <Icon className="h-14 w-14 text-foreground" />
+            <h3 className="mt-4 text-2xl font-bold text-foreground">
+                {title}
             </h3>
+            <p className="mt-2 text-base text-muted-foreground line-clamp-2">
+                {description}
+            </p>
           </div>
-          <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary flex-shrink-0 mt-2" />
-        </CardHeader>
-        <CardContent className="flex-grow px-4 pb-4">
-          <p className="text-muted-foreground text-sm leading-relaxed">
-            {description}
-          </p>
-        </CardContent>
-      </Link>
-      <CardFooter className="flex items-center justify-between text-xs text-muted-foreground p-4 mt-auto bg-muted/50 border-t border-border">
-        <div className="flex items-center gap-2">
-          {articleCount !== undefined && (
-            <span>
-              {articleCount} {articleCount === 1 ? "item" : "items"}
-            </span>
-          )}
-          {subsection && articleCount !== undefined && articleCount > 0 && (
-            <HoverCard>
-              <HoverCardTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto px-2 py-1 text-xs"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Eye className="h-3 w-3 mr-1" />
-                  Preview
-                </Button>
-              </HoverCardTrigger>
-              <HoverCardContent
-                className="w-80 p-0"
-                side="top"
-                align="center"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex flex-col p-2">
-                  <h4 className="text-sm font-semibold mb-2 px-2">Quick Preview</h4>
-                  <Separator className="mb-1" />
-                  <CategoryPreviewContent subsectionId={subsection.id} />
-                </div>
-              </HoverCardContent>
-            </HoverCard>
-          )}
+
+          <div className="mt-auto flex w-full items-center justify-between pt-4 text-sm font-semibold text-foreground">
+              <div className="flex items-center gap-2">
+              {articleCount !== undefined && (
+                  <span>
+                  {articleCount} {articleCount === 1 ? "item" : "items"}
+                  </span>
+              )}
+              {subsection && articleCount !== undefined && articleCount > 0 && (
+                  <HoverCard>
+                  <HoverCardTrigger asChild>
+                      <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-auto px-2 py-1 text-sm font-semibold"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                      >
+                      <Eye className="h-4 w-4 mr-1" />
+                      Preview
+                      </Button>
+                  </HoverCardTrigger>
+                  <HoverCardContent
+                      className="w-80 p-0"
+                      side="top"
+                      align="center"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  >
+                      <div className="flex flex-col p-2">
+                      <h4 className="text-sm font-semibold mb-2 px-2">Quick Preview</h4>
+                      <Separator className="mb-1" />
+                      <CategoryPreviewContent subsectionId={subsection.id} />
+                      </div>
+                  </HoverCardContent>
+                  </HoverCard>
+              )}
+              </div>
+              {updatedAt && <span>Updated {formatDate(updatedAt)}</span>}
+          </div>
         </div>
-        {updatedAt && <span>Updated {formatDate(updatedAt)}</span>}
-      </CardFooter>
+      </Link>
     </Card>
   );
 }
