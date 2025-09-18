@@ -6,10 +6,11 @@ import { ArticleCardSkeleton, CategoryCardSkeleton } from "@/components/ui/loadi
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { KnowledgeLayout } from "@/pages/KnowledgeLayout";
+import { KnowledgeLayout, useLayout } from "@/pages/KnowledgeLayout";
 import { getSubsectionsByGroup, getPageContents, getPageById, getAncestors } from "@/lib/api/api-client";
 import { Group } from "@/lib/types/content";
 import { getColorFromId } from "@/lib/utils/visual-utils";
+import { cn } from "@/lib/utils";
 
 const groupInfo = {
   departments: { title: "Departments", description: "Resources organized by team functions" },
@@ -19,6 +20,7 @@ const groupInfo = {
 
 export default function CategoryPage() {
   const { group, pageId } = useParams<{ group?: Group; pageId?: string }>();
+  const { isSidebarCollapsed } = useLayout();
 
   const isTopLevelPage = !!group && !pageId;
   const isNestedPage = !!pageId;
@@ -67,6 +69,11 @@ export default function CategoryPage() {
       }).concat(currentPageData ? [{ label: currentPageData.title }] : [])
     : [{ label: info.title }];
 
+  const gridClassName = cn(
+    "grid grid-cols-1 md:grid-cols-2 gap-6 mt-12",
+    isSidebarCollapsed ? "xl:grid-cols-5" : "xl:grid-cols-4"
+  );
+
   if (isNestedPage) {
     return (
       <KnowledgeLayout breadcrumbs={breadcrumbs}>
@@ -99,11 +106,11 @@ export default function CategoryPage() {
           </div>
           
           {contentsLoading || pageDetailsLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-12">{Array.from({ length: 6 }).map((_, i) => <ArticleCardSkeleton key={i} />)}</div>
+            <div className={gridClassName}>{Array.from({ length: 6 }).map((_, i) => <ArticleCardSkeleton key={i} />)}</div>
           ) : contents && contents.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-12">
+            <div className={gridClassName}>
               {contents.map((item) => item.type === 'subsection' ? (
-                <CategoryCard key={item.id} title={item.title} description={item.description} subsection={item} articleCount={item.articleCount} updatedAt={item.updatedAt} href={`/page/${item.id}`} />
+                <CategoryCard key={item.id} title={item.title} description={item.description} subsection={item} articleCount={item.articleCount} updatedAt={item.updatedAt} href={`/page/${item.id}`} isCompact={isSidebarCollapsed} />
               ) : (
                 <ArticleCard key={item.id} article={item} pastelColor={getColorFromId(item.id)} />
               ))}
@@ -131,9 +138,9 @@ export default function CategoryPage() {
           <p className="text-lg text-muted-foreground">{info.description}</p>
         </div>
         {subsectionsLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{Array.from({ length: 6 }).map((_, i) => <CategoryCardSkeleton key={i} />)}</div>
+          <div className={gridClassName.replace("mt-12", "")}>{Array.from({ length: 6 }).map((_, i) => <CategoryCardSkeleton key={i} />)}</div>
         ) : topLevelSubsections && topLevelSubsections.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className={gridClassName.replace("mt-12", "")}>
             {topLevelSubsections.map((subsection) => (
               <CategoryCard 
                 key={subsection.id} 
@@ -143,6 +150,7 @@ export default function CategoryPage() {
                 articleCount={subsection.articleCount} 
                 updatedAt={subsection.updatedAt} 
                 href={`/page/${subsection.id}`}
+                isCompact={isSidebarCollapsed}
               />
             ))}
           </div>

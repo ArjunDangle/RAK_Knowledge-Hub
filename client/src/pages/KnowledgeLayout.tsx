@@ -1,4 +1,4 @@
-import { useState, ReactNode, createContext, useContext, useEffect, useRef } from "react";
+import { useState, ReactNode, createContext, useContext, useEffect, useRef, useMemo } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { SiteHeader } from "@/components/layout/SiteHeader";
@@ -13,8 +13,9 @@ import { ImperativePanelHandle } from "react-resizable-panels";
 // --- CONTEXT ---
 interface LayoutContextType {
   activePath: string[];
+  isSidebarCollapsed: boolean;
 }
-const LayoutContext = createContext<LayoutContextType>({ activePath: [] });
+const LayoutContext = createContext<LayoutContextType>({ activePath: [], isSidebarCollapsed: false });
 export const useLayout = () => useContext(LayoutContext);
 // --- END CONTEXT ---
 
@@ -27,17 +28,14 @@ export function KnowledgeLayout({ breadcrumbs, children }: KnowledgeLayoutProps)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { pageId, articleId } = useParams<{ pageId?: string; articleId?: string }>();
   const isMobile = useIsMobile();
-  
   const idToFetch = pageId || articleId;
 
   const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
-
   const { data: ancestors } = useQuery({
     queryKey: ['ancestors', idToFetch],
     queryFn: () => getAncestors(idToFetch!),
     enabled: !!idToFetch,
   });
-
   const activePath = [...(ancestors?.map(a => a.id) || []), idToFetch].filter(Boolean) as string[];
 
   const toggleSidebar = () => {
@@ -50,10 +48,10 @@ export function KnowledgeLayout({ breadcrumbs, children }: KnowledgeLayoutProps)
       }
     }
   };
-  
+
   if (isMobile) {
     return (
-        <LayoutContext.Provider value={{ activePath }}>
+        <LayoutContext.Provider value={{ activePath, isSidebarCollapsed: true }}>
             <div className="min-h-screen bg-background">
                 <SiteHeader
                     showSidebarToggle={true}
@@ -79,12 +77,13 @@ export function KnowledgeLayout({ breadcrumbs, children }: KnowledgeLayoutProps)
   }
 
   return (
-    <LayoutContext.Provider value={{ activePath }}>
+    <LayoutContext.Provider value={{ activePath, isSidebarCollapsed: sidebarCollapsed }}>
       <div className="min-h-screen bg-background">
         <SiteHeader
           showSidebarToggle={true}
           onSidebarToggle={toggleSidebar}
           logoSrc="/rak-logo.png"
+          isSidebarCollapsed={sidebarCollapsed}
         />
         <ResizablePanelGroup 
           direction="horizontal" 
@@ -104,8 +103,6 @@ export function KnowledgeLayout({ breadcrumbs, children }: KnowledgeLayoutProps)
           >
             <SiteSidebar
               isCollapsed={sidebarCollapsed}
-              // ===== THE FIX IS HERE =====
-              // We now pass the correct toggle function
               onToggle={toggleSidebar}
             />
           </ResizablePanel>

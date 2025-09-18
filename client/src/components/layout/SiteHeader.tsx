@@ -1,4 +1,4 @@
-import { Search, Menu } from "lucide-react";
+import { Search, Menu, PanelRightOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link, useNavigate } from "react-router-dom";
@@ -9,12 +9,14 @@ interface SiteHeaderProps {
   showSidebarToggle?: boolean;
   onSidebarToggle?: () => void;
   logoSrc?: string;
+  isSidebarCollapsed?: boolean;
 }
 
 export function SiteHeader({ 
   showSidebarToggle = false, 
   onSidebarToggle, 
-  logoSrc 
+  logoSrc,
+  isSidebarCollapsed = false,
 }: SiteHeaderProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
@@ -32,8 +34,6 @@ export function SiteHeader({
       "shadow-sm"
     )}>
       <div className="container max-w-7xl mx-auto flex h-16 items-center gap-4 px-6">
-        {/* ===== FIX IS HERE ===== */}
-        {/* The `md:hidden` class is removed to show the toggle on desktop */}
         {showSidebarToggle && onSidebarToggle && (
           <Button
             variant="ghost"
@@ -41,12 +41,11 @@ export function SiteHeader({
             onClick={onSidebarToggle}
             className="h-9 w-9 p-0"
           >
-            <Menu className="h-5 w-5" />
-            <span className="sr-only">Toggle sidebar</span>
+            {isSidebarCollapsed ? <PanelRightOpen className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            <span className="sr-only">{isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}</span>
           </Button>
         )}
         
-        {/* Logo */}
         <div className="flex items-center space-x-2 mr-auto">
           <Link to="/" className="flex items-center space-x-3">
             {logoSrc ? (
@@ -64,7 +63,6 @@ export function SiteHeader({
           </Link>
         </div>
 
-        {/* Navigation & Search */}
         <div className="flex items-center gap-4">
           <nav className="hidden md:flex items-center"></nav>
 

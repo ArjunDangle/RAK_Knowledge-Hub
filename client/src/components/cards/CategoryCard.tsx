@@ -1,4 +1,4 @@
-import { Card, CardFooter } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Eye, FileText, Folder } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Subsection } from "@/lib/types/content";
@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getCardHeaderImage, getCardIcon } from "@/lib/utils/visual-utils";
+import { useState } from "react";
 
 interface CategoryCardProps {
   title: string;
@@ -24,6 +25,7 @@ interface CategoryCardProps {
   updatedAt?: string;
   href: string;
   className?: string;
+  isCompact?: boolean;
 }
 
 function CategoryPreviewContent({ subsectionId }: { subsectionId: string }) {
@@ -79,7 +81,10 @@ export function CategoryCard({
   updatedAt,
   href,
   className,
+  isCompact = false,
 }: CategoryCardProps) {
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
   const formatDate = (dateString?: string) => {
     if (!dateString) return "";
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -99,44 +104,43 @@ export function CategoryCard({
   return (
     <Card
       className={cn(
-        "group relative flex h-80 flex-col justify-end transition-all duration-300 shadow-lg hover:scale-105 hover:shadow-xl overflow-hidden bg-cover bg-center border border-black/10 dark:border-white/10 hover:border-secondary",
+        "group relative flex flex-col justify-end transition-all duration-300 shadow-lg overflow-hidden bg-cover bg-center border border-black/10 dark:border-white/10",
+        "hover:shadow-xl hover:border-secondary",
+        isCompact ? "h-72" : "h-80",
+        isPreviewOpen ? "scale-105 shadow-xl border-secondary" : "hover:scale-105",
         className
       )}
       style={{ backgroundImage: `url(${headerImage})` }}
     >
       <Link to={href} className="contents">
-        {/* Wrapper for all overlaid content */}
         <div className="relative flex h-full flex-col p-4 text-center">
           
-          {/* Main Content Area */}
           <div className="flex-grow flex flex-col items-center justify-center">
-            <Icon className="h-14 w-14 text-foreground" />
-            <h3 className="mt-4 text-2xl font-bold text-foreground">
+            <Icon className={cn("text-foreground", isCompact ? "h-12 w-12" : "h-14 w-14")} />
+            <h3 className={cn("mt-4 font-bold text-foreground", isCompact ? "text-xl" : "text-2xl")}>
                 {title}
             </h3>
-            <p className="mt-2 text-base text-muted-foreground line-clamp-2">
+            <p className={cn("mt-1 text-muted-foreground line-clamp-2", isCompact ? "text-sm" : "text-base")}>
                 {description}
             </p>
           </div>
 
-          {/* Footer Area */}
-          <div className="mt-auto flex w-full items-center justify-between pt-4 text-sm font-semibold text-foreground">
-              <div className="flex items-center gap-2">
+          <div className="flex w-full items-center justify-center gap-4 pt-4 text-sm font-semibold text-foreground">
               {articleCount !== undefined && (
-                  <span>
+                  <span className={cn("flex items-center", isCompact && "text-xs")}>
                   {articleCount} {articleCount === 1 ? "item" : "items"}
                   </span>
               )}
               {subsection && articleCount !== undefined && articleCount > 0 && (
-                  <HoverCard>
+                  <HoverCard onOpenChange={setIsPreviewOpen}>
                   <HoverCardTrigger asChild>
                       <Button
                       variant="ghost"
                       size="sm"
-                      className="h-auto px-2 py-1 text-sm font-semibold"
+                      className={cn("h-auto px-2 py-1 font-semibold", isCompact ? "text-xs" : "text-sm")}
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
                       >
-                      <Eye className="h-4 w-4 mr-1" />
+                      <Eye className={cn("mr-1", isCompact ? "h-3 w-3" : "h-4 w-4")} />
                       Preview
                       </Button>
                   </HoverCardTrigger>
@@ -154,8 +158,7 @@ export function CategoryCard({
                   </HoverCardContent>
                   </HoverCard>
               )}
-              </div>
-              {updatedAt && <span>Updated {formatDate(updatedAt)}</span>}
+              {updatedAt && <span className={cn(isCompact && "text-xs")}>Updated {formatDate(updatedAt)}</span>}
           </div>
         </div>
       </Link>

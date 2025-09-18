@@ -16,8 +16,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-// ===== THE FIX IS HERE =====
-// Updated props interface
 interface SidebarProps {
   isCollapsed: boolean;
   onToggle: () => void;
@@ -78,8 +76,6 @@ export function SiteSidebar({ isCollapsed, onToggle }: SidebarProps) {
             <h2 className="font-semibold text-sidebar-foreground pl-2">Navigation</h2>
             <Tooltip>
                 <TooltipTrigger asChild>
-                    {/* ===== THE FIX IS HERE ===== */}
-                    {/* The button now calls the correct onToggle function */}
                     <Button variant="ghost" size="icon" onClick={onToggle}>
                         <PanelLeftClose className="h-5 w-5" />
                     </Button>
@@ -104,7 +100,8 @@ export function SiteSidebar({ isCollapsed, onToggle }: SidebarProps) {
                 <div>
                     <h3 className="font-medium text-sidebar-foreground mb-2 px-3 text-sm">Quick Links</h3>
                     <div className="space-y-1">
-                    {quickLinks.map((link) => (
+                    {quickLinks.map((link) => 
+(
                         <Link key={link.href} to={link.href} className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors">
                         <link.icon className="h-4 w-4" />{link.label}
                         </Link>
