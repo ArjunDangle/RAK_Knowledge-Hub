@@ -1,11 +1,14 @@
-import { useState, ReactNode, createContext, useContext } from "react";
-import { useParams } from "react-router-dom";
+import { useState, ReactNode, createContext, useContext, useEffect, useRef } from "react";
+import { useParams, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteSidebar } from "@/components/layout/SiteSidebar";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
-import { getAncestors } from "@/lib/api//api-client";
+import { getAncestors } from "@/lib/api/api-client";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { ImperativePanelHandle } from "react-resizable-panels";
 
 // --- CONTEXT ---
 interface LayoutContextType {
@@ -23,8 +26,12 @@ interface KnowledgeLayoutProps {
 export function KnowledgeLayout({ breadcrumbs, children }: KnowledgeLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { pageId, articleId } = useParams<{ pageId?: string; articleId?: string }>();
+  const isMobile = useIsMobile();
   
   const idToFetch = pageId || articleId;
+
+  const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
+
   const { data: ancestors } = useQuery({
     queryKey: ['ancestors', idToFetch],
     queryFn: () => getAncestors(idToFetch!),
@@ -33,37 +40,79 @@ export function KnowledgeLayout({ breadcrumbs, children }: KnowledgeLayoutProps)
 
   const activePath = [...(ancestors?.map(a => a.id) || []), idToFetch].filter(Boolean) as string[];
 
+  const toggleSidebar = () => {
+    const panel = sidebarPanelRef.current;
+    if (panel) {
+      if (panel.isCollapsed()) {
+        panel.expand();
+      } else {
+        panel.collapse();
+      }
+    }
+  };
+  
+  if (isMobile) {
+    return (
+        <LayoutContext.Provider value={{ activePath }}>
+            <div className="min-h-screen bg-background">
+                <SiteHeader
+                    showSidebarToggle={true}
+                    onSidebarToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+                    logoSrc="/rak-logo.png"
+                />
+                <Sheet open={sidebarCollapsed} onOpenChange={setSidebarCollapsed}>
+                    <SheetContent side="left" className="w-[280px] p-0">
+                        <SiteSidebar isCollapsed={false} onToggle={() => setSidebarCollapsed(false)} />
+                    </SheetContent>
+                </Sheet>
+                <main className="h-full flex-1 overflow-y-auto">
+                    <div className="container max-w-6xl mx-auto px-6 py-8">
+                    {breadcrumbs && breadcrumbs.length > 0 && (
+                        <Breadcrumbs items={breadcrumbs} className="mb-6" />
+                    )}
+                    {children}
+                    </div>
+                </main>
+            </div>
+        </LayoutContext.Provider>
+    )
+  }
+
   return (
     <LayoutContext.Provider value={{ activePath }}>
       <div className="min-h-screen bg-background">
         <SiteHeader
-          variant="knowledge"
           showSidebarToggle={true}
-          onSidebarToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+          onSidebarToggle={toggleSidebar}
           logoSrc="/rak-logo.png"
         />
-        <ResizablePanelGroup direction="horizontal" className="h-[calc(100vh-4rem)]">
-          {/* --- DEFAULT SIZE UPDATED TO 25% --- */}
+        <ResizablePanelGroup 
+          direction="horizontal" 
+          className="h-[calc(100vh-4rem)]"
+          autoSaveId="knowledge-hub-sidebar-layout"
+        >
           <ResizablePanel
-            defaultSize={20}
-            minSize={15}
+            ref={sidebarPanelRef}
+            defaultSize={22}
+            minSize={18}
             maxSize={35}
             collapsible={true}
-            collapsedSize={4}
+            collapsedSize={0}
             onCollapse={() => setSidebarCollapsed(true)}
             onExpand={() => setSidebarCollapsed(false)}
-            className="hidden md:block"
+            className="transition-all duration-300 ease-in-out"
           >
             <SiteSidebar
               isCollapsed={sidebarCollapsed}
-              onCollapseChange={setSidebarCollapsed}
+              // ===== THE FIX IS HERE =====
+              // We now pass the correct toggle function
+              onToggle={toggleSidebar}
             />
           </ResizablePanel>
 
-          <ResizableHandle withHandle className="hidden md:flex" />
+          <ResizableHandle withHandle />
 
-          {/* --- DEFAULT SIZE UPDATED TO 75% --- */}
-          <ResizablePanel defaultSize={75}>
+          <ResizablePanel defaultSize={78}>
             <main className="flex-1 overflow-auto h-full">
               <div className="container max-w-6xl mx-auto px-6 py-8">
                 {breadcrumbs && breadcrumbs.length > 0 && (

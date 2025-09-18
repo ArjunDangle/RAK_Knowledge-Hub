@@ -85,6 +85,10 @@ export function CategoryCard({
     return new Date(dateString).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
+    if (!dateString) return "";
+    return new Date(dateString).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
     });
   };
 
