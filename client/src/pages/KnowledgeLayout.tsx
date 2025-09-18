@@ -13,8 +13,12 @@ import { ImperativePanelHandle } from "react-resizable-panels";
 // --- CONTEXT ---
 interface LayoutContextType {
   activePath: string[];
+  isSidebarCollapsed: boolean;
 }
-const LayoutContext = createContext<LayoutContextType>({ activePath: [] });
+const LayoutContext = createContext<LayoutContextType>({ 
+  activePath: [],
+  isSidebarCollapsed: false,
+});
 export const useLayout = () => useContext(LayoutContext);
 // --- END CONTEXT ---
 
@@ -53,7 +57,7 @@ export function KnowledgeLayout({ breadcrumbs, children }: KnowledgeLayoutProps)
   
   if (isMobile) {
     return (
-        <LayoutContext.Provider value={{ activePath }}>
+        <LayoutContext.Provider value={{ activePath, isSidebarCollapsed: sidebarCollapsed }}>
             <div className="min-h-screen bg-background">
                 <SiteHeader
                     showSidebarToggle={true}
@@ -66,7 +70,9 @@ export function KnowledgeLayout({ breadcrumbs, children }: KnowledgeLayoutProps)
                     </SheetContent>
                 </Sheet>
                 <main className="h-full flex-1 overflow-y-auto">
-                    <div className="container max-w-6xl mx-auto px-6 py-8">
+                    {/* ===== FIX IS HERE (For Mobile View Consistency) ===== */}
+                    {/* The max-w-6xl class has been removed */}
+                    <div className="container mx-auto px-6 py-8">
                     {breadcrumbs && breadcrumbs.length > 0 && (
                         <Breadcrumbs items={breadcrumbs} className="mb-6" />
                     )}
@@ -79,7 +85,7 @@ export function KnowledgeLayout({ breadcrumbs, children }: KnowledgeLayoutProps)
   }
 
   return (
-    <LayoutContext.Provider value={{ activePath }}>
+    <LayoutContext.Provider value={{ activePath, isSidebarCollapsed: sidebarCollapsed }}>
       <div className="min-h-screen bg-background">
         <SiteHeader
           showSidebarToggle={true}
@@ -104,8 +110,6 @@ export function KnowledgeLayout({ breadcrumbs, children }: KnowledgeLayoutProps)
           >
             <SiteSidebar
               isCollapsed={sidebarCollapsed}
-              // ===== THE FIX IS HERE =====
-              // We now pass the correct toggle function
               onToggle={toggleSidebar}
             />
           </ResizablePanel>
@@ -114,7 +118,9 @@ export function KnowledgeLayout({ breadcrumbs, children }: KnowledgeLayoutProps)
 
           <ResizablePanel defaultSize={78}>
             <main className="flex-1 overflow-auto h-full">
-              <div className="container max-w-6xl mx-auto px-6 py-8">
+              {/* ===== FIX IS HERE (For Desktop View) ===== */}
+              {/* The max-w-6xl class has been removed to allow the container to expand */}
+              <div className="container mx-auto px-6 py-8">
                 {breadcrumbs && breadcrumbs.length > 0 && (
                   <Breadcrumbs items={breadcrumbs} className="mb-6" />
                 )}

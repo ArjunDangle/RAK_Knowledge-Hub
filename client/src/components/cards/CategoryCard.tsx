@@ -102,7 +102,7 @@ export function CategoryCard({
   return (
     <Card
       className={cn(
-        "group relative flex h-80 flex-col justify-end transition-all duration-300 shadow-lg hover:scale-105 hover:shadow-xl overflow-hidden bg-cover bg-center border border-black/10 dark:border-white/10 hover:border-secondary",
+        "group relative flex h-80 flex-col justify-end transition-all duration-300 shadow-lg hover:scale-105 hover:shadow-xl bg-cover bg-center border border-black/10 dark:border-white/10 hover:border-secondary",
         className
       )}
       style={{ backgroundImage: `url(${headerImage})` }}
