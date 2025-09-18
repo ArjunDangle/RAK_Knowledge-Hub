@@ -12,6 +12,7 @@ import { getArticleById, getRelatedArticles, getAncestors, API_BASE_URL } from "
 import { toast } from "@/components/ui/sonner";
 import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PdfSlideshow } from "@/components/pdf/PdfSlideshow";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
 
@@ -142,7 +143,33 @@ export default function ArticlePage() {
     <KnowledgeLayout breadcrumbs={breadcrumbs}>
       <div className="max-w-4xl mx-auto">
         <header className="mb-8">
-          <h1 className="text-4xl font-bold text-foreground mb-4 leading-tight">{article.title}</h1>
+          <div className="flex justify-between items-start mb-4">
+            <h1 className="text-4xl font-bold text-foreground leading-tight flex-1 pr-8">{article.title}</h1>
+            <div className="flex gap-2 flex-shrink-0">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" onClick={handleShare}>
+                    <Share className="h-4 w-4" />
+                    <span className="sr-only">Share</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Share article</p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" onClick={handlePrint}>
+                    <Printer className="h-4 w-4" />
+                    <span className="sr-only">Print</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Print article</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground mb-4">
             <div className="flex items-center gap-1.5"><Calendar className="h-4 w-4" /><span>Updated {formatDate(article.updatedAt)}</span></div>
             <div className="flex items-center gap-1.5"><Clock className="h-4 w-4" /><span>{article.readMinutes} min read</span></div>
@@ -150,10 +177,6 @@ export default function ArticlePage() {
             {article.author && (<span>By {article.author}</span>)}
           </div>
           <div className="flex flex-wrap gap-2 mb-6">{article.tags.map((tag) => (<Badge key={tag.id} variant="secondary">{tag.name}</Badge>))}</div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleShare}><Share className="h-4 w-4 mr-2" />Share</Button>
-            <Button variant="outline" size="sm" onClick={handlePrint}><Printer className="h-4 w-4 mr-2" />Print</Button>
-          </div>
         </header>
         <Separator className="mb-8" />
         

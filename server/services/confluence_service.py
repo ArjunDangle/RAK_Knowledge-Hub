@@ -117,7 +117,17 @@ class ConfluenceService:
         child_pages_generator = self.confluence.get_child_pages(page_data['id'])
         article_count = len(list(child_pages_generator))
         
-        subsection_data = { "id": page_data["id"], "slug": self._slugify(page_data["title"]), "title": page_data["title"], "description": description or "No description available.", "group": group_slug, "tags": tags, "articleCount": article_count, "updatedAt": page_data["version"]["when"], }
+        subsection_data = {
+            "id": page_data["id"],
+            "slug": self._slugify(page_data["title"]),
+            "title": page_data["title"],
+            "description": description or "No description available.",
+            "html": html_content,
+            "group": group_slug,
+            "tags": tags,
+            "articleCount": article_count,
+            "updatedAt": page_data["version"]["when"],
+        }
         return Subsection.model_validate(subsection_data)
 
     def _fetch_and_transform_articles_from_cql(self, cql: str, limit: int) -> List[Article]:

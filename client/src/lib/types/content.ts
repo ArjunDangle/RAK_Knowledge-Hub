@@ -1,3 +1,5 @@
+// client/src/lib/types/content.ts
+
 export type Tag = {
   id: string;
   name: string;
@@ -14,11 +16,12 @@ export type GroupInfo = {
 };
 
 export type Subsection = {
-  type: 'subsection'; // <-- ADDED THIS
+  type: 'subsection';
   id: string;
   slug: string;
   title: string;
   description: string;
+  html: string;
   group: Group;
   tags: Tag[];
   articleCount: number;
@@ -26,7 +29,7 @@ export type Subsection = {
 };
 
 export type Article = {
-  type: 'article'; // <-- ADDED THIS
+  type: 'article';
   id: string;
   slug: string;
   title: string;

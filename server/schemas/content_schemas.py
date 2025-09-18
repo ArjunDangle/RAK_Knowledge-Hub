@@ -20,6 +20,7 @@ class Subsection(BaseModel):
     slug: str
     title: str
     description: str
+    html: str
     group: str
     tags: List[Tag]
     articleCount: int

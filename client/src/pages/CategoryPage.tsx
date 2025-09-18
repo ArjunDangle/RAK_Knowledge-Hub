@@ -4,6 +4,7 @@ import { ArticleCard } from "@/components/cards/ArticleCard";
 import { CategoryCard } from "@/components/cards/CategoryCard";
 import { ArticleCardSkeleton, CategoryCardSkeleton } from "@/components/ui/loading-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { KnowledgeLayout } from "./KnowledgeLayout";
 import { getSubsectionsByGroup, getPageContents, getPageById, getAncestors } from "@/lib/api/api-client";
@@ -70,30 +71,52 @@ export default function CategoryPage() {
     return (
       <KnowledgeLayout breadcrumbs={breadcrumbs}>
         <div>
-          {pageDetailsLoading ? (
-            <div className="space-y-4 mb-8"><Skeleton className="h-8 w-2/3" /><Skeleton className="h-4 w-full" /></div>
-          ) : pageDetailsError || !currentPageData ? (
-            <div className="text-center py-12"><h1 className="text-2xl font-bold">Page Not Found</h1></div>
-          ) : (
-            <div className="mb-8">
-              <h1 className="text-3xl font-bold text-foreground mb-4">{currentPageData.title}</h1>
-              <p className="text-lg text-muted-foreground mb-4">{currentPageData.description}</p>
-              <div className="flex flex-wrap gap-2">{currentPageData.tags.map((tag) => <Badge key={tag.id} variant="outline">{tag.name}</Badge>)}</div>
-            </div>
-          )}
-          <h2 className="text-xl font-semibold text-foreground mb-4">Contents</h2>
+          <div className="max-w-4xl mx-auto">
+            {pageDetailsLoading ? (
+              <div className="space-y-4 mb-8">
+                <Skeleton className="h-10 w-3/4 mx-auto" />
+                <Skeleton className="h-5 w-full" />
+                <Skeleton className="h-5 w-5/6" />
+              </div>
+            ) : pageDetailsError || !currentPageData ? (
+              <div className="text-center py-12"><h1 className="text-2xl font-bold">Page Not Found</h1></div>
+            ) : (
+              <div className="mb-6">
+                <header className="mb-6 text-center">
+                  <h1 className="text-4xl font-bold text-foreground mb-4 leading-tight">{currentPageData.title}</h1>
+                </header>
+                {currentPageData.html && (
+                  <>
+                    <Separator className="mb-6" />
+                    <div 
+                      className="prose dark:prose-invert max-w-none"
+                      dangerouslySetInnerHTML={{ __html: currentPageData.html }} 
+                    />
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          
           {contentsLoading || pageDetailsLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{Array.from({ length: 6 }).map((_, i) => <ArticleCardSkeleton key={i} />)}</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-12">{Array.from({ length: 6 }).map((_, i) => <ArticleCardSkeleton key={i} />)}</div>
           ) : contents && contents.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-12">
               {contents.map((item) => item.type === 'subsection' ? (
                 <CategoryCard key={item.id} title={item.title} description={item.description} subsection={item} articleCount={item.articleCount} updatedAt={item.updatedAt} href={`/page/${item.id}`} />
               ) : (
                 <ArticleCard key={item.id} article={item} />
               ))}
             </div>
-          ) : (
-            <div className="text-center py-12 bg-muted/20 rounded-lg"><p className="text-muted-foreground">This section is empty.</p></div>
+          ) : !pageDetailsLoading && (
+            <div className="text-center py-12 bg-muted/20 rounded-lg max-w-4xl mx-auto"><p className="text-muted-foreground">This section is empty.</p></div>
+          )}
+
+          {currentPageData && currentPageData.tags.length > 0 && (
+            <div className="max-w-4xl mx-auto">
+              <Separator className="my-8" />
+              <div className="flex flex-wrap gap-2 justify-center">{currentPageData.tags.map((tag) => <Badge key={tag.id} variant="outline">{tag.name}</Badge>)}</div>
+            </div>
           )}
         </div>
       </KnowledgeLayout>
@@ -103,7 +126,7 @@ export default function CategoryPage() {
   return (
     <KnowledgeLayout breadcrumbs={breadcrumbs}>
       <div>
-        <div className="mb-8">
+        <div className="mb-8 max-w-4xl mx-auto text-center">
           <h1 className="text-3xl font-bold text-foreground mb-4">{info.title}</h1>
           <p className="text-lg text-muted-foreground">{info.description}</p>
         </div>
@@ -112,7 +135,7 @@ export default function CategoryPage() {
         ) : topLevelSubsections && topLevelSubsections.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {topLevelSubsections.map((subsection) => (
-              <CategoryCard key={subsection.id} title={subsection.title} description={subsection.description} subsection={subsection} articleCount={subsection.articleCount} updatedAt={subsection.updatedAt} href={`/page/${subsection.id}`} />
+              <CategoryCard key={subsection.id} title={subsection.title} description={subsection.description} group={subsection.group} articleCount={subsection.articleCount} updatedAt={subsection.updatedAt} href={`/page/${subsection.id}`} />
             ))}
           </div>
         ) : (
