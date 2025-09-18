@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
-import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { ChevronLeft, ChevronRight, X, Download } from "lucide-react";
 import { Skeleton } from '../ui/skeleton';
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogClose } from '@/components/ui/dialog';
 
@@ -54,29 +54,26 @@ export function PdfSlideshow({ fileUrl }: PdfSlideshowProps) {
   return (
     <>
       <div className="not-prose my-6 flex flex-col items-center gap-4">
-        <div 
+        <div
           ref={containerRef}
-          className="w-full border rounded-md overflow-hidden flex items-center justify-center bg-gray-100 dark:bg-gray-800 cursor-pointer hover:ring-2 hover:ring-primary transition-all"
-          onClick={handleOpenModal}
+          className="w-full max-h-[450px] border rounded-md overflow-y-auto bg-muted/20 dark:bg-muted/40"
         >
-          <Document
-            file={fileUrl}
-            onLoadSuccess={onDocumentLoadSuccess}
-            loading={<Skeleton style={{ width: containerWidth || '100%', aspectRatio: '16/9' }} />}
-            error={<p>Failed to load PDF file.</p>}
-          >
-            {/* ===== MODIFICATION START ===== */}
-            <Page 
-              pageNumber={pageNumber} 
-              width={containerWidth} 
-              renderTextLayer={false} 
-              renderAnnotationLayer={false} 
-              // This prop shows a skeleton while an individual page is rendering,
-              // improving perceived performance when navigating between pages.
-              loading={<Skeleton style={{ width: containerWidth, height: containerWidth * 9/16, backgroundColor: 'hsl(var(--muted))' }} />}
-            />
-            {/* ===== MODIFICATION END ===== */}
-          </Document>
+          <div onClick={handleOpenModal} className="cursor-pointer">
+            <Document
+              file={fileUrl}
+              onLoadSuccess={onDocumentLoadSuccess}
+              loading={<Skeleton style={{ width: containerWidth || '100%', height: '450px' }} />}
+              error={<p>Failed to load PDF file.</p>}
+            >
+              <Page
+                pageNumber={pageNumber}
+                width={containerWidth}
+                renderTextLayer={false}
+                renderAnnotationLayer={false}
+                loading={<Skeleton style={{ width: containerWidth, height: '450px', backgroundColor: 'hsl(var(--muted))' }} />}
+              />
+            </Document>
+          </div>
         </div>
         
         {numPages && (
@@ -99,32 +96,29 @@ export function PdfSlideshow({ fileUrl }: PdfSlideshowProps) {
           
           <div className="relative w-full h-full flex items-center justify-center">
             <Document file={fileUrl} loading={<Skeleton className="w-[80vw] h-[80vh]" />}>
-              {/* ===== MODIFICATION START ===== */}
-              <Page 
-                pageNumber={modalPageNumber} 
+              <Page
+                pageNumber={modalPageNumber}
                 className="flex justify-center [&>canvas]:max-w-full [&>canvas]:max-h-full [&>canvas]:h-auto [&>canvas]:w-auto"
-                // This provides a simple text loader for the fullscreen modal view.
                 loading={<p className="text-white text-lg">Loading page...</p>}
               />
-              {/* ===== MODIFICATION END ===== */}
             </Document>
             
             {numPages && (
               <>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
+                <Button
+                  variant="ghost"
+                  size="icon"
                   className="absolute left-4 top-1/2 -translate-y-1/2 h-16 w-16 rounded-full bg-black/20 text-white hover:bg-black/40 hover:text-white"
-                  onClick={goToModalPrevPage} 
+                  onClick={goToModalPrevPage}
                   disabled={modalPageNumber <= 1}
                 >
                   <ChevronLeft className="h-8 w-8" />
                 </Button>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
+                <Button
+                  variant="ghost"
+                  size="icon"
                   className="absolute right-4 top-1/2 -translate-y-1/2 h-16 w-16 rounded-full bg-black/20 text-white hover:bg-black/40 hover:text-white"
-                  onClick={goToModalNextPage} 
+                  onClick={goToModalNextPage}
                   disabled={modalPageNumber >= numPages}
                 >
                   <ChevronRight className="h-8 w-8" />
@@ -135,15 +129,25 @@ export function PdfSlideshow({ fileUrl }: PdfSlideshowProps) {
               </>
             )}
 
-            <DialogClose asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute top-4 right-4 h-12 w-12 rounded-full bg-black/20 text-white hover:bg-black/40 hover:text-white"
-              >
-                <X className="h-6 w-6" />
-              </Button>
-            </DialogClose>
+            <div className="absolute top-4 right-4 flex items-center gap-2">
+                <Button
+                    asChild
+                    variant="ghost"
+                    size="icon"
+                    className="h-12 w-12 rounded-full bg-black/20 text-white hover:bg-black/40 hover:text-white"
+                    aria-label="Download PDF"
+                >
+                    <a href={fileUrl} download>
+                        <Download className="h-6 w-6" />
+                    </a>
+                </Button>
+
+                <DialogClose asChild>
+                    <Button variant="ghost" size="icon" className="h-12 w-12 rounded-full bg-black/20 text-white hover:bg-black/40 hover:text-white" aria-label="Close">
+                        <X className="h-6 w-6" />
+                    </Button>
+                </DialogClose>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
