@@ -57,7 +57,6 @@ export default function CategoryPage() {
   
   const info = groupInfo[currentGroup];
 
-  // Dynamically build detailed breadcrumbs
   const breadcrumbs = isNestedPage 
     ? (ancestors || []).map((ancestor, index) => {
         if (index === 0) {
@@ -135,7 +134,18 @@ export default function CategoryPage() {
         ) : topLevelSubsections && topLevelSubsections.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {topLevelSubsections.map((subsection) => (
-              <CategoryCard key={subsection.id} title={subsection.title} description={subsection.description} group={subsection.group} articleCount={subsection.articleCount} updatedAt={subsection.updatedAt} href={`/page/${subsection.id}`} />
+              <CategoryCard 
+                key={subsection.id} 
+                title={subsection.title} 
+                description={subsection.description} 
+                group={subsection.group} 
+                // ===== FIX IS HERE =====
+                // We now pass the 'subsection' object and fix the 'updatedAt' typo
+                subsection={subsection}
+                articleCount={subsection.articleCount} 
+                updatedAt={subsection.updatedAt} 
+                href={`/page/${subsection.id}`} 
+              />
             ))}
           </div>
         ) : (
