@@ -58,6 +58,8 @@ export default function CategoryPage() {
   
   const info = groupInfo[currentGroup];
 
+  const responsiveGridClass = "grid grid-cols-[repeat(auto-fit,minmax(20rem,1fr))] gap-6";
+
   const breadcrumbs = isNestedPage 
     ? (ancestors || []).map((ancestor, index) => {
         if (index === 0) {
@@ -99,9 +101,9 @@ export default function CategoryPage() {
           </div>
           
           {contentsLoading || pageDetailsLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-12">{Array.from({ length: 6 }).map((_, i) => <ArticleCardSkeleton key={i} />)}</div>
+            <div className={`${responsiveGridClass} mt-12`}>{Array.from({ length: 6 }).map((_, i) => <ArticleCardSkeleton key={i} />)}</div>
           ) : contents && contents.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-12">
+            <div className={`${responsiveGridClass} mt-12`}>
               {contents.map((item) => item.type === 'subsection' ? (
                 <CategoryCard key={item.id} title={item.title} description={item.description} subsection={item} articleCount={item.articleCount} updatedAt={item.updatedAt} href={`/page/${item.id}`} />
               ) : (
@@ -131,9 +133,9 @@ export default function CategoryPage() {
           <p className="text-lg text-muted-foreground">{info.description}</p>
         </div>
         {subsectionsLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{Array.from({ length: 6 }).map((_, i) => <CategoryCardSkeleton key={i} />)}</div>
+          <div className={responsiveGridClass}>{Array.from({ length: 6 }).map((_, i) => <CategoryCardSkeleton key={i} />)}</div>
         ) : topLevelSubsections && topLevelSubsections.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className={responsiveGridClass}>
             {topLevelSubsections.map((subsection) => (
               <CategoryCard 
                 key={subsection.id} 

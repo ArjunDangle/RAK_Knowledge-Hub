@@ -1,3 +1,4 @@
+// client/src/lib/utils/visual-utils.ts
 import {
     Package,
     Code,

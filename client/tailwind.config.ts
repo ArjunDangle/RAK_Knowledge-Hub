@@ -192,7 +192,7 @@ export default {
          
                     img: {
                       margin: 'auto',
-                      cursor: 'pointer', // Make images appear clickable
+                      cursor: 'pointer',
                     },
        
          
