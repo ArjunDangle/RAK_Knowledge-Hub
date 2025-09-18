@@ -4,13 +4,11 @@
 @tailwind components;
 @tailwind utilities;
 
-/* --- replace :root and .dark variable definitions with this block --- */
-
 @layer base {
   :root {
     /* Backgrounds & Surfaces */
     --background: 0 0% 98%; /* Lighter Platinum */
-    --foreground: 0 0% 9%; /* Near Black */
+    --foreground: 0 0% 9%; /* THIS IS THE FIX: Near Black text color */
     --card: 0 0% 100%; /* White */
     --card-foreground: 0 0% 21%;
     --popover: 0 0% 100%;
@@ -106,8 +104,6 @@
     --ring: 184 31% 44%;
   }
 }
-
-/* keep the rest of your @layer base rules (e.g. body, * { @apply ... }) below */
 
 @layer base {
   * {
