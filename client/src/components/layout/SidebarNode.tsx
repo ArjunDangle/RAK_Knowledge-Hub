@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
@@ -24,6 +24,14 @@ export function SidebarNode({ item, level }: SidebarNodeProps) {
   const isCurrentPage = location.pathname.includes(item.id);
   
   const [isExpanded, setIsExpanded] = useState(isActive);
+
+  // ===== FIX IS HERE =====
+  // This effect ensures parent nodes expand when a child becomes active
+  useEffect(() => {
+    if (isActive) {
+      setIsExpanded(true);
+    }
+  }, [isActive]);
 
   const { data: children, isLoading } = useQuery({
     queryKey: ['sidebar-children', item.id],
@@ -62,7 +70,6 @@ export function SidebarNode({ item, level }: SidebarNodeProps) {
           )}
         </div>
 
-        {/* --- CLASS UPDATED TO ALLOW TEXT WRAPPING --- */}
         <Link to={linkUrl} className="flex-1 py-2 whitespace-normal break-words" title={item.title}>
           {item.title}
         </Link>
