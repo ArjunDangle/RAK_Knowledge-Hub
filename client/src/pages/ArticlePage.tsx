@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/compone
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PdfSlideshow } from "@/components/pdf/PdfSlideshow";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
+import { getColorFromId } from "@/lib/utils/visual-utils";
 
 export default function ArticlePage() {
   const { pageId } = useParams<{ pageId: string }>();
@@ -41,15 +42,12 @@ export default function ArticlePage() {
       let nodeReplaced = false;
       if (node.nodeType === Node.ELEMENT_NODE) {
         const element = node as HTMLElement;
-        
+    
         const isPdfMacro = element.matches('div[data-macro-name="viewpdf"]');
         const isVideoMacro = element.matches('div[data-macro-name="multimedia"]');
         
-        // ===== MODIFICATION START =====
-        // This now checks for the specific SPAN wrapper Confluence uses for file links.
         const isVideoFileLink = element.matches('span.confluence-embedded-file-wrapper') && element.querySelector('a[href*=".mp4"]');
-        // ===== MODIFICATION END =====
-
+        
         if (isPdfMacro || isVideoMacro || isVideoFileLink) {
           if (currentHtml.trim() !== '') {
             blocks.push({ type: 'html', content: currentHtml });
@@ -87,7 +85,6 @@ export default function ArticlePage() {
     return blocks.length > 0 ? blocks : [{ type: 'html', content: fullHtml }];
   }, [article]);
 
-
   const { data: relatedArticles, isLoading: relatedLoading } = useQuery({
     queryKey: ['relatedArticles', article?.id],
     queryFn: () => article ? getRelatedArticles(article.tags, article.id) : Promise.resolve([]),
@@ -113,7 +110,6 @@ export default function ArticlePage() {
     document.addEventListener('click', handleImageClick);
     return () => document.removeEventListener('click', handleImageClick);
   }, []);
-
 
   if (articleLoading) {
     return <KnowledgeLayout><div className="max-w-4xl mx-auto py-8 space-y-4"><Skeleton className="h-10 w-3/4" /><Skeleton className="h-5 w-1/2" /><div className="space-y-4"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-[90%]" /></div></div></KnowledgeLayout>;
@@ -206,7 +202,7 @@ export default function ArticlePage() {
             {relatedLoading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">{Array.from({ length: 4 }).map((_, i) => <ArticleCardSkeleton key={i} />)}</div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">{relatedArticles.map((related) => (<ArticleCard key={related.id} article={related} showGroup={true} />))}</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">{relatedArticles.map((related) => (<ArticleCard key={related.id} article={related} showGroup={true} pastelColor={getColorFromId(related.id)} />))}</div>
             )}
           </section>
         )}
