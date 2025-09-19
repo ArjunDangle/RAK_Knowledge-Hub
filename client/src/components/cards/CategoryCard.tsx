@@ -111,8 +111,8 @@ export function CategoryCard({
         <div className="relative flex h-full flex-col p-4 text-center">
           <div className="flex-grow flex flex-col items-center justify-center">
             <Icon className="h-14 w-14 text-foreground" />
-            <h3 className="mt-4 text-2xl font-bold text-foreground">{title}</h3>
-            <p className="mt-2 text-base text-muted-foreground line-clamp-2">
+            <h3 className="mt-4 text-lg font-bold text-foreground">{title}</h3>
+            <p className="mt-2 text-sm text-muted-foreground line-clamp-2">
               {description}
             </p>
           </div>
