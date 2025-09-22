@@ -1,9 +1,11 @@
+// client/src/components/layout/SiteHeader.tsx
 import { Search, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/context/AuthContext";
 
 interface SiteHeaderProps {
   showSidebarToggle?: boolean;
@@ -18,6 +20,7 @@ export function SiteHeader({
 }: SiteHeaderProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
+  const { isAuthenticated, user, logout } = useAuth();
   
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,8 +65,6 @@ export function SiteHeader({
         </div>
 
         <div className="flex items-center gap-4">
-          <nav className="hidden md:flex items-center"></nav>
-
           <form onSubmit={handleSearch} className="hidden md:flex items-center rounded-full bg-muted/60 px-3 h-9">
             <Search className="h-4 w-4 text-muted-foreground" />
             <Input
@@ -80,6 +81,23 @@ export function SiteHeader({
               <span className="sr-only">Search</span>
             </Link>
           </Button>
+
+          <div className="h-6 w-px bg-border hidden md:block" />
+
+          {isAuthenticated ? (
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground hidden sm:inline">
+                {user?.username}
+              </span>
+              <Button variant="outline" size="sm" onClick={logout}>
+                Logout
+              </Button>
+            </div>
+          ) : (
+            <Button asChild size="sm">
+              <Link to="/login">Sign In</Link>
+            </Button>
+          )}
         </div>
       </div>
     </header>

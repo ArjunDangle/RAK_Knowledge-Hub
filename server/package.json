@@ -1,0 +1,7 @@
+{
+  "name": "rak-knowledge-hub-server",
+  "private": true,
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  }
+}

@@ -1,0 +1,19 @@
+// This is your Prisma schema file.
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-py" // <-- Make sure this line is correct
+}
+
+datasource db {
+  provider = "postgresql" // or "mysql", "sqlite", etc.
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              Int      @id @default(autoincrement())
+  username        String   @unique
+  hashed_password String
+  role            String   // 'MEMBER' or 'ADMIN'
+  createdAt       DateTime @default(now())
+}
