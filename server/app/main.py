@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import db
-from app.routers import knowledge_router, auth_router
+from app.routers import knowledge_router, auth_router, cms_router # Import cms_router
 
 app = FastAPI(
     title="Knowledge Hub API",
@@ -28,6 +28,7 @@ origins = [
 FRONTEND_URL = os.environ.get("FRONTEND_URL")
 if FRONTEND_URL:
     origins.append(FRONTEND_URL)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -38,6 +39,7 @@ app.add_middleware(
 
 app.include_router(knowledge_router.router)
 app.include_router(auth_router.router, prefix="/auth")
+app.include_router(cms_router.router) # Include the new CMS router
 
 @app.get("/", tags=["Health Check"])
 def read_root():

@@ -15,7 +15,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 
 import { useAuth } from "@/context/AuthContext";
-import { loginUser } from "@/lib/api/api-client";
+// --- CHANGE #1: Import the LoginResponse type ---
+import { loginUser, LoginResponse } from "@/lib/api/api-client";
 
 const loginSchema = z.object({
   username: z.string().min(1, { message: "Username is required" }),
@@ -38,9 +39,14 @@ export default function LoginPage() {
   });
 
   const mutation = useMutation({
-    mutationFn: loginUser,
+    // Explicitly type the data returned by the mutation
+    mutationFn: (credentials: LoginFormData): Promise<LoginResponse> => loginUser(credentials),
     onSuccess: (data) => {
+      // --- CHANGE #2: THIS IS THE CRITICAL FIX ---
+      // Pass the entire `data` object to the login function.
+      // This object contains `access_token` and the nested `user` object.
       login(data);
+      // ------------------------------------------
       navigate("/");
     },
     onError: (error) => {

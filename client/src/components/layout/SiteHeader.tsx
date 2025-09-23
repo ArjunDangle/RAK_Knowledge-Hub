@@ -1,5 +1,5 @@
 // client/src/components/layout/SiteHeader.tsx
-import { Search, Menu } from "lucide-react";
+import { Search, Menu, PlusCircle, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link, useNavigate } from "react-router-dom";
@@ -20,8 +20,8 @@ export function SiteHeader({
 }: SiteHeaderProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
-  const { isAuthenticated, user, logout } = useAuth();
-  
+  const { isAuthenticated, user, logout, isAdmin } = useAuth(); // Get isAdmin from context
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
@@ -48,7 +48,7 @@ export function SiteHeader({
         )}
         
         <div className="flex items-center space-x-2 mr-auto">
-          <Link to="/" className="flex items-center space-x-3">
+           <Link to="/" className="flex items-center space-x-3">
             {logoSrc ? (
               <img src={logoSrc} alt="RAKwireless Logo" className="h-10 w-auto" />
             ) : (
@@ -61,7 +61,7 @@ export function SiteHeader({
               <div className="font-semibold text-foreground">RAKwireless</div>
               <div className="text-xs text-muted-foreground -mt-1">Knowledge Hub</div>
             </div>
-          </Link>
+           </Link>
         </div>
 
         <div className="flex items-center gap-4">
@@ -77,12 +77,33 @@ export function SiteHeader({
           </form>
           <Button variant="ghost" size="icon" className="md:hidden" asChild>
             <Link to="/search">
-              <Search className="h-5 w-5" />
+             <Search className="h-5 w-5" />
               <span className="sr-only">Search</span>
             </Link>
           </Button>
 
           <div className="h-6 w-px bg-border hidden md:block" />
+          
+          {/* --- NEW CMS & ADMIN BUTTONS --- */}
+          {isAuthenticated && (
+            <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" asChild>
+                    <Link to="/create">
+                        <PlusCircle className="h-4 w-4 mr-2" />
+                        Add Content
+                    </Link>
+                </Button>
+                {isAdmin && (
+                     <Button variant="ghost" size="sm" asChild>
+                        <Link to="/admin/dashboard">
+                            <LayoutDashboard className="h-4 w-4 mr-2" />
+                            Admin
+                        </Link>
+                    </Button>
+                )}
+            </div>
+          )}
+          {/* ----------------------------- */}
 
           {isAuthenticated ? (
             <div className="flex items-center gap-2">
@@ -91,7 +112,7 @@ export function SiteHeader({
               </span>
               <Button variant="outline" size="sm" onClick={logout}>
                 Logout
-              </Button>
+               </Button>
             </div>
           ) : (
             <Button asChild size="sm">
@@ -99,7 +120,7 @@ export function SiteHeader({
             </Button>
           )}
         </div>
-      </div>
+       </div>
     </header>
   );
 }

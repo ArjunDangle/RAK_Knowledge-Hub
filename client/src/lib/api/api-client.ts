@@ -1,6 +1,19 @@
 // client/src/lib/api/api-client.ts
 import { SearchFilters, Article, Subsection, UpdateEntry, Group, Tag, GroupInfo, ContentItem } from '../types/content';
 
+// Define the User and LoginResponse types
+interface User {
+  username: string;
+  role: 'MEMBER' | 'ADMIN';
+}
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  user: User;
+}
+
+
 // export const API_BASE_URL = "https://rak-knowledge-hub-backend.onrender.com";
 export const API_BASE_URL = "http://127.0.0.1:8000";
 
@@ -21,7 +34,6 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
     'Content-Type': 'application/json',
     ...options.headers,
   };
-
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
@@ -31,23 +43,21 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
 }
 
 // --- AUTH FUNCTIONS ---
-export async function loginUser(credentials: any) {
-  // Use URLSearchParams to create the x-www-form-urlencoded body
+export async function loginUser(credentials: any): Promise<LoginResponse> { // Update return type
   const formBody = new URLSearchParams();
   formBody.append('username', credentials.username);
   formBody.append('password', credentials.password);
 
   const response = await fetch(`${API_BASE_URL}/auth/token`, {
     method: 'POST',
-    // Change the Content-Type header
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    // Send the form data instead of JSON
     body: formBody.toString(),
   });
-  return handleResponse<any>(response);
+  return handleResponse<LoginResponse>(response); // Update return type
 }
 
-// --- REFACTORED API FUNCTIONS ---
+// ... (the rest of the file remains exactly the same) ...
+// --- KNOWLEDGE HUB FUNCTIONS ---
 export async function getGroups(): Promise<GroupInfo[]> {
   return apiFetch<GroupInfo[]>('/groups');
 }
@@ -82,7 +92,6 @@ export async function getRelatedArticles(tags: Tag[], currentId: string, limit =
   
   const searchParams = new URLSearchParams();
   tagNames.forEach(tag => searchParams.append('tags', tag));
-  
   const allArticles = await apiFetch<Article[]>(`/search?q=${tagNames.join(' ')}&${searchParams.toString()}`);
   return allArticles.filter(a => a.id !== currentId).slice(0, limit);
 }
@@ -117,4 +126,46 @@ export async function getAllTags(): Promise<Tag[]> {
 export async function getAncestors(pageId: string): Promise<{ id: string; title: string }[]> {
   if (!pageId) return [];
   return apiFetch<{ id: string; title: string }[]>(`/ancestors/${pageId}`);
+}
+
+// --- NEW CMS FUNCTIONS ---
+
+// Helper to get all subsections for the create page dropdown
+export async function getAllSubsections(): Promise<Subsection[]> {
+    const groups: Group[] = ['departments', 'resource-centre', 'tools'];
+    const promises = groups.map(group => getSubsectionsByGroup(group));
+    const results = await Promise.all(promises);
+    return results.flat();
+}
+
+export interface PageCreatePayload {
+    title: string;
+    content: string;
+    parent_id: string;
+    tags: string[];
+}
+
+export async function createPage(payload: PageCreatePayload) {
+    return apiFetch('/cms/pages/create', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+    });
+}
+
+// --- NEW ADMIN FUNCTIONS ---
+
+export async function getPendingArticles(): Promise<Article[]> {
+    return apiFetch('/cms/admin/pending');
+}
+
+export async function approveArticle(pageId: string): Promise<void> {
+    return apiFetch(`/cms/admin/pages/${pageId}/approve`, {
+        method: 'POST',
+    });
+}
+
+export async function rejectArticle(pageId: string): Promise<void> {
+    return apiFetch(`/cms/admin/pages/${pageId}/reject`, {
+        method: 'POST',
+    });
 }

@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import Landing from "./pages/Landing";
 import CategoryPage from "./pages/CategoryPage";
 import ArticlePage from "./pages/ArticlePage";
@@ -11,10 +11,28 @@ import SearchPage from "./pages/SearchPage";
 import WhatsNewPage from "./pages/WhatsNewPage";
 import NotFound from "./pages/NotFound";
 import ScrollToTop from "./components/ScrollToTop";
-import { AuthProvider } from "./context/AuthContext";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/LoginPage";
+// --- NEW IMPORTS ---
+import CreatePage from "./pages/CreatePage";
+import AdminDashboard from "./pages/AdminDashboard";
 
 const queryClient = new QueryClient();
+
+// --- NEW PROTECTED ROUTE COMPONENTS ---
+const ProtectedRoute = () => {
+    const { isAuthenticated } = useAuth();
+    return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
+};
+
+const AdminRoute = () => {
+    const { isAuthenticated, isAdmin } = useAuth();
+    if (!isAuthenticated) {
+        return <Navigate to="/login" replace />;
+    }
+    return isAdmin ? <Outlet /> : <Navigate to="/" replace />;
+};
+// ------------------------------------
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -25,16 +43,26 @@ const App = () => (
         <BrowserRouter>
           <ScrollToTop />
           <Routes>
+            {/* Public Routes */}
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/search" element={<SearchPage />} />
-            {/* Top-level group pages */}
             <Route path="/category/:group" element={<CategoryPage />} />
-            {/* All nested folder pages */}
             <Route path="/page/:pageId" element={<CategoryPage />} />
-            {/* All article pages */}
             <Route path="/article/:pageId" element={<ArticlePage />} />
             <Route path="/whats-new" element={<WhatsNewPage />} />
+            
+            {/* Protected Routes for Logged-in Users */}
+            <Route element={<ProtectedRoute />}>
+              <Route path="/create" element={<CreatePage />} />
+            </Route>
+
+            {/* Protected Routes for Admins */}
+            <Route element={<AdminRoute />}>
+              <Route path="/admin/dashboard" element={<AdminDashboard />} />
+            </Route>
+
+            {/* Not Found Route */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
@@ -42,5 +70,4 @@ const App = () => (
     </TooltipProvider>
   </QueryClientProvider>
 );
-
 export default App;

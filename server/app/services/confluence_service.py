@@ -9,9 +9,10 @@ import mimetypes
 
 from app.config import Settings
 from app.schemas.content_schemas import Article, Tag, Subsection, GroupInfo, PageContentItem, Ancestor
+from app.schemas.cms_schemas import PageCreate
 
 class ConfluenceService:
-    # ... (the entire class content remains the same)
+    # ... (init and other private methods like _slugify, _transform_page_to_article, etc. remain the same) ...
     def __init__(self, settings: Settings):
         self.settings = settings
         self.confluence = Confluence(
@@ -131,7 +132,7 @@ class ConfluenceService:
             "updatedAt": page_data["version"]["when"],
         }
         return Subsection.model_validate(subsection_data)
-
+        
     def _fetch_and_transform_articles_from_cql(self, cql: str, limit: int) -> List[Article]:
         try:
             search_path = f'/rest/api/content/search?cql={cql}&limit={limit}&expand=body.view,version,metadata.labels,ancestors'
@@ -146,7 +147,7 @@ class ConfluenceService:
         except Exception as e:
             print(f"Error during CQL fetch and transform: {e}")
             return []
-        
+    
     def get_groups(self) -> List[GroupInfo]:
         return [
             GroupInfo(id='departments', title='Departments', description='Resources organized by team functions', icon='Building2'),
@@ -155,9 +156,9 @@ class ConfluenceService:
         ]
         
     def get_subsections_by_group(self, group_slug: str) -> List[Subsection]:
+        # Subsections are structural and should always be visible. We don't apply status logic here.
         root_page_id = self.root_page_ids.get(group_slug)
         if not root_page_id: return []
-        
         try:
             child_pages_stubs = list(self.confluence.get_child_pages(root_page_id))
             subsections = []
@@ -172,17 +173,31 @@ class ConfluenceService:
             print(f"Could not fetch subsections for group '{group_slug}': {e}")
             return []
 
+    # --- CHANGE #1: CORE LOGIC UPDATE ---
+    # This method is now the source of truth for what is "public".
     def get_page_contents(self, parent_page_id: str) -> List[PageContentItem]:
         try:
-            child_page_stubs = list(self.confluence.get_child_pages(parent_page_id))
+            # A page is public if it does NOT have 'status-unpublished' AND does NOT have 'status-rejected'.
+            cql = f'parent={parent_page_id} and label != "status-unpublished" and label != "status-rejected"'
+            results = self.confluence.cql(cql, limit=200, expand="body.view,version,metadata.labels,ancestors").get('results', [])
             
             content_items = []
-            for stub in child_page_stubs:
-                page = self.confluence.get_page_by_id(stub['id'], expand="body.view,version,metadata.labels,ancestors")
-            
-                grand_children = list(self.confluence.get_child_pages(page['id']))
+            for page_summary in results:
+                # --- THIS IS THE FIX ---
+                # The page ID from a CQL result is nested under 'content'
+                page_id = page_summary['content']['id']
+                # ---------------------
+
+                # We need the full page object for our transformation logic, so we fetch it by its ID
+                page = self.confluence.get_page_by_id(page_id, expand="body.view,version,metadata.labels,ancestors")
+                if not page:
+                    continue # Skip if the full page details can't be fetched
+
+                # Check if this page has any public children
+                grand_children_cql = f'parent={page_id} and label != "status-unpublished" and label != "status-rejected"'
+                grand_children_results = self.confluence.cql(grand_children_cql, limit=1).get('results', [])
                 
-                if len(grand_children) > 0:
+                if len(grand_children_results) > 0:
                     subsection = self._transform_page_to_subsection(page)
                     if subsection: content_items.append(subsection)
                 else:
@@ -194,6 +209,7 @@ class ConfluenceService:
             print(f"Error in get_page_contents for parent {parent_page_id}: {e}")
             return []
     
+    # ... (get_ancestors, get_article_by_id, get_page_by_id, get_attachment_data remain the same) ...
     def get_ancestors(self, page_id: str) -> List[Ancestor]:
         try:
             ancestors_data = self.confluence.get_page_ancestors(page_id)
@@ -245,19 +261,21 @@ class ConfluenceService:
         except Exception as e:
             print(f"Error fetching attachment '{file_name}' for page ID {page_id}: {e}")
             return None
-
+            
+    # --- CHANGE #2: Update all public-facing methods to use the new "NOT" logic ---
     def get_recent_articles(self, limit: int = 6) -> List[Article]:
-        cql = f'space = "{self.settings.confluence_space_key}" and type = page order by lastModified desc'
+        cql = f'space = "{self.settings.confluence_space_key}" and type = page and label != "status-unpublished" and label != "status-rejected" order by lastModified desc'
         return self._fetch_and_transform_articles_from_cql(cql, limit)
 
     def get_popular_articles(self, limit: int = 6) -> List[Article]:
-        cql = f'space = "{self.settings.confluence_space_key}" and type = page order by created desc'
+        cql = f'space = "{self.settings.confluence_space_key}" and type = page and label != "status-unpublished" and label != "status-rejected" order by created desc'
         return self._fetch_and_transform_articles_from_cql(cql, limit)
 
     def get_whats_new(self, limit: int = 20) -> List[Article]:
         return self.get_recent_articles(limit)
     
     def get_all_tags(self) -> List[Tag]:
+        # This function can remain as is, it just fetches all available labels.
         try:
             path = f'/rest/api/space/{self.settings.confluence_space_key}/label'
             labels_data = self.confluence.get(path, params={'limit': 200}).get('results', [])
@@ -273,8 +291,14 @@ class ConfluenceService:
             return []
 
     def search_content(self, query: str, labels: List[str] = None, mode: str = "all") -> List[Article]:
-        cql_parts = [f'space = "{self.settings.confluence_space_key}"', 'type = page']
+        cql_parts = [
+            f'space = "{self.settings.confluence_space_key}"', 
+            'type = page',
+            'label != "status-unpublished"',
+            'label != "status-rejected"'
+        ]
 
+        # The rest of the search logic remains the same
         if mode == "tags":
             tag_list = query.strip().split()
             if not tag_list:
@@ -286,7 +310,7 @@ class ConfluenceService:
         elif mode == "title":
             cql_parts.append(f'title ~ "{query}"')
         
-        else:  # "all" or "content"
+        else:
             cql_parts.append(f'text ~ "{query}"')
         
         if labels:
@@ -296,3 +320,60 @@ class ConfluenceService:
         cql = ' and '.join(cql_parts) + ' order by lastModified desc'
         
         return self._fetch_and_transform_articles_from_cql(cql, 50)
+        
+    # --- CHANGE #3: Update the CMS workflow methods ---
+
+    def _add_label_to_page(self, page_id: str, label_name: str):
+        self.confluence.set_page_label(page_id, label_name)
+
+    def _remove_label_from_page(self, page_id: str, label_name: str):
+        self.confluence.remove_page_label(page_id, label_name)
+
+    def create_page_for_review(self, page_data: PageCreate, author_name: str) -> dict:
+        try:
+            full_content = f"<p><em>Submitted by: {author_name}</em></p>{page_data.content}"
+            new_page = self.confluence.create_page(
+                space=self.settings.confluence_space_key,
+                title=page_data.title,
+                parent_id=page_data.parent_id,
+                body=full_content,
+                representation='storage'
+            )
+            
+            if not new_page:
+                raise Exception("Page creation returned None from Confluence API.")
+
+            page_id = new_page['id']
+            
+            # The page is created with the "unpublished" label
+            self._add_label_to_page(page_id, 'status-unpublished')
+            for tag in page_data.tags:
+                self._add_label_to_page(page_id, tag)
+
+            return {"id": page_id, "title": page_data.title, "status": "unpublished"}
+        except Exception as e:
+            raise e
+    
+    def get_pending_pages(self, limit: int = 50) -> List[Article]:
+        # This method is now correct, it finds pages to be reviewed.
+        cql = f'space = "{self.settings.confluence_space_key}" and type = page and label = "status-unpublished" order by created desc'
+        return self._fetch_and_transform_articles_from_cql(cql, limit)
+
+    def approve_page(self, page_id: str) -> bool:
+        # On approval, we just remove the unpublished tag.
+        try:
+            self._remove_label_from_page(page_id, "status-unpublished")
+            return True
+        except Exception as e:
+            print(f"Error approving page {page_id} by removing label: {e}")
+            return False
+
+    def reject_page(self, page_id: str) -> bool:
+        # On rejection, we remove the unpublished tag and add the rejected tag.
+        try:
+            self._remove_label_from_page(page_id, "status-unpublished")
+            self._add_label_to_page(page_id, "status-rejected")
+            return True
+        except Exception as e:
+            print(f"Error rejecting page {page_id}: {e}")
+            return False
