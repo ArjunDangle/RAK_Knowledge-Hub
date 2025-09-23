@@ -4,15 +4,6 @@
 .DS_Store
 Thumbs.db
 
-# Environment variables
-**/.env*
-!.env.example
-
-# Server (Python) specific
-/server/venv/
-/server/__pycache__/
-/server/*.pyc
-
 # Client (Node.js) specific
 /client/node_modules/
 /client/dist/

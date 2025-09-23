@@ -1,0 +1,13 @@
+# Virtual Environment
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Node.js dependencies (if any run in server dir)
+node_modules/
+package-lock.json
+
+# Environment variables
+.env
