@@ -6,7 +6,6 @@ import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Loader2, Paperclip, Code } from "lucide-react";
-
 import { KnowledgeLayout } from "./KnowledgeLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +23,6 @@ const createPageSchema = z.object({
   parent_id: z.string({ required_error: "Please select a parent category." }),
   tags: z.string().optional(),
 });
-
 type CreatePageFormData = z.infer<typeof createPageSchema>;
 
 export default function CreatePage() {
@@ -44,7 +42,7 @@ export default function CreatePage() {
         queryKey: ['allSubsections'],
         queryFn: getAllSubsections,
     });
-    
+
     const attachmentMutation = useMutation({
         mutationFn: uploadAttachment,
         onSuccess: (data) => {
@@ -62,13 +60,13 @@ export default function CreatePage() {
                 attachmentType = 'video';
             }
 
-            // --- THIS IS THE CRITICAL FRONTEND FIX ---
-            // We now insert a simple, clean div placeholder.
-            // TipTap will automatically wrap this in a <p> tag, which is fine.
-            const placeholderHtml = `<div data-attachment-type="${attachmentType}" data-file-name="${data.file_name}"></div>`;
-            // ------------------------------------------
-
-            editor?.chain().focus().insertContent(placeholderHtml).run();
+            // --- THIS IS THE FIX ---
+            // Use the new custom command to insert the node
+            editor?.chain().focus().setAttachment({ 
+                'data-file-name': data.file_name,
+                'data-attachment-type': attachmentType 
+            }).run();
+            // -----------------------
         },
         onError: (error) => {
             toast.error("Upload failed", { description: error.message });
@@ -113,7 +111,6 @@ export default function CreatePage() {
             tags: data.tags ? data.tags.split(',').map(tag => tag.trim()).filter(Boolean) : [],
             attachments: attachments,
         };
-        
         pageMutation.mutate(payload);
     };
 

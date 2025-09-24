@@ -4,12 +4,13 @@ import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import { Bold, Italic, Strikethrough, Code, List, ListOrdered, Quote } from 'lucide-react';
 import { Toggle } from '@/components/ui/toggle';
+import { AttachmentNode } from './extensions/attachmentNode'; // Import the new custom node
 
 interface RichTextEditorProps {
   editor: Editor | null;
 }
 
-const Toolbar = ({ editor }: { editor: Editor }) => {
+const Toolbar = ({ editor }: { editor: Editor | null }) => {
   if (!editor) {
     return null;
   }
@@ -50,14 +51,14 @@ export const RichTextEditor = ({ editor }: RichTextEditorProps) => {
     );
 };
 
-// Custom hook to initialize the editor with our configuration
 export const useConfiguredEditor = (initialContent: string = '') => {
     const editor = useEditor({
         extensions: [
             StarterKit,
             Image.configure({
-                inline: false, // Allows images to be on their own line
+                inline: false,
             }),
+            AttachmentNode, // Use the new custom node extension
         ],
         content: initialContent,
         editorProps: {

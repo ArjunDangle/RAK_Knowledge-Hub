@@ -1,8 +1,5 @@
 # In server/app/routers/cms_router.py
-import os
-import uuid
-import shutil
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
 
 from app.services.confluence_service import ConfluenceService
@@ -15,31 +12,6 @@ router = APIRouter(
     tags=["CMS"]
 )
 confluence_service = ConfluenceService(settings)
-
-# Define a directory for temporary uploads
-UPLOAD_DIR = "/tmp/uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-@router.post(
-    "/attachments/upload",
-    response_model=cms_schemas.AttachmentResponse,
-    dependencies=[Depends(get_current_user)]
-)
-async def upload_attachment(file: UploadFile = File(...)):
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No file name provided.")
-
-    temp_id = str(uuid.uuid4())
-    file_path = os.path.join(UPLOAD_DIR, temp_id)
-
-    try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-    finally:
-        file.file.close()
-    
-    return {"temp_id": temp_id, "file_name": file.filename}
-
 
 @router.post(
     "/pages/create", 
