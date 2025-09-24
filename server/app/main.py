@@ -39,7 +39,7 @@ app.add_middleware(
 
 app.include_router(knowledge_router.router)
 app.include_router(auth_router.router, prefix="/auth")
-app.include_router(cms_router.router) # Include the new CMS router
+app.include_router(cms_router.router) # This line includes the new CMS router
 
 @app.get("/", tags=["Health Check"])
 def read_root():

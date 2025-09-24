@@ -1,6 +1,7 @@
+// client/src/pages/ArticlePage.tsx
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Clock, Eye, Calendar, Share, Printer } from "lucide-react";
+import { Clock, Eye, Calendar, Share, Printer, Code } from "lucide-react"; // Import Code icon
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -11,15 +12,20 @@ import { KnowledgeLayout } from "./KnowledgeLayout";
 import { getArticleById, getRelatedArticles, getAncestors, API_BASE_URL } from "@/lib/api/api-client";
 import { toast } from "@/components/ui/sonner";
 import { useState, useEffect, useMemo } from "react";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"; // Import Dialog components
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PdfSlideshow } from "@/components/pdf/PdfSlideshow";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
 import { getColorFromId } from "@/lib/utils/visual-utils";
+import { ScrollArea } from "@/components/ui/scroll-area"; // Import ScrollArea
 
 export default function ArticlePage() {
   const { pageId } = useParams<{ pageId: string }>();
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  
+  // --- NEW STATE FOR DEBUG MODAL ---
+  const [isHtmlModalOpen, setIsHtmlModalOpen] = useState(false);
+  // ---------------------------------
 
   const { data: article, isLoading: articleLoading, isError: articleError } = useQuery({
     queryKey: ['article', pageId],
@@ -28,32 +34,23 @@ export default function ArticlePage() {
     retry: false,
   });
 
+  // ... (contentBlocks, relatedArticles, ancestors, and useEffect hooks remain the same)
   const contentBlocks = useMemo(() => {
     if (!article) return [];
-
     const fullHtml = article.html;
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = fullHtml;
-
     const blocks: { type: 'html' | 'pdf' | 'video'; content?: string; fileName?: string }[] = [];
     let currentHtml = '';
-
     tempDiv.childNodes.forEach(node => {
       let nodeReplaced = false;
       if (node.nodeType === Node.ELEMENT_NODE) {
         const element = node as HTMLElement;
-    
         const isPdfMacro = element.matches('div[data-macro-name="viewpdf"]');
         const isVideoMacro = element.matches('div[data-macro-name="multimedia"]');
-        
         const isVideoFileLink = element.matches('span.confluence-embedded-file-wrapper') && element.querySelector('a[href*=".mp4"]');
-        
         if (isPdfMacro || isVideoMacro || isVideoFileLink) {
-          if (currentHtml.trim() !== '') {
-            blocks.push({ type: 'html', content: currentHtml });
-            currentHtml = '';
-          }
-          
+          if (currentHtml.trim() !== '') { blocks.push({ type: 'html', content: currentHtml }); currentHtml = ''; }
           let attachmentName: string | null = null;
           if (isVideoFileLink) {
             const link = element.querySelector('a');
@@ -64,7 +61,6 @@ export default function ArticlePage() {
           } else {
             attachmentName = element.querySelector('div[data-attachment-name]')?.getAttribute('data-attachment-name');
           }
-
           if (attachmentName) {
             const type = isPdfMacro ? 'pdf' : 'video';
             blocks.push({ type, fileName: attachmentName });
@@ -72,31 +68,13 @@ export default function ArticlePage() {
           nodeReplaced = true;
         }
       }
-      
-      if (!nodeReplaced) {
-        currentHtml += (node as any).outerHTML || node.textContent;
-      }
+      if (!nodeReplaced) { currentHtml += (node as any).outerHTML || node.textContent; }
     });
-
-    if (currentHtml.trim() !== '') {
-      blocks.push({ type: 'html', content: currentHtml });
-    }
-
+    if (currentHtml.trim() !== '') { blocks.push({ type: 'html', content: currentHtml }); }
     return blocks.length > 0 ? blocks : [{ type: 'html', content: fullHtml }];
   }, [article]);
-
-  const { data: relatedArticles, isLoading: relatedLoading } = useQuery({
-    queryKey: ['relatedArticles', article?.id],
-    queryFn: () => article ? getRelatedArticles(article.tags, article.id) : Promise.resolve([]),
-    enabled: !!article,
-  });
-
-  const { data: ancestors } = useQuery({
-    queryKey: ['ancestors', pageId],
-    queryFn: () => pageId ? getAncestors(pageId) : Promise.resolve([]),
-    enabled: !!pageId,
-  });
-
+  const { data: relatedArticles, isLoading: relatedLoading } = useQuery({ queryKey: ['relatedArticles', article?.id], queryFn: () => article ? getRelatedArticles(article.tags, article.id) : Promise.resolve([]), enabled: !!article });
+  const { data: ancestors } = useQuery({ queryKey: ['ancestors', pageId], queryFn: () => pageId ? getAncestors(pageId) : Promise.resolve([]), enabled: !!pageId });
   useEffect(() => {
     const handleImageClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
@@ -106,7 +84,6 @@ export default function ArticlePage() {
         if (src) setSelectedImage(src);
       }
     };
-    
     document.addEventListener('click', handleImageClick);
     return () => document.removeEventListener('click', handleImageClick);
   }, []);
@@ -114,23 +91,11 @@ export default function ArticlePage() {
   if (articleLoading) {
     return <KnowledgeLayout><div className="max-w-4xl mx-auto py-8 space-y-4"><Skeleton className="h-10 w-3/4" /><Skeleton className="h-5 w-1/2" /><div className="space-y-4"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-[90%]" /></div></div></KnowledgeLayout>;
   }
-
   if (articleError || !article) {
     return <KnowledgeLayout><div className="text-center py-20"><h1 className="text-2xl font-bold">Article Not Found</h1><p className="text-muted-foreground">The article you're looking for doesn't exist or has been moved.</p></div></KnowledgeLayout>;
   }
 
-  const breadcrumbs = ancestors
-    ? [
-        ...ancestors.map((ancestor, index) => {
-          if (index === 0) {
-            return { label: ancestor.title, href: `/category/${article.group}` };
-          }
-          return { label: ancestor.title, href: `/page/${ancestor.id}` };
-        }),
-        { label: article.title },
-      ]
-    : [];
-
+  const breadcrumbs = ancestors ? [...ancestors.map((ancestor, index) => { if (index === 0) { return { label: ancestor.title, href: `/category/${article.group}` }; } return { label: ancestor.title, href: `/page/${ancestor.id}` }; }), { label: article.title }] : [];
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   const handleShare = () => { navigator.clipboard.writeText(window.location.href); toast.success("Link copied to clipboard!"); };
   const handlePrint = () => window.print();
@@ -142,27 +107,24 @@ export default function ArticlePage() {
           <div className="flex justify-between items-start mb-4">
             <h1 className="text-4xl font-bold text-foreground leading-tight flex-1 pr-8">{article.title}</h1>
             <div className="flex gap-2 flex-shrink-0">
+              {/* --- NEW DEBUG BUTTON --- */}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="outline" size="icon" onClick={handleShare}>
-                    <Share className="h-4 w-4" />
-                    <span className="sr-only">Share</span>
+                  <Button variant="destructive" size="icon" onClick={() => setIsHtmlModalOpen(true)}>
+                    <Code className="h-4 w-4" />
+                    <span className="sr-only">View Raw HTML</span>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>
-                  <p>Share article</p>
-                </TooltipContent>
+                <TooltipContent><p>View Raw HTML (Debug)</p></TooltipContent>
+              </Tooltip>
+              {/* -------------------- */}
+              <Tooltip>
+                <TooltipTrigger asChild><Button variant="outline" size="icon" onClick={handleShare}><Share className="h-4 w-4" /><span className="sr-only">Share</span></Button></TooltipTrigger>
+                <TooltipContent><p>Share article</p></TooltipContent>
               </Tooltip>
               <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="outline" size="icon" onClick={handlePrint}>
-                    <Printer className="h-4 w-4" />
-                    <span className="sr-only">Print</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Print article</p>
-                </TooltipContent>
+                <TooltipTrigger asChild><Button variant="outline" size="icon" onClick={handlePrint}><Printer className="h-4 w-4" /><span className="sr-only">Print</span></Button></TooltipTrigger>
+                <TooltipContent><p>Print article</p></TooltipContent>
               </Tooltip>
             </div>
           </div>
@@ -177,21 +139,9 @@ export default function ArticlePage() {
         <Separator className="mb-8" />
         
         {contentBlocks.map((block, index) => {
-          if (block.type === 'pdf' && pageId && block.fileName) {
-            return <PdfSlideshow key={`pdf-${index}`} fileUrl={`${API_BASE_URL}/attachment/${pageId}/${block.fileName}`} />;
-          }
-          if (block.type === 'video' && pageId && block.fileName) {
-            return <VideoPlayer key={`video-${index}`} fileUrl={`${API_BASE_URL}/attachment/${pageId}/${block.fileName}`} />;
-          }
-          if (block.type === 'html' && block.content) {
-            return (
-              <div 
-                key={`html-${index}`}
-                className="prose dark:prose-invert max-w-none mb-12"
-                dangerouslySetInnerHTML={{ __html: block.content }} 
-              />
-            );
-          }
+          if (block.type === 'pdf' && pageId && block.fileName) { return <PdfSlideshow key={`pdf-${index}`} fileUrl={`${API_BASE_URL}/attachment/${pageId}/${block.fileName}`} />; }
+          if (block.type === 'video' && pageId && block.fileName) { return <VideoPlayer key={`video-${index}`} fileUrl={`${API_BASE_URL}/attachment/${pageId}/${block.fileName}`} />; }
+          if (block.type === 'html' && block.content) { return (<div key={`html-${index}`} className="prose dark:prose-invert max-w-none mb-12" dangerouslySetInnerHTML={{ __html: block.content }} />); }
           return null;
         })}
 
@@ -199,20 +149,31 @@ export default function ArticlePage() {
           <section>
             <Separator className="mb-8" />
             <h2 className="text-2xl font-bold text-foreground mb-6">Related Articles</h2>
-            {relatedLoading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">{Array.from({ length: 4 }).map((_, i) => <ArticleCardSkeleton key={i} />)}</div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">{relatedArticles.map((related) => (<ArticleCard key={related.id} article={related} showGroup={true} pastelColor={getColorFromId(related.id)} />))}</div>
-            )}
+            {relatedLoading ? (<div className="grid grid-cols-1 md:grid-cols-2 gap-6">{Array.from({ length: 4 }).map((_, i) => <ArticleCardSkeleton key={i} />)}</div>) : (<div className="grid grid-cols-1 md:grid-cols-2 gap-6">{relatedArticles.map((related) => (<ArticleCard key={related.id} article={related} showGroup={true} pastelColor={getColorFromId(related.id)} />))}</div>)}
           </section>
         )}
       </div>
+      
+      {/* --- DIALOG FOR ENLARGED IMAGE --- */}
       <Dialog open={!!selectedImage} onOpenChange={(isOpen) => !isOpen && setSelectedImage(null)}>
         <DialogContent className="sm:max-w-4xl p-2 bg-transparent border-none shadow-none">
           <DialogTitle className="sr-only">Enlarged Image</DialogTitle>
-          <DialogDescription className="sr-only">An enlarged view of the image from the article content.</DialogDescription>
+          <DialogDescription className="sr-only">An enlarged view of the image.</DialogDescription>
           <img src={selectedImage || ''} alt="Enlarged view" className="w-full h-auto max-h-[90vh] object-contain" />
         </DialogContent>
+      </Dialog>
+
+      {/* --- NEW DIALOG FOR RAW HTML --- */}
+      <Dialog open={isHtmlModalOpen} onOpenChange={setIsHtmlModalOpen}>
+          <DialogContent className="max-w-3xl">
+              <DialogHeader>
+                  <DialogTitle>Raw Confluence Storage Format</DialogTitle>
+                  <DialogDescription>This is the exact HTML/XML content stored in Confluence for this page.</DialogDescription>
+              </DialogHeader>
+              <ScrollArea className="h-[60vh] rounded-md border p-4">
+                  <pre className="text-sm"><code>{article.html}</code></pre>
+              </ScrollArea>
+          </DialogContent>
       </Dialog>
     </KnowledgeLayout>
   );

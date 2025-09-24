@@ -1,6 +1,6 @@
 // client/src/context/AuthContext.tsx
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { LoginResponse } from '@/lib/api/api-client'; // Make sure this is imported
+import { LoginResponse } from '@/lib/api/api-client';
 
 interface User {
   username: string;
@@ -27,10 +27,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const storedUser = localStorage.getItem('authUser');
     if (storedToken && storedUser) {
       try {
-        // This is where the error was happening.
-        // The check below in the `login` function will prevent "undefined" from ever being stored again.
         setUser(JSON.parse(storedUser));
-        setToken(storedToken);
+        setToken(storedToken); // This line is the fix
       } catch (error) {
         console.error("Failed to parse auth user from localStorage", error);
         localStorage.removeItem('authToken');
@@ -40,7 +38,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const login = (data: LoginResponse) => {
-    // This is the critical part that prevents the error
     if (data && data.access_token && data.user) {
       setToken(data.access_token);
       setUser(data.user);
