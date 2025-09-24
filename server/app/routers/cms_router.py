@@ -1,5 +1,7 @@
 # In server/app/routers/cms_router.py
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+import uuid
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from typing import List
 
 from app.services.confluence_service import ConfluenceService
@@ -11,7 +13,35 @@ router = APIRouter(
     prefix="/cms",
     tags=["CMS"]
 )
+
 confluence_service = ConfluenceService(settings)
+
+# ADD THIS NEW ENDPOINT
+@router.post(
+    "/attachments/upload",
+    response_model=cms_schemas.AttachmentResponse,
+    dependencies=[Depends(get_current_user)]
+)
+async def upload_attachment_endpoint(file: UploadFile = File(...)):
+    UPLOAD_DIR = "/tmp/uploads"
+    if not os.path.exists(UPLOAD_DIR):
+        os.makedirs(UPLOAD_DIR)
+
+    temp_id = f"{uuid.uuid4()}-{file.filename}"
+    file_path = os.path.join(UPLOAD_DIR, temp_id)
+
+    try:
+        with open(file_path, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Could not save file: {e}"
+        )
+
+    return cms_schemas.AttachmentResponse(temp_id=temp_id, file_name=file.filename)
+# END OF NEW ENDPOINT
 
 @router.post(
     "/pages/create", 

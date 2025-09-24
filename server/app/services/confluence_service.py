@@ -31,7 +31,6 @@ class ConfluenceService:
         if not self.root_page_ids:
             print("CRITICAL: Could not discover any root page IDs.")
 
-    # ... (_discover_root_pages, _slugify, _get_plain_text, _get_group_from_ancestors remain the same) ...
     def _discover_root_pages(self) -> Dict[str, str]:
         space_key = self.settings.confluence_space_key
         discovered_ids = {}
@@ -66,14 +65,13 @@ class ConfluenceService:
                 return self.id_to_group_slug_map[ancestor_id]
         return ""
     
-    # --- THIS METHOD IS UPDATED ---
-    def _transform_page_to_article(self, page_data: dict) -> Optional[Article]:
+    def _transform_page_to_article(self, page_data: dict, is_admin_view: bool = False) -> Optional[Article]:
         raw_labels = page_data.get("metadata", {}).get("labels", {}).get("results", [])
         label_names = {label.get("name") for label in raw_labels}
         
-        # 1. Perform security check here
-        if "status-unpublished" in label_names or "status-rejected" in label_names:
-            return None # Do not process or return restricted content
+        if not is_admin_view:
+            if "status-unpublished" in label_names or "status-rejected" in label_names:
+                return None
 
         ancestors = page_data.get('ancestors', [])
         if not ancestors: return None
@@ -89,7 +87,6 @@ class ConfluenceService:
         read_minutes = max(1, round(word_count / 200))
         excerpt = (plain_text[:150] + '...') if len(plain_text) > 150 else plain_text
         
-        # 2. Filter out internal status labels from the final list
         status_labels = {"status-unpublished", "status-rejected"}
         tags = [Tag(id=label["id"], name=label["name"], slug=self._slugify(label["name"])) for label in raw_labels if label.get("name") not in status_labels]
         
@@ -112,14 +109,12 @@ class ConfluenceService:
         }
         return Article.model_validate(article_data)
 
-    # --- THIS METHOD IS UPDATED ---
     def _transform_page_to_subsection(self, page_data: dict) -> Optional[Subsection]:
         raw_labels = page_data.get("metadata", {}).get("labels", {}).get("results", [])
         label_names = {label.get("name") for label in raw_labels}
 
-        # 1. Perform security check here
         if "status-unpublished" in label_names or "status-rejected" in label_names:
-            return None # Do not process or return restricted content
+            return None
 
         ancestors = page_data.get('ancestors', [])
         if not ancestors: return None
@@ -127,7 +122,6 @@ class ConfluenceService:
         group_slug = self._get_group_from_ancestors(ancestors)
         if not group_slug: return None
         
-        # 2. Filter out internal status labels
         status_labels = {"status-unpublished", "status-rejected"}
         tags = [Tag(id=label["id"], name=label["name"], slug=self._slugify(label["name"])) for label in raw_labels if label.get("name") not in status_labels]
 
@@ -145,14 +139,13 @@ class ConfluenceService:
         }
         return Subsection.model_validate(subsection_data)
         
-    # ... (_fetch_and_transform_articles_from_cql, get_groups, get_subsections_by_group remain the same) ...
-    def _fetch_and_transform_articles_from_cql(self, cql: str, limit: int) -> List[Article]:
+    def _fetch_and_transform_articles_from_cql(self, cql: str, limit: int, is_admin_view: bool = False) -> List[Article]:
         try:
             search_path = f'/rest/api/content/search?cql={cql}&limit={limit}&expand=body.view,version,metadata.labels,ancestors'
             results = self.confluence.get(search_path).get('results', [])
             articles = []
             for page_data in results:
-                transformed_article = self._transform_page_to_article(page_data)
+                transformed_article = self._transform_page_to_article(page_data, is_admin_view=is_admin_view)
                 if transformed_article:
                     articles.append(transformed_article)
             return articles
@@ -184,31 +177,26 @@ class ConfluenceService:
             print(f"Could not fetch subsections for group '{group_slug}': {e}")
             return []
     
-    # --- THIS METHOD IS NOW SIMPLER ---
     def get_article_by_id(self, page_id: str) -> Optional[Article]:
         try:
             article_page = self.confluence.get_page_by_id(page_id, expand="body.view,version,metadata.labels,ancestors")
             if not article_page:
                 return None
-            # The security check is now handled by the transformer
             return self._transform_page_to_article(article_page)
         except Exception as e:
             print(f"Error fetching article ID {page_id}: {e}")
             return None
 
-    # --- THIS METHOD IS NOW SIMPLER ---
     def get_page_by_id(self, page_id: str) -> Optional[Subsection]:
         try:
             page_data = self.confluence.get_page_by_id(page_id, expand="version,metadata.labels,body.view,ancestors")
             if not page_data:
                 return None
-            # The security check is now handled by the transformer
             return self._transform_page_to_subsection(page_data)
         except Exception as e:
             print(f"Error fetching page ID {page_id}: {e}")
             return None
 
-    # ... (all other public methods remain the same) ...
     def get_page_contents(self, parent_page_id: str) -> List[PageContentItem]:
         try:
             cql = f'parent={parent_page_id} and label != "status-unpublished" and label != "status-rejected"'
@@ -298,12 +286,11 @@ class ConfluenceService:
         
     def _add_label_to_page(self, page_id: str, label_name: str):
         self.confluence.set_page_label(page_id, label_name)
-
+    
     def _remove_label_from_page(self, page_id: str, label_name: str):
         self.confluence.remove_page_label(page_id, label_name)
 
     def create_page_for_review(self, page_data: PageCreate, author_name: str) -> dict:
-        # This method remains the same as the last working version
         try:
             translated_content = html_to_storage_format(page_data.content)
             full_content = f"<p><em>Submitted by: {author_name}</em></p>{translated_content}"
@@ -330,12 +317,11 @@ class ConfluenceService:
                 self._add_label_to_page(page_id, tag)
             return {"id": page_id, "title": page_data.title, "status": "unpublished"}
         except Exception as e:
-            # ... (error handling)
             raise e
     
     def get_pending_pages(self, limit: int = 50) -> List[Article]:
         cql = f'space = "{self.settings.confluence_space_key}" and type = page and label = "status-unpublished" order by created desc'
-        return self._fetch_and_transform_articles_from_cql(cql, limit)
+        return self._fetch_and_transform_articles_from_cql(cql, limit, is_admin_view=True)
 
     def approve_page(self, page_id: str) -> bool:
         try:
