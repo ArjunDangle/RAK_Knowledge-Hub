@@ -5,9 +5,9 @@ import { CheckCircle, XCircle, FileClock, Loader2 } from "lucide-react";
 
 import { KnowledgeLayout } from "./KnowledgeLayout";
 import { getPendingArticles, approveArticle, rejectArticle } from "@/lib/api/api-client";
+import { Article } from "@/lib/types/content";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/sonner";
 import { formatRelativeTime } from "@/lib/utils/date";
@@ -22,12 +22,37 @@ export default function AdminDashboard() {
     const createMutation = (mutationFn: (pageId: string) => Promise<void>, successMessage: string) => {
         return useMutation({
             mutationFn,
-            onSuccess: () => {
-                toast.success(successMessage);
+            onMutate: async (pageId: string) => {
+                // Cancel any outgoing refetches so they don't overwrite our optimistic update
+                await queryClient.cancelQueries({ queryKey: ['pendingArticles'] });
+
+                // Snapshot the previous value
+                const previousArticles = queryClient.getQueryData<Article[]>(['pendingArticles']);
+
+                // Optimistically remove the article from the list
+                if (previousArticles) {
+                    queryClient.setQueryData<Article[]>(
+                        ['pendingArticles'],
+                        previousArticles.filter(article => article.id !== pageId)
+                    );
+                }
+
+                // Return a context object with the snapshotted value
+                return { previousArticles };
+            },
+            // If the mutation fails, use the context returned from onMutate to roll back
+            onError: (error: Error, _pageId: string, context: { previousArticles?: Article[] } | undefined) => {
+                // Roll back to the previous state on error
+                if (context?.previousArticles) {
+                    queryClient.setQueryData<Article[]>(['pendingArticles'], context.previousArticles);
+                }
+                toast.error("Action failed", { description: error.message });
+                // Invalidate on error to ensure we sync with the server's state
                 queryClient.invalidateQueries({ queryKey: ['pendingArticles'] });
             },
-            onError: (error) => {
-                toast.error("Action failed", { description: error.message });
+            onSuccess: () => {
+                // On success, we trust our optimistic update and just show the notification
+                toast.success(successMessage);
             },
         });
     };
