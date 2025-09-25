@@ -16,17 +16,30 @@ import LoginPage from "./pages/LoginPage";
 // --- NEW IMPORTS ---
 import CreatePage from "./pages/CreatePage";
 import AdminDashboard from "./pages/AdminDashboard";
+import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
 
-// --- NEW PROTECTED ROUTE COMPONENTS ---
+// --- MODIFIED PROTECTED ROUTE COMPONENTS ---
+const LoadingSpinner = () => (
+    <div className="flex h-screen w-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    </div>
+);
+
 const ProtectedRoute = () => {
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, isLoading } = useAuth();
+    if (isLoading) {
+        return <LoadingSpinner />;
+    }
     return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
 };
 
 const AdminRoute = () => {
-    const { isAuthenticated, isAdmin } = useAuth();
+    const { isAuthenticated, isAdmin, isLoading } = useAuth();
+    if (isLoading) {
+        return <LoadingSpinner />;
+    }
     if (!isAuthenticated) {
         return <Navigate to="/login" replace />;
     }
