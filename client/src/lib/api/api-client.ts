@@ -1,5 +1,5 @@
 // client/src/lib/api/api-client.ts
-import { SearchFilters, Article, Subsection, UpdateEntry, Group, Tag, GroupInfo, ContentItem } from '../types/content';
+import { SearchFilters, Article, Subsection, UpdateEntry, Group, Tag, GroupInfo, ContentItem, PageTreeNode } from '../types/content';
 
 interface User {
   username: string;
@@ -100,6 +100,11 @@ export async function getAllSubsections(): Promise<Subsection[]> {
     const promises = groups.map(group => getSubsectionsByGroup(group));
     const results = await Promise.all(promises);
     return results.flat();
+}
+
+export async function getPageTree(parentId?: string): Promise<PageTreeNode[]> {
+    const endpoint = parentId ? `/cms/pages/tree?parent_id=${parentId}` : '/cms/pages/tree';
+    return apiFetch<PageTreeNode[]>(endpoint);
 }
 
 // --- NEW ATTACHMENT UPLOAD FUNCTION ---

@@ -3,7 +3,7 @@ import { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Loader2, Paperclip, Code } from "lucide-react";
 import { KnowledgeLayout } from "./KnowledgeLayout";
@@ -11,12 +11,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
-import { createPage, getAllSubsections, PageCreatePayload, uploadAttachment, AttachmentInfo } from "@/lib/api/api-client";
+import { createPage, PageCreatePayload, uploadAttachment, AttachmentInfo } from "@/lib/api/api-client";
 import { RichTextEditor, useConfiguredEditor } from "@/components/editor/RichTextEditor";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { TreeSelect } from "@/components/cms/TreeSelect";
 
 const createPageSchema = z.object({
   title: z.string().min(5, { message: "Title must be at least 5 characters long." }),
@@ -38,11 +38,6 @@ export default function CreatePage() {
         defaultValues: { title: "", parent_id: "", tags: "" },
     });
 
-    const { data: subsections, isLoading: subsectionsLoading } = useQuery({
-        queryKey: ['allSubsections'],
-        queryFn: getAllSubsections,
-    });
-
     const attachmentMutation = useMutation({
         mutationFn: uploadAttachment,
         onSuccess: (data) => {
@@ -60,13 +55,10 @@ export default function CreatePage() {
                 attachmentType = 'video';
             }
 
-            // --- THIS IS THE FIX ---
-            // Use the new custom command to insert the node
             editor?.chain().focus().setAttachment({ 
                 'data-file-name': data.file_name,
                 'data-attachment-type': attachmentType 
             }).run();
-            // -----------------------
         },
         onError: (error) => {
             toast.error("Upload failed", { description: error.message });
@@ -130,8 +122,19 @@ export default function CreatePage() {
                                 <FormField control={form.control} name="title" render={({ field }) => (
                                     <FormItem><FormLabel>Title</FormLabel><FormControl><Input placeholder="e.g., How to Configure the WisGate Edge Lite 2" {...field} /></FormControl><FormMessage /></FormItem>
                                 )} />
+                                
                                 <FormField control={form.control} name="parent_id" render={({ field }) => (
-                                    <FormItem><FormLabel>Parent Category</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value} disabled={subsectionsLoading}><FormControl><SelectTrigger><SelectValue placeholder="Select a category..." /></SelectTrigger></FormControl><SelectContent>{subsections?.map(sub => (<SelectItem key={sub.id} value={sub.id}>{sub.title} ({sub.group})</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>
+                                    <FormItem>
+                                        <FormLabel>Parent Category</FormLabel>
+                                        <FormControl>
+                                            <TreeSelect
+                                                value={field.value}
+                                                onChange={field.onChange}
+                                                placeholder="Select a parent page..."
+                                            />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
                                 )} />
                                 
                                 <div>

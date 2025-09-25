@@ -49,3 +49,8 @@ PageContentItem = Union[Subsection, Article]
 class Ancestor(BaseModel):
     id: str
     title: str
+
+class PageTreeNode(BaseModel):
+    id: str
+    title: str
+    hasChildren: bool

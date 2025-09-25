@@ -227,6 +227,42 @@ class ConfluenceService:
             print(f"Error fetching ancestors for page ID {page_id}: {e}")
             return []
 
+    def get_page_tree(self, parent_id: Optional[str] = None) -> List[Dict]:
+        nodes = []
+        if parent_id is None:
+            # Fetch top-level groups if no parent is specified
+            for slug, page_id in self.root_page_ids.items():
+                try:
+                    # Using a direct API call to check for children more efficiently
+                    cql = f'parent={page_id}'
+                    children_results = self.confluence.cql(cql, limit=1).get('results', [])
+                    page = self.confluence.get_page_by_id(page_id)
+                    nodes.append({
+                        "id": page['id'],
+                        "title": page['title'],
+                        "hasChildren": len(children_results) > 0
+                    })
+                except Exception as e:
+                    print(f"Error fetching root page {slug}: {e}")
+            return nodes
+        else:
+            # Fetch children of the specified parent
+            try:
+                child_pages = self.confluence.get_child_pages(parent_id)
+                for child in child_pages:
+                    # Check if this child has its own children to set hasChildren flag
+                    grand_children_cql = f'parent={child["id"]}'
+                    grand_children_results = self.confluence.cql(grand_children_cql, limit=1).get('results', [])
+                    nodes.append({
+                        "id": child['id'],
+                        "title": child['title'],
+                        "hasChildren": len(grand_children_results) > 0
+                    })
+                return nodes
+            except Exception as e:
+                print(f"Error fetching children for page {parent_id}: {e}")
+                return []
+
     def get_attachment_data(self, page_id: str, file_name: str) -> Optional[StreamingResponse]:
         try:
             attachments = self.confluence.get_attachments_from_content(page_id=page_id, limit=200)

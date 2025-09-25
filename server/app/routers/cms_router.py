@@ -1,11 +1,12 @@
 # In server/app/routers/cms_router.py
 import os
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
-from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+from typing import List, Optional
 
 from app.services.confluence_service import ConfluenceService
 from app.schemas import cms_schemas, content_schemas, auth_schemas
+from app.schemas.content_schemas import PageTreeNode
 from app.config import settings
 from .auth_router import get_current_user, get_current_admin_user
 
@@ -42,6 +43,19 @@ async def upload_attachment_endpoint(file: UploadFile = File(...)):
 
     return cms_schemas.AttachmentResponse(temp_id=temp_id, file_name=file.filename)
 # END OF NEW ENDPOINT
+
+@router.get(
+    "/pages/tree",
+    response_model=List[PageTreeNode],
+    dependencies=[Depends(get_current_user)]
+)
+def get_page_tree_structure(parent_id: Optional[str] = Query(None)):
+    """
+    Fetches the page hierarchy in a tree structure for the CMS.
+    - If `parent_id` is not provided, returns the top-level root pages.
+    - If `parent_id` is provided, returns the direct children of that page.
+    """
+    return confluence_service.get_page_tree(parent_id)
 
 @router.post(
     "/pages/create", 
