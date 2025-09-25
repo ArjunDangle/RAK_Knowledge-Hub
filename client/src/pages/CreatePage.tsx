@@ -1,22 +1,25 @@
 // client/src/pages/CreatePage.tsx
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Paperclip, Code } from "lucide-react";
+import { Loader2, Paperclip, Code, X, Tag as TagIcon } from "lucide-react";
 import { KnowledgeLayout } from "./KnowledgeLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from "@/components/ui/sonner";
-import { createPage, PageCreatePayload, uploadAttachment, AttachmentInfo } from "@/lib/api/api-client";
+import { createPage, PageCreatePayload, uploadAttachment, AttachmentInfo, getAllTags } from "@/lib/api/api-client";
+import { Tag } from "@/lib/types/content";
 import { RichTextEditor, useConfiguredEditor } from "@/components/editor/RichTextEditor";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TreeSelect } from "@/components/cms/TreeSelect";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 const createPageSchema = z.object({
   title: z.string().min(5, { message: "Title must be at least 5 characters long." }),
@@ -32,11 +35,48 @@ export default function CreatePage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isHtmlModalOpen, setIsHtmlModalOpen] = useState(false);
     const [rawHtml, setRawHtml] = useState("");
+    
+    // --- NEW STATE FOR TAGS ---
+    const [tagInputValue, setTagInputValue] = useState('');
+    const [currentTags, setCurrentTags] = useState<string[]>([]);
+    const [isTagModalOpen, setIsTagModalOpen] = useState(false);
+    const [temporarySelectedTags, setTemporarySelectedTags] = useState<Set<string>>(new Set());
+
+    const { data: allTags } = useQuery({
+        queryKey: ['allTags'],
+        queryFn: getAllTags,
+    });
 
     const form = useForm<CreatePageFormData>({
         resolver: zodResolver(createPageSchema),
         defaultValues: { title: "", parent_id: "", tags: "" },
     });
+
+    useEffect(() => {
+        form.setValue('tags', currentTags.join(','));
+    }, [currentTags, form]);
+
+    const groupedTags = useMemo(() => {
+        if (!allTags) return {};
+        const groups: { [key: string]: Tag[] } = { 'A-C': [], 'D-L': [], 'M-R': [], 'S-Z': [], '#': [] };
+        allTags.forEach(tag => {
+            const firstLetter = tag.name[0]?.toUpperCase();
+            if (firstLetter >= 'A' && firstLetter <= 'C') groups['A-C'].push(tag);
+            else if (firstLetter >= 'D' && firstLetter <= 'L') groups['D-L'].push(tag);
+            else if (firstLetter >= 'M' && firstLetter <= 'R') groups['M-R'].push(tag);
+            else if (firstLetter >= 'S' && firstLetter <= 'Z') groups['S-Z'].push(tag);
+            else groups['#'].push(tag);
+        });
+        return Object.fromEntries(Object.entries(groups).filter(([, tags]) => tags.length > 0));
+    }, [allTags]);
+
+    const handleAddTag = (tagToAdd: string) => {
+        const newTag = tagToAdd.trim().replace(/,/g, '');
+        if (newTag && !currentTags.includes(newTag)) {
+            setCurrentTags(prev => [...prev, newTag]);
+        }
+        setTagInputValue('');
+    };
 
     const attachmentMutation = useMutation({
         mutationFn: uploadAttachment,
@@ -88,6 +128,34 @@ export default function CreatePage() {
         setRawHtml(currentHtml);
         setIsHtmlModalOpen(true);
     };
+    
+    const handleRemoveTag = (tagToRemove: string) => {
+        setCurrentTags(prev => prev.filter(tag => tag !== tagToRemove));
+    };
+
+    const handleTagInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter' || e.key === ',') {
+            e.preventDefault();
+            handleAddTag(tagInputValue);
+        }
+    };
+
+    const handleModalOpen = (isOpen: boolean) => {
+        if (isOpen) {
+            setTemporarySelectedTags(new Set(currentTags));
+        }
+        setIsTagModalOpen(isOpen);
+    };
+
+    const handleTemporaryTagToggle = (tagName: string) => {
+        setTemporarySelectedTags(prev => {
+            const newSet = new Set(prev);
+            newSet.has(tagName) ? newSet.delete(tagName) : newSet.add(tagName);
+            return newSet;
+        });
+    };
+
+    const handleApplyTagSelection = () => setCurrentTags(Array.from(temporarySelectedTags));
 
     const onSubmit = (data: CreatePageFormData) => {
         const content = editor?.getHTML() || '';
@@ -149,8 +217,31 @@ export default function CreatePage() {
                                 </div>
                                 
                                 <FormField control={form.control} name="tags" render={({ field }) => (
-                                    <FormItem><FormLabel>Tags</FormLabel><FormControl><Input placeholder="e.g., getting-started, configuration, api" {...field} /></FormControl><p className="text-xs text-muted-foreground">Enter comma-separated tags.</p><FormMessage /></FormItem>
-                                )} />
+                                    <FormItem>
+                                        <FormLabel>Tags</FormLabel>
+                                        <FormControl>
+                                            <div className="flex items-center gap-2 flex-wrap p-2 border rounded-md min-h-[40px]">
+                                                {currentTags.map((tag) => (
+                                                    <Badge key={tag} variant="secondary">
+                                                        {tag}
+                                                        <button type="button" onClick={() => handleRemoveTag(tag)} className="ml-1.5 rounded-full hover:bg-background/50 p-0.5">
+                                                            <X className="h-3 w-3" />
+                                                        </button>
+                                                    </Badge>
+                                                ))}
+                                                <Input value={tagInputValue} onChange={(e) => setTagInputValue(e.target.value)} onKeyDown={handleTagInputKeyDown} placeholder="Add a tag..." className="border-none focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-[120px] h-auto p-0" />
+                                            </div>
+                                        </FormControl>
+                                        <div className="flex justify-between items-start mt-2">
+                                            <p className="text-xs text-muted-foreground">Type a tag and press Enter, or select existing ones.</p>
+                                            <Button type="button" variant="outline" size="sm" onClick={() => handleModalOpen(true)}>
+                                                <TagIcon className="mr-2 h-4 w-4" />
+                                                Browse Tags
+                                            </Button>
+                                        </div>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}  />
                                 
                                 <div className="flex items-center gap-4">
                                     <Button type="submit" disabled={pageMutation.isPending}>
@@ -177,6 +268,32 @@ export default function CreatePage() {
                     <ScrollArea className="h-[60vh] rounded-md border p-4">
                         <pre className="text-sm"><code>{rawHtml}</code></pre>
                     </ScrollArea>
+                </DialogContent>
+            </Dialog>
+            
+            <Dialog open={isTagModalOpen} onOpenChange={handleModalOpen}>
+                <DialogContent className="sm:max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Select Tags</DialogTitle>
+                        <DialogDescription>Select one or more existing tags, or create new ones in the input field.</DialogDescription>
+                    </DialogHeader>
+                    <ScrollArea className="h-[60vh] rounded-md border p-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-4">
+                            {Object.entries(groupedTags).map(([groupName, tagsInGroup]) => (
+                                <div key={groupName} className="space-y-2">
+                                    <h4 className="font-semibold text-sm text-muted-foreground border-b pb-1 mb-2">{groupName}</h4>
+                                    <div className="flex flex-col items-start space-y-1">
+                                        {(tagsInGroup as Tag[]).map(tag => (
+                                            <button key={tag.id} type="button" onClick={() => handleTemporaryTagToggle(tag.name)} className={cn("text-sm text-foreground text-left rounded-sm px-1 -mx-1 hover:bg-accent w-full", temporarySelectedTags.has(tag.name) && "bg-accent text-accent-foreground font-semibold")}>
+                                                {tag.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </ScrollArea>
+                    <DialogFooter><Button variant="ghost" onClick={() => setIsTagModalOpen(false)}>Cancel</Button><Button onClick={handleApplyTagSelection}>Apply Tags</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
         </KnowledgeLayout>
