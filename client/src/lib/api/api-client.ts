@@ -95,6 +95,10 @@ export async function getWhatsNew(): Promise<UpdateEntry[]> {
 }
 
 // --- CMS & ADMIN FUNCTIONS ---
+export async function getArticleForPreview(pageId: string): Promise<Article | null> {
+  return apiFetch<Article | null>(`/cms/admin/preview/${pageId}`);
+}
+
 export async function getAllSubsections(): Promise<Subsection[]> {
     const groups: Group[] = ['departments', 'resource-centre', 'tools'];
     const promises = groups.map(group => getSubsectionsByGroup(group));

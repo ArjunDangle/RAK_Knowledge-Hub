@@ -186,6 +186,18 @@ class ConfluenceService:
         except Exception as e:
             print(f"Error fetching article ID {page_id}: {e}")
             return None
+    
+    def get_article_for_preview(self, page_id: str) -> Optional[Article]:
+        """ Fetches an article by its ID without status checks, for admin previews. """
+        try:
+            article_page = self.confluence.get_page_by_id(page_id, expand="body.view,version,metadata.labels,ancestors")
+            if not article_page:
+                return None
+            # This explicitly bypasses the status check by calling with is_admin_view=True
+            return self._transform_page_to_article(article_page, is_admin_view=True)
+        except Exception as e:
+            print(f"Error fetching article preview for ID {page_id}: {e}")
+            return None
 
     def get_page_by_id(self, page_id: str) -> Optional[Subsection]:
         try:

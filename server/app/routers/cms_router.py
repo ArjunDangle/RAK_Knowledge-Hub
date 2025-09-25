@@ -75,6 +75,24 @@ def create_page(
     return created_page
 
 @router.get(
+    "/admin/preview/{page_id}",
+    response_model=content_schemas.Article,
+    dependencies=[Depends(get_current_admin_user)]
+)
+def get_article_preview_endpoint(page_id: str):
+    """
+    Fetches the full content of a pending article for an admin to preview.
+    Bypasses the regular status checks for publication.
+    """
+    article = confluence_service.get_article_for_preview(page_id)
+    if not article:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Article with ID '{page_id}' not found."
+        )
+    return article
+
+@router.get(
     "/admin/pending", 
     response_model=List[content_schemas.Article], 
     dependencies=[Depends(get_current_admin_user)]
