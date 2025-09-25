@@ -28,16 +28,16 @@ export const TreeSelect = ({ value, onChange, placeholder = 'Select a category..
   // Fetch the full details of the currently selected page to display its title
   useEffect(() => {
     if (value) {
-        // This is a simple way to get the title. In a real app, you might have a dedicated endpoint.
-        getPageById(value)
-            .then(page => setSelectedNodeTitle(page.title))
-            .catch(() => {
-                getArticleById(value)
-                    .then(article => article && setSelectedNodeTitle(article.title))
-                    .catch(() => setSelectedNodeTitle("Unknown Selection"));
-            });
+      // This is a simple way to get the title. In a real app, you might have a dedicated endpoint.
+      getPageById(value)
+        .then(page => setSelectedNodeTitle(page.title))
+        .catch(() => {
+          getArticleById(value)
+            .then(article => article && setSelectedNodeTitle(article.title))
+            .catch(() => setSelectedNodeTitle("Unknown Selection"));
+        });
     } else {
-        setSelectedNodeTitle(null);
+      setSelectedNodeTitle(null);
     }
   }, [value]);
 
@@ -60,12 +60,25 @@ export const TreeSelect = ({ value, onChange, placeholder = 'Select a category..
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-        <ScrollArea className="h-72">
+      <PopoverContent
+        className="w-[--radix-popover-trigger-width] p-0"
+        align="start"
+      >
+        <ScrollArea className="max-h-72 overflow-y-auto overscroll-contain">
           <div className="p-2">
-            {isTreeLoading && <div className="flex items-center justify-center p-4"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}
+            {isTreeLoading && (
+              <div className="flex items-center justify-center p-4">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            )}
             {topLevelNodes?.map(node => (
-              <TreeNode key={node.id} node={node} level={0} onSelect={handleSelect} selectedId={value} />
+              <TreeNode
+                key={node.id}
+                node={node}
+                level={0}
+                onSelect={handleSelect}
+                selectedId={value}
+              />
             ))}
           </div>
         </ScrollArea>
