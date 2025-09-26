@@ -4,12 +4,15 @@ import os
 import time
 import mimetypes
 import requests
+import json
 from typing import List, Dict, Optional
 from atlassian import Confluence
 from bs4 import BeautifulSoup
 from fastapi.responses import StreamingResponse
 import io
 
+from app.db import db
+from app.schemas.cms_schemas import ArticleSubmissionStatus
 from app.config import Settings
 from app.schemas.content_schemas import Article, Tag, Subsection, GroupInfo, PageContentItem, Ancestor
 from app.schemas.cms_schemas import PageCreate, AttachmentInfo
@@ -193,7 +196,6 @@ class ConfluenceService:
             article_page = self.confluence.get_page_by_id(page_id, expand="body.view,version,metadata.labels,ancestors")
             if not article_page:
                 return None
-            # This explicitly bypasses the status check by calling with is_admin_view=True
             return self._transform_page_to_article(article_page, is_admin_view=True)
         except Exception as e:
             print(f"Error fetching article preview for ID {page_id}: {e}")
@@ -242,10 +244,8 @@ class ConfluenceService:
     def get_page_tree(self, parent_id: Optional[str] = None) -> List[Dict]:
         nodes = []
         if parent_id is None:
-            # Fetch top-level groups if no parent is specified
             for slug, page_id in self.root_page_ids.items():
                 try:
-                    # Using a direct API call to check for children more efficiently
                     cql = f'parent={page_id}'
                     children_results = self.confluence.cql(cql, limit=1).get('results', [])
                     page = self.confluence.get_page_by_id(page_id)
@@ -258,11 +258,9 @@ class ConfluenceService:
                     print(f"Error fetching root page {slug}: {e}")
             return nodes
         else:
-            # Fetch children of the specified parent
             try:
                 child_pages = self.confluence.get_child_pages(parent_id)
                 for child in child_pages:
-                    # Check if this child has its own children to set hasChildren flag
                     grand_children_cql = f'parent={child["id"]}'
                     grand_children_results = self.confluence.cql(grand_children_cql, limit=1).get('results', [])
                     nodes.append({
@@ -337,14 +335,36 @@ class ConfluenceService:
     
     def _remove_label_from_page(self, page_id: str, label_name: str):
         self.confluence.remove_page_label(page_id, label_name)
+    
+    def _post_comment_to_page(self, page_id: str, comment_text: str):
+        """Posts a footer comment to a specific Confluence page using the dedicated library function."""
+        try:
+            # The library handles the formatting. We just provide the text.
+            # This is a more reliable method than manual requests.
+            self.confluence.add_comment(page_id=page_id, text=comment_text)
+            
+            print(f"Successfully posted comment to page {page_id}")
+        except Exception as e:
+            # This will give us a more specific library error if it fails
+            print(f"Error posting comment to page {page_id} using atlassian-python-api: {e}")
 
-    def create_page_for_review(self, page_data: PageCreate, author_name: str) -> dict:
+    async def create_page_for_review(self, page_data: PageCreate, author_id: int, author_name: str) -> dict:
         try:
             translated_content = html_to_storage_format(page_data.content)
             full_content = f"<p><em>Submitted by: {author_name}</em></p>{translated_content}"
             new_page = self.confluence.create_page(space=self.settings.confluence_space_key, title=page_data.title, parent_id=page_data.parent_id, body=full_content, representation='storage')
             if not new_page: raise Exception("Page creation returned None.")
             page_id = new_page['id']
+            
+            await db.articlesubmission.create(
+                data={
+                    'confluencePageId': page_id,
+                    'title': page_data.title,
+                    'authorId': author_id,
+                    'status': ArticleSubmissionStatus.PENDING_REVIEW,
+                }
+            )
+
             time.sleep(5)
             attachment_url = f"{self.settings.confluence_url}/rest/api/content/{page_id}/child/attachment"
             headers = {"X-Atlassian-Token": "no-check"}
@@ -360,6 +380,7 @@ class ConfluenceService:
                             response.raise_for_status()
                     finally:
                         os.remove(temp_file_path)
+
             self._add_label_to_page(page_id, 'status-unpublished')
             for tag in page_data.tags:
                 self._add_label_to_page(page_id, tag)
@@ -371,17 +392,63 @@ class ConfluenceService:
         cql = f'space = "{self.settings.confluence_space_key}" and type = page and label = "status-unpublished" order by created desc'
         return self._fetch_and_transform_articles_from_cql(cql, limit, is_admin_view=True)
 
-    def approve_page(self, page_id: str) -> bool:
+    async def approve_page(self, page_id: str) -> bool:
         try:
             self._remove_label_from_page(page_id, "status-unpublished")
+            await db.articlesubmission.update(
+                where={'confluencePageId': page_id},
+                data={'status': ArticleSubmissionStatus.PUBLISHED}
+            )
             return True
         except Exception as e:
+            print(f"Error approving page {page_id}: {e}")
             return False
-
-    def reject_page(self, page_id: str) -> bool:
+    
+    async def reject_page(self, page_id: str, comment: Optional[str] = None) -> bool:
         try:
+            # Step 1: Post the comment to Confluence if it exists
+            if comment:
+                self._post_comment_to_page(page_id, comment)
+
+            # Step 2: Change the labels in Confluence
             self._remove_label_from_page(page_id, "status-unpublished")
             self._add_label_to_page(page_id, "status-rejected")
+            
+            # Step 3: Update the status in our database
+            await db.articlesubmission.update(
+                where={'confluencePageId': page_id},
+                data={'status': ArticleSubmissionStatus.REJECTED}
+            )
             return True
         except Exception as e:
+            print(f"Error rejecting page {page_id}: {e}")
+            return False
+    
+    async def get_submissions_by_author(self, author_id: int) -> List[dict]:
+        """ Fetches all article submissions for a specific author from the database. """
+        try:
+            submissions = await db.articlesubmission.find_many(
+                where={'authorId': author_id},
+                order={'updatedAt': 'desc'}
+            )
+            return [sub.model_dump() for sub in submissions]
+        except Exception as e:
+            print(f"Error fetching submissions for author ID {author_id}: {e}")
+            return []
+    
+    async def resubmit_page_for_review(self, page_id: str) -> bool:
+        """ Changes a page's status from REJECTED back to PENDING_REVIEW. """
+        try:
+            # Step 1: Swap the labels in Confluence
+            self._remove_label_from_page(page_id, "status-rejected")
+            self._add_label_to_page(page_id, "status-unpublished")
+            
+            # Step 2: Update the status in our database
+            await db.articlesubmission.update(
+                where={'confluencePageId': page_id},
+                data={'status': ArticleSubmissionStatus.PENDING_REVIEW}
+            )
+            return True
+        except Exception as e:
+            print(f"Error resubmitting page {page_id}: {e}")
             return False

@@ -11,11 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/sonner";
 import { formatRelativeTime } from "@/lib/utils/date";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import ArticlePage from "./ArticlePage"; // Reused for preview
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import ArticlePage from "./ArticlePage";
+import { Textarea } from "@/components/ui/textarea"; // <-- Import Textarea
+import { Label } from "@/components/ui/label"; // <-- Import Label
 
 export default function AdminDashboard() {
-    const [reviewingArticleId, setReviewingArticleId] = useState<string | null>(null);
+    const [reviewingArticle, setReviewingArticle] = useState<Article | null>(null);
+    const [rejectionComment, setRejectionComment] = useState(""); // <-- State for the comment
     const queryClient = useQueryClient();
     
     const { data: pendingArticles, isLoading } = useQuery({
@@ -23,38 +26,44 @@ export default function AdminDashboard() {
         queryFn: getPendingArticles,
     });
 
-    const createMutation = (mutationFn: (pageId: string) => Promise<void>, successMessage: string) => {
-        return useMutation({
-            mutationFn,
-            onMutate: async (pageId: string) => {
-                await queryClient.cancelQueries({ queryKey: ['pendingArticles'] });
-                const previousArticles = queryClient.getQueryData<Article[]>(['pendingArticles']);
-                if (previousArticles) {
-                    queryClient.setQueryData<Article[]>(
-                        ['pendingArticles'],
-                        previousArticles.filter(article => article.id !== pageId)
-                    );
-                }
-                return { previousArticles };
-            },
-            onError: (error: Error, _pageId: string, context: { previousArticles?: Article[] } | undefined) => {
-                if (context?.previousArticles) {
-                    queryClient.setQueryData<Article[]>(['pendingArticles'], context.previousArticles);
-                }
-                toast.error("Action failed", { description: error.message });
-                queryClient.invalidateQueries({ queryKey: ['pendingArticles'] });
-            },
-            onSuccess: () => {
-                toast.success(successMessage);
-                setReviewingArticleId(null);
-            },
-        });
-    };
+    const approveMutation = useMutation({
+        mutationFn: (pageId: string) => approveArticle(pageId),
+        onSuccess: (_, pageId) => {
+            toast.success("Article approved and published!");
+            queryClient.invalidateQueries({ queryKey: ['pendingArticles'] });
+            if (reviewingArticle?.id === pageId) {
+                setReviewingArticle(null);
+            }
+        },
+        onError: (error: Error) => toast.error("Action failed", { description: error.message }),
+    });
 
-    const approveMutation = createMutation(approveArticle, "Article approved and published!");
-    const rejectMutation = createMutation(rejectArticle, "Article rejected.");
+    // --- MODIFIED MUTATION ---
+    const rejectMutation = useMutation({
+        mutationFn: ({ pageId, comment }: { pageId: string, comment: string }) => rejectArticle(pageId, { comment }),
+        onSuccess: (_, { pageId }) => {
+            toast.success("Article rejected and feedback sent.");
+            queryClient.invalidateQueries({ queryKey: ['pendingArticles'] });
+            if (reviewingArticle?.id === pageId) {
+                setReviewingArticle(null);
+            }
+        },
+        onError: (error: Error) => toast.error("Action failed", { description: error.message }),
+    });
 
     const isMutating = approveMutation.isPending || rejectMutation.isPending;
+
+    const handleReject = () => {
+        if (reviewingArticle && rejectionComment.trim()) {
+            rejectMutation.mutate({ pageId: reviewingArticle.id, comment: rejectionComment });
+        }
+    };
+    
+    const handleCloseModal = () => {
+        setReviewingArticle(null);
+        setRejectionComment(""); // Clear comment on close
+    };
+
     const breadcrumbs = [{ label: "Admin Dashboard" }];
 
     return (
@@ -85,8 +94,6 @@ export default function AdminDashboard() {
                                             <TableCell><Skeleton className="h-5 w-32" /></TableCell>
                                             <TableCell className="text-right space-x-2">
                                                 <Skeleton className="h-8 w-24 inline-block" />
-                                                <Skeleton className="h-8 w-20 inline-block" />
-                                                <Skeleton className="h-8 w-24 inline-block" />
                                             </TableCell>
                                         </TableRow>
                                     ))
@@ -94,19 +101,11 @@ export default function AdminDashboard() {
                                     pendingArticles.map(article => (
                                         <TableRow key={article.id}>
                                             <TableCell className="font-medium">{article.title}</TableCell>
-                                            <TableCell>{article.author}</TableCell>
+                                            <TableCell>{article.author || 'N/A'}</TableCell>
                                             <TableCell>{formatRelativeTime(article.updatedAt)}</TableCell>
                                             <TableCell className="text-right space-x-2">
-                                                <Button variant="outline" size="sm" onClick={() => setReviewingArticleId(article.id)}>
+                                                <Button variant="outline" size="sm" onClick={() => setReviewingArticle(article)}>
                                                     <Eye className="h-4 w-4 mr-2" />Review
-                                                </Button>
-                                                <Button variant="outline" size="sm" onClick={() => rejectMutation.mutate(article.id)} disabled={isMutating}>
-                                                    {rejectMutation.isPending && rejectMutation.variables === article.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4 mr-2" />}
-                                                    Reject
-                                                </Button>
-                                                <Button size="sm" onClick={() => approveMutation.mutate(article.id)} disabled={isMutating}>
-                                                    {approveMutation.isPending && approveMutation.variables === article.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
-                                                    Approve
                                                 </Button>
                                             </TableCell>
                                         </TableRow>
@@ -125,18 +124,49 @@ export default function AdminDashboard() {
                 </div>
             </KnowledgeLayout>
 
-            <Dialog open={!!reviewingArticleId} onOpenChange={(isOpen) => !isOpen && setReviewingArticleId(null)}>
-                {/* --- THIS IS THE CHANGE --- */}
+            <Dialog open={!!reviewingArticle} onOpenChange={(isOpen) => !isOpen && handleCloseModal()}>
                 <DialogContent className="max-w-6xl h-[95vh] flex flex-col p-0">
                     <DialogHeader className="p-6 pb-2">
                         <DialogTitle>Article Preview</DialogTitle>
-                        <DialogDescription>This is how the article will appear on the site once approved.</DialogDescription>
+                        <DialogDescription>Review the article content. You can approve it directly or add comments before rejecting.</DialogDescription>
                     </DialogHeader>
-                    <div className="flex-1 overflow-y-auto">
-                        {reviewingArticleId && (
-                            <ArticlePage pageId={reviewingArticleId} isPreviewMode={true} />
+                    <div className="flex-1 overflow-y-auto px-1">
+                        {reviewingArticle && (
+                            <ArticlePage pageId={reviewingArticle.id} isPreviewMode={true} />
                         )}
                     </div>
+                    {/* --- NEW COMMENT SECTION --- */}
+                    <DialogFooter className="p-6 bg-muted/50 border-t flex-col sm:flex-col md:flex-row items-start md:items-center">
+                        <div className="w-full space-y-2">
+                           <Label htmlFor="rejection-comment">Rejection Comments (Required to Reject)</Label>
+                           <Textarea 
+                                id="rejection-comment"
+                                placeholder="e.g., Please add more details to the introduction..."
+                                value={rejectionComment}
+                                onChange={(e) => setRejectionComment(e.target.value)}
+                                className="bg-background"
+                           />
+                        </div>
+                        <div className="flex-shrink-0 pt-2 sm:pt-2 md:pt-0 md:pl-4 self-end md:self-center">
+                            <Button variant="outline" className="mr-2" onClick={handleCloseModal}>Cancel</Button>
+                            <Button
+                                variant="destructive"
+                                className="mr-2"
+                                onClick={handleReject}
+                                disabled={!rejectionComment.trim() || isMutating}
+                            >
+                                {rejectMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
+                                Reject with Comment
+                            </Button>
+                            <Button
+                                onClick={() => approveMutation.mutate(reviewingArticle!.id)}
+                                disabled={isMutating}
+                            >
+                                {approveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                                Approve
+                            </Button>
+                        </div>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </>

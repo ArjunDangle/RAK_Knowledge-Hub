@@ -1,5 +1,5 @@
 // client/src/components/layout/SiteHeader.tsx
-import { Search, Menu, PlusCircle, LayoutDashboard, LogOut, User as UserIcon } from "lucide-react";
+import { Search, Menu, PlusCircle, LayoutDashboard, LogOut, User as UserIcon, FileText } from "lucide-react"; // Import FileText
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link, useNavigate } from "react-router-dom";
@@ -109,13 +109,21 @@ export function SiteHeader({
                 <DropdownMenuContent className="w-56" align="end" forceMount>
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">{user?.username}</p>
+                      {/* --- UPDATE: Use user.name for display --- */}
+                      <p className="text-sm font-medium leading-none">{user?.name}</p>
                       <p className="text-xs leading-none text-muted-foreground">
                         {user?.role}
                       </p>
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  {/* --- ADD THIS NEW MENU ITEM --- */}
+                  <DropdownMenuItem asChild>
+                    <Link to="/my-submissions">
+                      <FileText className="mr-2 h-4 w-4" />
+                      <span>My Submissions</span>
+                    </Link>
+                  </DropdownMenuItem>
                   {isAdmin && (
                     <DropdownMenuItem asChild>
                       <Link to="/admin/dashboard">

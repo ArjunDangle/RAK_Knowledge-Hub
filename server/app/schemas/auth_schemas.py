@@ -11,12 +11,14 @@ class TokenData(BaseModel):
 
 class UserCreate(BaseModel):
     username: str
+    name: str  # <-- ADD THIS LINE
     password: str
     role: str # 'MEMBER' or 'ADMIN'
 
 class UserResponse(BaseModel):
     id: int
     username: str
+    name: str  # <-- ADD THIS LINE
     role: str
 
     class Config:

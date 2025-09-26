@@ -13,14 +13,13 @@ import NotFound from "./pages/NotFound";
 import ScrollToTop from "./components/ScrollToTop";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/LoginPage";
-// --- NEW IMPORTS ---
 import CreatePage from "./pages/CreatePage";
 import AdminDashboard from "./pages/AdminDashboard";
+import MySubmissionsPage from "./pages/MySubmissionsPage";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
 
-// --- MODIFIED PROTECTED ROUTE COMPONENTS ---
 const LoadingSpinner = () => (
     <div className="flex h-screen w-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -45,7 +44,6 @@ const AdminRoute = () => {
     }
     return isAdmin ? <Outlet /> : <Navigate to="/" replace />;
 };
-// ------------------------------------
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -68,6 +66,8 @@ const App = () => (
             {/* Protected Routes for Logged-in Users */}
             <Route element={<ProtectedRoute />}>
               <Route path="/create" element={<CreatePage />} />
+              {/* --- ADD THIS NEW ROUTE --- */}
+              <Route path="/my-submissions" element={<MySubmissionsPage />} />
             </Route>
 
             {/* Protected Routes for Admins */}

@@ -12,6 +12,7 @@ from app.config import settings
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 router = APIRouter(tags=["Authentication"])
 
+# ... (get_current_user and get_current_admin_user functions are unchanged) ...
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -40,6 +41,7 @@ async def get_current_admin_user(current_user: auth_schemas.UserResponse = Depen
         )
     return current_user
 
+
 @router.post("/register", response_model=auth_schemas.UserResponse)
 async def register_user(user_data: auth_schemas.UserCreate):
     existing_user = await db.user.find_unique(where={'username': user_data.username})
@@ -54,14 +56,13 @@ async def register_user(user_data: auth_schemas.UserCreate):
     new_user = await db.user.create(
         data={
             'username': user_data.username,
+            'name': user_data.name,  # <-- SAVE THE NAME
             'hashed_password': hashed_password,
             'role': user_data.role
         }
     )
     return new_user
 
-# --- CHANGE IS HERE ---
-# Update the response_model to allow the extra 'user' field
 @router.post("/token") 
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     user = await db.user.find_unique(where={'username': form_data.username})
@@ -78,17 +79,15 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
     
-    # --- THIS IS THE FIX ---
-    # Return the full object including the user details
     return {
         "access_token": access_token, 
         "token_type": "bearer",
         "user": {
             "username": user.username,
+            "name": user.name, # <-- INCLUDE THE NAME IN RESPONSE
             "role": user.role
         }
     }
-    # ----------------------
 
 @router.get("/users/me", response_model=auth_schemas.UserResponse)
 async def read_users_me(current_user: auth_schemas.UserResponse = Depends(get_current_user)):

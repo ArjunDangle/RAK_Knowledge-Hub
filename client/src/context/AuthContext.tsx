@@ -2,8 +2,10 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { LoginResponse } from '@/lib/api/api-client';
 
+// --- THIS IS THE FIX ---
 interface User {
   username: string;
+  name: string; // <-- ADD THIS PROPERTY
   role: 'MEMBER' | 'ADMIN';
 }
 
@@ -12,7 +14,7 @@ interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
-  isLoading: boolean; // --- ADD THIS LINE ---
+  isLoading: boolean;
   login: (data: LoginResponse) => void;
   logout: () => void;
 }
@@ -22,7 +24,7 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // --- ADD THIS LINE ---
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     try {
@@ -37,7 +39,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       localStorage.removeItem('authToken');
       localStorage.removeItem('authUser');
     } finally {
-      setIsLoading(false); // --- ADD THIS LINE ---
+      setIsLoading(false);
     }
   }, []);
 
@@ -65,7 +67,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     user,
     isAuthenticated: !!token,
     isAdmin: user?.role === 'ADMIN',
-    isLoading, // --- ADD THIS LINE ---
+    isLoading,
     login,
     logout,
   };

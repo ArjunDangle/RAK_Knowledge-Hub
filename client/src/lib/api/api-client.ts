@@ -1,10 +1,15 @@
 // client/src/lib/api/api-client.ts
 import { SearchFilters, Article, Subsection, UpdateEntry, Group, Tag, GroupInfo, ContentItem, PageTreeNode } from '../types/content';
 
+// This interface now matches our backend User model, including the new 'name' field
 interface User {
+  id: number;
   username: string;
+  name: string;
   role: 'MEMBER' | 'ADMIN';
 }
+
+// This is updated to expect the full user object on login
 export interface LoginResponse {
   access_token: string;
   token_type: string;
@@ -27,8 +32,24 @@ export interface PageCreatePayload {
     attachments: AttachmentInfo[];
 }
 
+export interface RejectPayload {
+  comment?: string;
+}
+
+// --- NEW TYPES FOR PHASE 3 ---
+export type ArticleSubmissionStatus = "PENDING_REVIEW" | "REJECTED" | "PUBLISHED";
+
+export interface ArticleSubmission {
+  id: number;
+  confluencePageId: string;
+  title: string;
+  status: ArticleSubmissionStatus;
+  updatedAt: string;
+}
+// -----------------------------
 
 export const API_BASE_URL = "http://127.0.0.1:8000";
+// export const API_BASE_URL = "https://rak-knowledge-hub-backend.onrender.com";
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -96,7 +117,12 @@ export async function getWhatsNew(): Promise<UpdateEntry[]> {
 
 // --- CMS & ADMIN FUNCTIONS ---
 export async function getArticleForPreview(pageId: string): Promise<Article | null> {
-  return apiFetch<Article | null>(`/cms/admin/preview/${pageId}`);
+    return apiFetch<Article | null>(`/cms/admin/preview/${pageId}`);
+}
+
+// --- NEW FUNCTION FOR PHASE 3 ---
+export async function getMySubmissions(): Promise<ArticleSubmission[]> {
+  return apiFetch('/cms/my-submissions');
 }
 
 export async function getAllSubsections(): Promise<Subsection[]> {
@@ -111,7 +137,6 @@ export async function getPageTree(parentId?: string): Promise<PageTreeNode[]> {
     return apiFetch<PageTreeNode[]>(endpoint);
 }
 
-// --- NEW ATTACHMENT UPLOAD FUNCTION ---
 export async function uploadAttachment(file: File): Promise<AttachmentUploadResponse> {
     const formData = new FormData();
     formData.append('file', file);
@@ -122,7 +147,6 @@ export async function uploadAttachment(file: File): Promise<AttachmentUploadResp
         headers['Authorization'] = `Bearer ${token}`;
     }
 
-    // Note: We don't set Content-Type here; the browser does it for FormData
     const response = await fetch(`${API_BASE_URL}/cms/attachments/upload`, {
         method: 'POST',
         headers,
@@ -130,17 +154,23 @@ export async function uploadAttachment(file: File): Promise<AttachmentUploadResp
     });
     return handleResponse<AttachmentUploadResponse>(response);
 }
-// ------------------------------------
 
-// --- UPGRADED CREATE PAGE FUNCTION ---
 export async function createPage(payload: PageCreatePayload) {
     return apiFetch('/cms/pages/create', {
         method: 'POST',
         body: JSON.stringify(payload)
     });
 }
-// ------------------------------------
 
 export async function getPendingArticles(): Promise<Article[]> { return apiFetch('/cms/admin/pending'); }
 export async function approveArticle(pageId: string): Promise<void> { return apiFetch(`/cms/admin/pages/${pageId}/approve`, { method: 'POST' }); }
-export async function rejectArticle(pageId: string): Promise<void> { return apiFetch(`/cms/admin/pages/${pageId}/reject`, { method: 'POST' }); }
+export async function rejectArticle(pageId: string, payload: RejectPayload): Promise<void> { 
+  return apiFetch(`/cms/admin/pages/${pageId}/reject`, { 
+    method: 'POST',
+    body: JSON.stringify(payload) 
+  }); 
+}
+
+export async function resubmitArticle(pageId: string): Promise<void> {
+  return apiFetch(`/cms/pages/${pageId}/resubmit`, { method: 'POST' });
+}

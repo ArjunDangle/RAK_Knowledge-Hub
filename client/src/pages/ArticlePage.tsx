@@ -95,11 +95,24 @@ export default function ArticlePage({ pageId: propPageId, isPreviewMode = false 
     document.addEventListener('click', handleImageClick);
     return () => document.removeEventListener('click', handleImageClick);
   }, []);
-
-  const breadcrumbs = ancestors ? [...ancestors.map((ancestor, index) => { if (index === 0) { return { label: ancestor.title, href: `/category/${article.group}` }; } return { label: ancestor.title, href: `/page/${ancestor.id}` }; }), { label: article.title }] : [];
+  
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   const handleShare = () => { navigator.clipboard.writeText(window.location.href); toast.success("Link copied to clipboard!"); };
   const handlePrint = () => window.print();
+
+  if (articleLoading) {
+    const skeleton = <div className="max-w-4xl mx-auto py-8 space-y-4"><Skeleton className="h-10 w-3/4" /><Skeleton className="h-5 w-1/2" /><div className="space-y-4"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-[90%]" /></div></div>;
+    return isPreviewMode ? <div className="p-6">{skeleton}</div> : <KnowledgeLayout>{skeleton}</KnowledgeLayout>;
+  }
+
+  if (articleError || !article) {
+    const errorContent = <div className="text-center py-20"><h1 className="text-2xl font-bold">Article Not Found</h1><p className="text-muted-foreground">The article you're looking for doesn't exist or has been moved.</p></div>;
+    return isPreviewMode ? <div className="p-6">{errorContent}</div> : <KnowledgeLayout>{errorContent}</KnowledgeLayout>;
+  }
+  
+  // --- THIS IS THE FIX ---
+  // The breadcrumbs are now defined only AFTER we are sure the article data exists.
+  const breadcrumbs = ancestors ? [...ancestors.map((ancestor, index) => { if (index === 0) { return { label: ancestor.title, href: `/category/${article.group}` }; } return { label: ancestor.title, href: `/page/${ancestor.id}` }; }), { label: article.title }] : [];
 
   const renderContent = () => (
     <>
@@ -138,20 +151,8 @@ export default function ArticlePage({ pageId: propPageId, isPreviewMode = false 
       )}
     </>
   );
-
-  if (articleLoading) {
-    const skeleton = <div className="max-w-4xl mx-auto py-8 space-y-4"><Skeleton className="h-10 w-3/4" /><Skeleton className="h-5 w-1/2" /><div className="space-y-4"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-[90%]" /></div></div>;
-    return isPreviewMode ? <div className="p-6">{skeleton}</div> : <KnowledgeLayout>{skeleton}</KnowledgeLayout>;
-  }
-
-  if (articleError || !article) {
-    const errorContent = <div className="text-center py-20"><h1 className="text-2xl font-bold">Article Not Found</h1><p className="text-muted-foreground">The article you're looking for doesn't exist or has been moved.</p></div>;
-    return isPreviewMode ? <div className="p-6">{errorContent}</div> : <KnowledgeLayout>{errorContent}</KnowledgeLayout>;
-  }
   
-  // --- THIS IS THE CORRECTED LOGIC ---
   if (isPreviewMode) {
-    // For the preview modal, wrap the content in a div with padding and constrained width.
     return (
       <div className="p-6">
         <div className="max-w-4xl mx-auto">
@@ -161,7 +162,6 @@ export default function ArticlePage({ pageId: propPageId, isPreviewMode = false 
     );
   }
 
-  // For the normal page view, the layout is handled by KnowledgeLayout.
   return (
     <KnowledgeLayout breadcrumbs={breadcrumbs}>
       <div className="max-w-4xl mx-auto">
