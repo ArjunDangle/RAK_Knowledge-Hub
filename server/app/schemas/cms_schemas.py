@@ -20,7 +20,6 @@ class PageCreate(BaseModel):
     tags: List[str] = []
     attachments: List[AttachmentInfo] = []
     
-# --- ADD THIS NEW MODEL ---
 class PageReject(BaseModel):
     comment: Optional[str] = Field(None, min_length=1)
 
@@ -38,6 +37,17 @@ class ArticleSubmissionResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class ContentNode(BaseModel):
+    id: str
+    title: str
+    author: Optional[str] = None
+    status: ArticleSubmissionStatus
+    updatedAt: datetime
+    confluenceUrl: str
+    children: List['ContentNode'] = []
+
+ContentNode.model_rebuild()
 
 class AttachmentResponse(BaseModel):
     temp_id: str

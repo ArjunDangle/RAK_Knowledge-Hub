@@ -8,6 +8,7 @@ from app.services.confluence_service import ConfluenceService
 from app.db import db
 from app.schemas import cms_schemas, content_schemas, auth_schemas
 from app.schemas.content_schemas import PageTreeNode
+from app.schemas.cms_schemas import ContentNode # <-- THIS IS THE FIX
 from app.config import settings
 from .auth_router import get_current_user, get_current_admin_user
 
@@ -17,6 +18,19 @@ router = APIRouter(
 )
 
 confluence_service = ConfluenceService(settings)
+
+@router.get(
+    "/admin/content-index",
+    response_model=List[ContentNode],
+    dependencies=[Depends(get_current_admin_user)]
+)
+async def get_content_index():
+    """
+    Provides a complete, hierarchical tree of all content in the knowledge hub,
+    enriched with author and status information for administrative purposes.
+    """
+    content_tree = await confluence_service.get_full_content_tree()
+    return content_tree
 
 @router.post(
     "/attachments/upload",

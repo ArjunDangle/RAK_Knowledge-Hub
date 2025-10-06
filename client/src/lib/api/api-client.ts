@@ -46,6 +46,17 @@ export interface ArticleSubmission {
   status: ArticleSubmissionStatus;
   updatedAt: string;
 }
+
+// --- NEW TYPE FOR INDEX PAGE ---
+export interface ContentNode {
+  id: string;
+  title: string;
+  author: string | null;
+  status: ArticleSubmissionStatus;
+  updatedAt: string;
+  confluenceUrl: string;
+  children: ContentNode[];
+}
 // -----------------------------
 
 export const API_BASE_URL = "http://127.0.0.1:8000";
@@ -123,6 +134,10 @@ export async function getArticleForPreview(pageId: string): Promise<Article | nu
 // --- NEW FUNCTION FOR PHASE 3 ---
 export async function getMySubmissions(): Promise<ArticleSubmission[]> {
   return apiFetch('/cms/my-submissions');
+}
+
+export async function getContentIndex(): Promise<ContentNode[]> {
+  return apiFetch('/cms/admin/content-index');
 }
 
 export async function getAllSubsections(): Promise<Subsection[]> {

@@ -16,6 +16,7 @@ import LoginPage from "./pages/LoginPage";
 import CreatePage from "./pages/CreatePage";
 import AdminDashboard from "./pages/AdminDashboard";
 import MySubmissionsPage from "./pages/MySubmissionsPage";
+import AdminIndexPage from "./pages/AdminIndexPage";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -51,7 +52,8 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <BrowserRouter>
+        {/* --- THIS IS THE FIX --- */}
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <ScrollToTop />
           <Routes>
             {/* Public Routes */}
@@ -66,13 +68,13 @@ const App = () => (
             {/* Protected Routes for Logged-in Users */}
             <Route element={<ProtectedRoute />}>
               <Route path="/create" element={<CreatePage />} />
-              {/* --- ADD THIS NEW ROUTE --- */}
               <Route path="/my-submissions" element={<MySubmissionsPage />} />
             </Route>
 
             {/* Protected Routes for Admins */}
             <Route element={<AdminRoute />}>
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
+              <Route path="/admin/content-index" element={<AdminIndexPage />} />
             </Route>
 
             {/* Not Found Route */}

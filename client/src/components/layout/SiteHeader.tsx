@@ -1,5 +1,5 @@
 // client/src/components/layout/SiteHeader.tsx
-import { Search, Menu, PlusCircle, LayoutDashboard, LogOut, User as UserIcon, FileText } from "lucide-react"; // Import FileText
+import { Search, Menu, PlusCircle, LayoutDashboard, LogOut, User as UserIcon, FileText, ListTree } from "lucide-react"; // Import FileText and ListTree
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link, useNavigate } from "react-router-dom";
@@ -125,12 +125,21 @@ export function SiteHeader({
                     </Link>
                   </DropdownMenuItem>
                   {isAdmin && (
-                    <DropdownMenuItem asChild>
-                      <Link to="/admin/dashboard">
-                        <LayoutDashboard className="mr-2 h-4 w-4" />
-                        <span>Admin Dashboard</span>
-                      </Link>
-                    </DropdownMenuItem>
+                    <>
+                      <DropdownMenuItem asChild>
+                        <Link to="/admin/dashboard">
+                          <LayoutDashboard className="mr-2 h-4 w-4" />
+                          <span>Review Dashboard</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      {/* --- ADD THIS NEW MENU ITEM --- */}
+                      <DropdownMenuItem asChild>
+                        <Link to="/admin/content-index">
+                          <ListTree className="mr-2 h-4 w-4" />
+                          <span>Content Index</span>
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
                   )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={logout}>

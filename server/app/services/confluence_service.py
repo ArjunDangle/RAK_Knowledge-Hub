@@ -15,7 +15,7 @@ from app.db import db
 from app.schemas.cms_schemas import ArticleSubmissionStatus
 from app.config import Settings
 from app.schemas.content_schemas import Article, Tag, Subsection, GroupInfo, PageContentItem, Ancestor
-from app.schemas.cms_schemas import PageCreate, AttachmentInfo
+from app.schemas.cms_schemas import PageCreate, AttachmentInfo, ContentNode # <-- THIS LINE IS NOW CORRECT
 from app.utils.html_translator import html_to_storage_format
 
 UPLOAD_DIR = "/tmp/uploads"
@@ -423,6 +423,82 @@ class ConfluenceService:
         except Exception as e:
             print(f"Error rejecting page {page_id}: {e}")
             return False
+
+    async def get_full_content_tree(self) -> List[ContentNode]:
+        """
+        Recursively builds a tree of all content, enriching it with author and status data from the local DB.
+        """
+        root_nodes = []
+        for slug, root_id in self.root_page_ids.items():
+            try:
+                # Fetch root page details from Confluence
+                root_page = self.confluence.get_page_by_id(root_id, expand="version")
+                if not root_page:
+                    continue
+
+                # Recursively fetch children
+                children = await self._get_child_nodes_recursive(root_id)
+
+                node = ContentNode(
+                    id=root_id,
+                    title=root_page['title'],
+                    # Root pages don't have authors/status in our system, so we can mock it
+                    author="System",
+                    status=ArticleSubmissionStatus.PUBLISHED,
+                    updatedAt=root_page['version']['when'],
+                    confluenceUrl=f"{self.settings.confluence_url}/spaces/{self.settings.confluence_space_key}/pages/{root_id}",
+                    children=children
+                )
+                root_nodes.append(node)
+            except Exception as e:
+                print(f"Error processing root page {slug} ({root_id}): {e}")
+
+        return root_nodes
+
+    async def _get_child_nodes_recursive(self, parent_id: str) -> List[ContentNode]:
+        """ Helper function to recursively fetch and build the content tree for children of a given page. """
+        children_nodes = []
+        try:
+            # Get all child pages from Confluence
+            child_pages = self.confluence.get_child_pages(parent_id)
+
+            for child_page_stub in child_pages:
+                child_id = child_page_stub['id']
+                
+                # Fetch full details for each child
+                child_page_details = self.confluence.get_page_by_id(child_id, expand="version")
+                if not child_page_details:
+                    continue
+
+                # Get submission info from our DB
+                submission = await db.articlesubmission.find_unique(where={'confluencePageId': child_id})
+                
+                author_name = "N/A"
+                status = ArticleSubmissionStatus.PUBLISHED # Default to published if not in our DB
+                
+                if submission:
+                    author = await db.user.find_unique(where={'id': submission.authorId})
+                    if author:
+                        author_name = author.name
+                    status = submission.status
+                
+                # Recursively get the children of this child
+                grandchildren = await self._get_child_nodes_recursive(child_id)
+                
+                node = ContentNode(
+                    id=child_id,
+                    title=child_page_details['title'],
+                    author=author_name,
+                    status=status,
+                    updatedAt=child_page_details['version']['when'],
+                    confluenceUrl=f"{self.settings.confluence_url}/spaces/{self.settings.confluence_space_key}/pages/{child_id}",
+                    children=grandchildren
+                )
+                children_nodes.append(node)
+        except Exception as e:
+            print(f"Error fetching children for page {parent_id}: {e}")
+        
+        return children_nodes
     
     async def get_submissions_by_author(self, author_id: int) -> List[dict]:
         """ Fetches all article submissions for a specific author from the database. """
