@@ -1,28 +1,22 @@
-    #!/usr/bin/env bash
-    set -o errexit
+#!/usr/bin/env bash
+set -o errexit
 
-    echo "--- Starting build process ---"
+echo "--- Starting build process ---"
 
-    echo "--- Installing Python dependencies ---"
-    pip install -r requirements.txt
+echo "--- Installing Python dependencies ---"
+pip install -r requirements.txt
 
-    echo "--- Checking Node.js version ---"
-    node -v
-    npm -v
+# Node.js check is no longer strictly necessary but doesn't hurt
+echo "--- Checking Node.js version ---"
+node -v
+npm -v
 
-    # Specify the Prisma CLI version required by the Python client
-    PRISMA_CLI_VERSION="5.17.0"
-    echo "--- Using Prisma CLI version $PRISMA_CLI_VERSION ---"
+# --- Use Python to generate, ensuring correct engine placement ---
+echo "--- Generating Prisma Client (using Python wrapper) ---"
+python -m prisma generate
 
-    # Ensure Prisma downloads the engine (handled by generate)
-    # The 'python -m prisma fetch' command was incorrect and has been removed.
+echo "--- Applying database migrations (using Python wrapper) ---"
+python -m prisma migrate deploy
 
-    echo "--- Generating Prisma Client ---"
-    npx prisma@$PRISMA_CLI_VERSION generate
-
-    echo "--- Applying database migrations ---"
-    npx prisma@$PRISMA_CLI_VERSION migrate deploy
-
-    echo "--- Build finished ---"
-    
+echo "--- Build finished ---"
 
