@@ -1,28 +1,23 @@
     #!/usr/bin/env bash
-
-    # Exit immediately if a command exits with a non-zero status.
     set -o errexit
 
     echo "--- Starting build process ---"
 
-    # Install Python dependencies
     echo "--- Installing Python dependencies ---"
     pip install -r requirements.txt
 
-    # --- Node.js Dependency Section ---
-    # Render needs Node.js installed for the 'npx' commands below.
-    # Ensure your Render environment provides Node.js (e.g., via Buildpacks).
-    echo "--- Checking Node.js version (requires Node.js to be installed) ---"
+    echo "--- Checking Node.js version ---"
     node -v
     npm -v
 
-    # Generate Prisma Client (uses npx, requires Node.js)
-    echo "--- Generating Prisma Client ---"
-    npx prisma generate
+    # Specify the Prisma CLI version required by the Python client
+    PRISMA_CLI_VERSION="5.17.0"
+    echo "--- Using Prisma CLI version $PRISMA_CLI_VERSION ---"
 
-    # Apply database migrations (uses npx, requires Node.js)
+    echo "--- Generating Prisma Client ---"
+    npx prisma@$PRISMA_CLI_VERSION generate
+
     echo "--- Applying database migrations ---"
-    npx prisma migrate deploy
+    npx prisma@$PRISMA_CLI_VERSION migrate deploy
 
     echo "--- Build finished ---"
-    
