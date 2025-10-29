@@ -1,8 +1,10 @@
-# main.py
+# server/app/main.py
 import os
 from fastapi import FastAPI
-from routers import knowledge_router
 from fastapi.middleware.cors import CORSMiddleware
+
+from app.db import db
+from app.routers import knowledge_router, auth_router, cms_router # Import cms_router
 
 app = FastAPI(
     title="Knowledge Hub API",
@@ -10,15 +12,19 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# --- SECURE CORS MIDDLEWARE FOR PRODUCTION ---
-# This list specifies which frontend domains are allowed to make requests to your API.
+@app.on_event("startup")
+async def startup():
+    await db.connect()
+
+@app.on_event("shutdown")
+async def shutdown():
+    await db.disconnect()
+
 origins = [
     "http://localhost:8080",
     "http://127.0.0.1:8080",
     "https://rak-knowledge-hub.vercel.app",
 ]
-
-# This allows you to add another URL via environment variables for flexibility (e.g., for a staging server)
 FRONTEND_URL = os.environ.get("FRONTEND_URL")
 if FRONTEND_URL:
     origins.append(FRONTEND_URL)
@@ -30,9 +36,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# -----------------------------------------
 
 app.include_router(knowledge_router.router)
+app.include_router(auth_router.router, prefix="/auth")
+app.include_router(cms_router.router) # This line includes the new CMS router
 
 @app.get("/", tags=["Health Check"])
 def read_root():

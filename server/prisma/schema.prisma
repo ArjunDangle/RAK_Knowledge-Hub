@@ -1,0 +1,39 @@
+// server/prisma/schema.prisma
+
+// This is your Prisma schema file.
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-py"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              Int      @id @default(autoincrement())
+  username        String   @unique
+  name            String   // <-- NEW FIELD
+  hashed_password String
+  role            String   // 'MEMBER' or 'ADMIN'
+  createdAt       DateTime @default(now())
+
+  // Relation to the new ArticleSubmission table
+  submissions ArticleSubmission[]
+}
+
+// New table to track article submissions, ownership, and status
+model ArticleSubmission {
+  id               Int      @id @default(autoincrement())
+  confluencePageId String   @unique
+  title            String
+  status           String   // e.g., "PENDING_REVIEW", "REJECTED", "PUBLISHED"
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Establishes a many-to-one relationship with User
+  author   User @relation(fields: [authorId], references: [id])
+  authorId Int
+}

@@ -74,3 +74,9 @@ export type UpdateEntry = {
   articleSlug?: string;
   group?: Group;
 };
+
+export type PageTreeNode = {
+  id: string;
+  title: string;
+  hasChildren: boolean;
+};

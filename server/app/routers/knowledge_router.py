@@ -1,18 +1,18 @@
-# routers/knowledge_router.py
+# server/app/routers/knowledge_router.py
 from fastapi import APIRouter, HTTPException, Query, Response
 from typing import List
-from services.confluence_service import ConfluenceService
-from schemas import content_schemas
-from config import settings
+
+from app.services.confluence_service import ConfluenceService
+from app.schemas import content_schemas
+from app.config import settings
 
 router = APIRouter()
 confluence_service = ConfluenceService(settings)
 
+# ... (all endpoints remain the same)
 @router.get("/groups", response_model=List[content_schemas.GroupInfo], tags=["Knowledge Hub"])
 def get_groups():
     return confluence_service.get_groups()
-
-# ... (all other endpoints remain the same) ...
 
 @router.get("/subsections/{group_slug}", response_model=List[content_schemas.Subsection], tags=["Knowledge Hub"])
 def get_subsections(group_slug: str):
@@ -73,9 +73,7 @@ def get_attachment(page_id: str, file_name: str, response: Response):
     if not attachment_stream:
         raise HTTPException(status_code=404, detail="Attachment not found or access denied.")
     
-    # This is the key: we tell the browser to display the file inline, not download it.
     response.headers["Content-Disposition"] = "inline"
-    # We also need to add the CORS header back here for the file stream.
     response.headers["Access-Control-Allow-Origin"] = "*"
     
     return attachment_stream
