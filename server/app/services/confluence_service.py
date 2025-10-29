@@ -392,6 +392,41 @@ class ConfluenceService:
         cql = f'space = "{self.settings.confluence_space_key}" and type = page and label = "status-unpublished" order by created desc'
         return self._fetch_and_transform_articles_from_cql(cql, limit, is_admin_view=True)
 
+    async def get_pending_submissions_from_db(self) -> List[Article]:
+        """
+        Fetches pending articles by querying the local ArticleSubmission database table.
+        This is the new, preferred method for the admin dashboard.
+        """
+        try:
+            pending_submissions = await db.articlesubmission.find_many(
+                where={'status': ArticleSubmissionStatus.PENDING_REVIEW},
+                include={'author': True}, 
+                order={'updatedAt': 'desc'}
+            )
+
+            articles_for_dashboard = []
+            for sub in pending_submissions:
+                article_data = {
+                    "id": sub.confluencePageId,
+                    "title": sub.title,
+                    "author": sub.author.name if sub.author else "Unknown",
+                    "updatedAt": sub.updatedAt.isoformat(),
+                    "slug": self._slugify(sub.title),
+                    "excerpt": "Content available for preview.",
+                    "html": "",
+                    "tags": [],
+                    "group": "unknown",
+                    "subsection": "unknown",
+                    "views": 0,
+                    "readMinutes": 0,
+                }
+                articles_for_dashboard.append(Article.model_validate(article_data))
+
+            return articles_for_dashboard
+        except Exception as e:
+            print(f"Error fetching pending submissions from DB: {e}")
+            return []
+
     async def approve_page(self, page_id: str) -> bool:
         try:
             self._remove_label_from_page(page_id, "status-unpublished")

@@ -110,8 +110,8 @@ def get_article_preview_endpoint(page_id: str):
     response_model=List[content_schemas.Article], 
     dependencies=[Depends(get_current_admin_user)]
 )
-def get_pages_pending_review():
-    return confluence_service.get_pending_pages()
+async def get_pages_pending_review():
+    return await confluence_service.get_pending_submissions_from_db()
 
 @router.post(
     "/admin/pages/{page_id}/approve", 
