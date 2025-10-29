@@ -248,10 +248,6 @@ export default function CreatePage() {
                                         {pageMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                         Submit for Review
                                     </Button>
-                                    <Button type="button" variant="destructive" size="sm" onClick={handleShowHtml}>
-                                        <Code className="mr-2 h-4 w-4" />
-                                        View Raw HTML
-                                    </Button>
                                 </div>
                             </form>
                         </Form>

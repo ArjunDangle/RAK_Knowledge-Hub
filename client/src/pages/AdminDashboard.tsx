@@ -25,28 +25,30 @@ export default function AdminDashboard() {
         queryKey: ['pendingArticles'],
         queryFn: getPendingArticles,
     });
+    
+    // --- NEW: Optimistic update handler ---
+    const onActionSuccess = (pageId: string, message: string) => {
+        toast.success(message);
+        queryClient.setQueryData(['pendingArticles'], (oldData: Article[] | undefined) => {
+            return oldData ? oldData.filter(article => article.id !== pageId) : [];
+        });
+        if (reviewingArticle?.id === pageId) {
+            setReviewingArticle(null);
+        }
+    };
 
     const approveMutation = useMutation({
         mutationFn: (pageId: string) => approveArticle(pageId),
         onSuccess: (_, pageId) => {
-            toast.success("Article approved and published!");
-            queryClient.invalidateQueries({ queryKey: ['pendingArticles'] });
-            if (reviewingArticle?.id === pageId) {
-                setReviewingArticle(null);
-            }
+            onActionSuccess(pageId, "Article approved and published!");
         },
         onError: (error: Error) => toast.error("Action failed", { description: error.message }),
     });
 
-    // --- MODIFIED MUTATION ---
     const rejectMutation = useMutation({
         mutationFn: ({ pageId, comment }: { pageId: string, comment: string }) => rejectArticle(pageId, { comment }),
         onSuccess: (_, { pageId }) => {
-            toast.success("Article rejected and feedback sent.");
-            queryClient.invalidateQueries({ queryKey: ['pendingArticles'] });
-            if (reviewingArticle?.id === pageId) {
-                setReviewingArticle(null);
-            }
+            onActionSuccess(pageId, "Article rejected and feedback sent.");
         },
         onError: (error: Error) => toast.error("Action failed", { description: error.message }),
     });

@@ -121,7 +121,6 @@ export default function ArticlePage({ pageId: propPageId, isPreviewMode = false 
               <h1 className="text-4xl font-bold text-foreground leading-tight flex-1 pr-8">{article.title}</h1>
               {!isPreviewMode && (
                   <div className="flex gap-2 flex-shrink-0">
-                      <Tooltip><TooltipTrigger asChild><Button variant="destructive" size="icon" onClick={() => setIsHtmlModalOpen(true)}><Code className="h-4 w-4" /><span className="sr-only">View Raw HTML</span></Button></TooltipTrigger><TooltipContent><p>View Raw HTML (Debug)</p></TooltipContent></Tooltip>
                       <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={handleShare}><Share className="h-4 w-4" /><span className="sr-only">Share</span></Button></TooltipTrigger><TooltipContent><p>Share article</p></TooltipContent></Tooltip>
                       <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={handlePrint}><Printer className="h-4 w-4" /><span className="sr-only">Print</span></Button></TooltipTrigger><TooltipContent><p>Print article</p></TooltipContent></Tooltip>
                   </div>
