@@ -30,7 +30,6 @@ type CreatePageFormData = z.infer<typeof createPageSchema>;
 
 export default function CreatePage() {
     const navigate = useNavigate();
-    const editor = useConfiguredEditor();
     const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isHtmlModalOpen, setIsHtmlModalOpen] = useState(false);
@@ -41,6 +40,37 @@ export default function CreatePage() {
     const [currentTags, setCurrentTags] = useState<string[]>([]);
     const [isTagModalOpen, setIsTagModalOpen] = useState(false);
     const [temporarySelectedTags, setTemporarySelectedTags] = useState<Set<string>>(new Set());
+
+    const attachmentMutation = useMutation({
+        mutationFn: uploadAttachment,
+        onSuccess: (data) => {
+            setAttachments(prev => [...prev, data]);
+            toast.success(`File "${data.file_name}" uploaded successfully.`);
+            
+            const extension = data.file_name.split('.').pop()?.toLowerCase();
+            let attachmentType = 'file';
+
+            if (['png', 'jpg', 'jpeg', 'gif'].includes(extension || '')) {
+                attachmentType = 'image';
+            } else if (extension === 'pdf') {
+                attachmentType = 'pdf';
+            } else if (['mp4', 'mov', 'avi', 'webm'].includes(extension || '')) {
+                attachmentType = 'video';
+            }
+
+            editor?.chain().focus().setAttachment({ 
+                'data-file-name': data.file_name,
+                'data-attachment-type': attachmentType 
+            }).run();
+        },
+        onError: (error) => {
+            toast.error("Upload failed", { description: error.message });
+        },
+    });
+
+    // --- THIS IS THE FIX ---
+    // Pass the mutation function to the editor hook.
+    const editor = useConfiguredEditor('', attachmentMutation.mutate);
 
     const { data: allTags } = useQuery({
         queryKey: ['allTags'],
@@ -78,32 +108,7 @@ export default function CreatePage() {
         setTagInputValue('');
     };
 
-    const attachmentMutation = useMutation({
-        mutationFn: uploadAttachment,
-        onSuccess: (data) => {
-            setAttachments(prev => [...prev, data]);
-            toast.success(`File "${data.file_name}" uploaded successfully.`);
-            
-            const extension = data.file_name.split('.').pop()?.toLowerCase();
-            let attachmentType = 'file';
 
-            if (['png', 'jpg', 'jpeg', 'gif'].includes(extension || '')) {
-                attachmentType = 'image';
-            } else if (extension === 'pdf') {
-                attachmentType = 'pdf';
-            } else if (['mp4', 'mov', 'avi', 'webm'].includes(extension || '')) {
-                attachmentType = 'video';
-            }
-
-            editor?.chain().focus().setAttachment({ 
-                'data-file-name': data.file_name,
-                'data-attachment-type': attachmentType 
-            }).run();
-        },
-        onError: (error) => {
-            toast.error("Upload failed", { description: error.message });
-        },
-    });
 
     const pageMutation = useMutation({
         mutationFn: createPage,
