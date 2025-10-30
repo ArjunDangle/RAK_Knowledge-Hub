@@ -170,3 +170,21 @@ async def resubmit_page_endpoint(
     if not success:
         raise HTTPException(status_code=500, detail="Failed to resubmit page.")
     return
+
+@router.delete(
+    "/admin/pages/{page_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(get_current_admin_user)]
+)
+async def delete_page_permanently_endpoint(page_id: str):
+    """
+    Deletes a page from Confluence and its corresponding record from the local database.
+    This is a destructive action.
+    """
+    success = await confluence_service.delete_page_permanently(page_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete the page from Confluence or the local database."
+        )
+    return

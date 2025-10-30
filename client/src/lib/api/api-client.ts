@@ -59,8 +59,7 @@ export interface ContentNode {
 }
 // -----------------------------
 
-export const API_BASE_URL = "http://127.0.0.1:8000";
-// export const API_BASE_URL = "https://rak-knowledge-hub-backend.onrender.com";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -188,4 +187,8 @@ export async function rejectArticle(pageId: string, payload: RejectPayload): Pro
 
 export async function resubmitArticle(pageId: string): Promise<void> {
   return apiFetch(`/cms/pages/${pageId}/resubmit`, { method: 'POST' });
+}
+
+export async function deletePage(pageId: string): Promise<void> {
+  return apiFetch(`/cms/admin/pages/${pageId}`, { method: 'DELETE' });
 }

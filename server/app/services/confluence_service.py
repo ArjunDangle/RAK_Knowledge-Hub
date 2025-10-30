@@ -563,3 +563,27 @@ class ConfluenceService:
         except Exception as e:
             print(f"Error resubmitting page {page_id}: {e}")
             return False
+    
+    async def delete_page_permanently(self, page_id: str) -> bool:
+        """
+        Moves a Confluence page to the trash and deletes its record from the ArticleSubmission table.
+        """
+        try:
+            # Step 1: Delete the page in Confluence (this moves it to the trash).
+            # The default behavior of remove_page is to trash the content.
+            self.confluence.remove_page(page_id=page_id)
+            print(f"Successfully moved Confluence page {page_id} to trash.")
+
+            # Step 2: Delete the record from our local database.
+            # This might not exist for non-article pages (like categories), so we handle that.
+            submission = await db.articlesubmission.find_unique(where={'confluencePageId': page_id})
+            if submission:
+                await db.articlesubmission.delete(where={'confluencePageId': page_id})
+                print(f"Successfully deleted submission record for page {page_id}.")
+            
+            return True
+        except Exception as e:
+            print(f"Error during permanent deletion of page {page_id}: {e}")
+            # In a real-world scenario, you might want to handle rollback logic,
+            # but for now, logging the error is sufficient.
+            return False
