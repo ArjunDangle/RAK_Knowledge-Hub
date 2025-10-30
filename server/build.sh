@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
+# Exit on error
 set -o errexit
 
-# Install Python dependencies
+# 1. Install Python dependencies
 pip install --no-cache-dir -r requirements.txt
 
-# Install Node.js dependencies
+# 2. Install Node.js dependencies
+# This will trigger the "postinstall" script in package.json,
+# which runs "prisma py fetch && prisma generate"
 npm install
 
-# Generate Prisma Python client
-prisma generate
+# 3. Run database migrations
+# This command will work because the binaries are now
+# in the node_modules directory
+npx prisma generate
 
-# Fetch the Prisma engine binaries for this OS
-prisma py fetch
 
-# Apply database migrations
-npx prisma migrate deploy
 
 echo "✅ Build finished successfully!"
