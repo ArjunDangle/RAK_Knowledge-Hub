@@ -1,7 +1,11 @@
 {
   "name": "rak-knowledge-hub-server",
   "private": true,
+  "devDependencies": {
+    "prisma": "5.17.0"
+  },
   "prisma": {
-    "schema": "prisma/schema.prisma"
+    "schema": "prisma/schema.prisma",
+    "postinstall": "prisma py fetch && prisma generate"
   }
 }
