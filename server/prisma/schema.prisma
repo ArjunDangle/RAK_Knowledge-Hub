@@ -3,10 +3,11 @@
 // This is your Prisma schema file.
 // Learn more about it in the docs: https://pris.ly/d/prisma-schema
 
+
 generator client {
-  provider = "prisma-client-py"
+  provider                  = "prisma-client-py"
   enable_experimental_decimal = true
-  binaryTargets = ["native", "debian-openssl-3.0.x"]
+  binaryTargets             = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
