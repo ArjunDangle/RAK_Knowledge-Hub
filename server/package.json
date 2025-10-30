@@ -7,7 +7,7 @@
   },
   "devDependencies": {},
   "prisma": {
-    "schema": "prisma/schema.prisma",
-    "postinstall": "prisma py fetch && prisma generate"
+    "schema": "prisma/schema.prisma"
+
   }
 }
