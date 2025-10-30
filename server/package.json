@@ -1,8 +1,9 @@
 {
-  "name": "rak-knowledge-hub-server",
+ "name": "rak-knowledge-hub-server",
   "private": true,
   "dependencies": {
-    "prisma": "5.17.0"
+    "prisma": "5.17.0",
+    "@prisma/client": "5.17.0"
   },
   "devDependencies": {},
   "prisma": {
