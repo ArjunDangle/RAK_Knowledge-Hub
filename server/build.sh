@@ -1,19 +1,22 @@
 #!/usr/bin/env bash
 set -o errexit
 
-# Install Python dependencies
-pip install --no-cache-dir -r requirements.txt
+# 1. Tell Prisma to put binaries in a local 'binaries' folder
+export PRISMA_PY_BINARIES_DIR=binaries
 
-# Install Node.js dependencies
+# 2. Install Python & Node deps
+pip install --no-cache-dir -r requirements.txt
 npm install
 
-# Generate Prisma Python client
+# 3. Run Prisma commands
+# (The 'postinstall' hook in package.json will also run these,
+#  but being explicit here is safer and ensures order)
 prisma generate
 
-# Fetch the Prisma engine binaries for this OS
+# 4. Fetch binaries INTO the 'server/binaries' folder
 prisma py fetch
 
-# Apply database migrations
+# 5. Run migrations (it will find the binaries in './binaries')
 npx prisma migrate deploy
 
-echo "✅ Build finished successfully!"
+echo "✅ Build finished. Binaries are in ./binaries"
