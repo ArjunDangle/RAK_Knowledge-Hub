@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Exit on error
 set -o errexit
 
 # Install Python dependencies
@@ -10,6 +9,9 @@ npm install
 
 # Generate Prisma Python client
 prisma generate
+
+# Fetch Prisma query engine binaries (critical for Render)
+prisma py fetch
 
 # Apply database migrations
 npx prisma migrate deploy
