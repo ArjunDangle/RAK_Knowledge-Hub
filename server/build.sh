@@ -13,6 +13,8 @@ npm install
 # 3. Run database migrations
 # This command will work because the binaries are now
 # in the node_modules directory
-npx prisma migrate deploy
+npx prisma generate
+
+
 
 echo "✅ Build finished successfully!"
