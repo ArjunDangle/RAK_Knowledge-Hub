@@ -2,20 +2,19 @@
 # Exit on error
 set -o errexit
 
-# Install Python dependencies
-# Use --no-cache-dir to ensure fresh installs in build environment if needed
+# 1. Install Python dependencies
 pip install --no-cache-dir -r requirements.txt
 
-# Install Node.js dependencies (needed for Prisma CLI)
+# 2. Install Node.js dependencies
+# This will trigger the "postinstall" script in package.json,
+# which runs "prisma py fetch && prisma generate"
 npm install
 
-# Run Prisma client generation using the correct CLI version
-npx prisma@5.17.0 generate
+# 3. Run database migrations
+# This command will work because the binaries are now
+# in the node_modules directory
+npx prisma generate
 
-# Fetch the required Prisma binary engines for the Python client
-prisma py fetch
 
-# Apply database migrations
-npx prisma migrate deploy
 
-echo "Build finished successfully!"
+echo "✅ Build finished successfully!"
