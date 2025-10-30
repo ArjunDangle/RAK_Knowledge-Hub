@@ -7,9 +7,6 @@ pip install --no-cache-dir -r requirements.txt
 # Install Node.js dependencies
 npm install
 
-# Move into server directory if schema.prisma is there
-cd server
-
 # Generate Prisma Python client
 prisma generate
 
