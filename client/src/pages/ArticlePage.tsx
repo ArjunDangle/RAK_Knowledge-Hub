@@ -1,7 +1,7 @@
 // client/src/pages/ArticlePage.tsx
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Clock, Eye, Calendar, Share, Printer, Code } from "lucide-react";
+import { Clock, Eye, Calendar, Share, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -42,43 +42,77 @@ export default function ArticlePage({ pageId: propPageId, isPreviewMode = false 
   });
 
   const contentBlocks = useMemo(() => {
-    if (!article) return [];
+    if (!article || !pageId) return [];
+
     const fullHtml = article.html;
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = fullHtml;
+
+    // --- THIS IS THE DEFINITIVE FIX ---
+    // Find all image tags and rewrite their src to point to our backend proxy.
+    // This works regardless of whether the original src is relative or absolute.
+    const images = tempDiv.getElementsByTagName('img');
+    for (let i = 0; i < images.length; i++) {
+        const img = images[i];
+        const src = img.getAttribute('src');
+        // Check if the src contains the Confluence download path
+        if (src && src.includes('/wiki/download/attachments/')) {
+            const urlParts = src.split('/');
+            const filenameIndex = urlParts.findIndex(part => part === 'attachments') + 2;
+            if (filenameIndex < urlParts.length) {
+                const filename = decodeURIComponent(urlParts[filenameIndex].split('?')[0]);
+                img.src = `${API_BASE_URL}/attachment/${pageId}/${filename}`;
+            }
+        }
+    }
+    // --- END OF URL REWRITING FIX ---
+
     const blocks: { type: 'html' | 'pdf' | 'video'; content?: string; fileName?: string }[] = [];
     let currentHtml = '';
+
+    const videoExtensions = ['.mp4', '.mov', '.avi', '.webm'];
+
     tempDiv.childNodes.forEach(node => {
-      let nodeReplaced = false;
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        const element = node as HTMLElement;
-        const isPdfMacro = element.matches('div[data-macro-name="viewpdf"]');
-        const isVideoMacro = element.matches('div[data-macro-name="multimedia"]');
-        const isVideoFileLink = element.matches('span.confluence-embedded-file-wrapper') && element.querySelector('a[href*=".mp4"]');
-        if (isPdfMacro || isVideoMacro || isVideoFileLink) {
-          if (currentHtml.trim() !== '') { blocks.push({ type: 'html', content: currentHtml }); currentHtml = ''; }
-          let attachmentName: string | null = null;
-          if (isVideoFileLink) {
-            const link = element.querySelector('a');
-            const href = link?.getAttribute('href') || '';
-            const parts = href.split('/');
-            const lastPart = parts[parts.length - 1];
-            attachmentName = decodeURIComponent(lastPart.split('?')[0]);
-          } else {
-            attachmentName = element.querySelector('div[data-attachment-name]')?.getAttribute('data-attachment-name');
-          }
-          if (attachmentName) {
-            const type = isPdfMacro ? 'pdf' : 'video';
-            blocks.push({ type, fileName: attachmentName });
-          }
-          nodeReplaced = true;
+        let nodeHandled = false;
+        if (node.nodeType === Node.ELEMENT_NODE) {
+            const element = node as HTMLElement;
+
+            // Handle PDF macros
+            if (element.matches('div[data-macro-name="viewpdf"]')) {
+                if (currentHtml.trim() !== '') { blocks.push({ type: 'html', content: currentHtml }); currentHtml = ''; }
+                const attachmentName = element.querySelector('div[data-attachment-name]')?.getAttribute('data-attachment-name');
+                if (attachmentName) {
+                    blocks.push({ type: 'pdf', fileName: attachmentName });
+                }
+                nodeHandled = true;
+            }
+            // Handle embedded videos
+            else if (element.matches('span.confluence-embedded-file-wrapper')) {
+                const link = element.querySelector('a');
+                const href = link?.getAttribute('href') || '';
+                
+                if (videoExtensions.some(ext => href.toLowerCase().includes(ext))) {
+                    if (currentHtml.trim() !== '') { blocks.push({ type: 'html', content: currentHtml }); currentHtml = ''; }
+                    const parts = href.split('/');
+                    const lastPart = parts[parts.length - 1];
+                    const attachmentName = decodeURIComponent(lastPart.split('?')[0]);
+                    blocks.push({ type: 'video', fileName: attachmentName });
+                    nodeHandled = true;
+                }
+            }
         }
-      }
-      if (!nodeReplaced) { currentHtml += (node as any).outerHTML || node.textContent; }
+
+        if (!nodeHandled) {
+            currentHtml += (node as any).outerHTML || node.textContent;
+        }
     });
-    if (currentHtml.trim() !== '') { blocks.push({ type: 'html', content: currentHtml }); }
+    
+    if (currentHtml.trim() !== '') {
+        blocks.push({ type: 'html', content: currentHtml });
+    }
+
     return blocks.length > 0 ? blocks : [{ type: 'html', content: fullHtml }];
-  }, [article]);
+  }, [article, pageId]);
   
   const { data: relatedArticles, isLoading: relatedLoading } = useQuery({ queryKey: ['relatedArticles', article?.id], queryFn: () => article ? getRelatedArticles(article.tags, article.id) : Promise.resolve([]), enabled: !!article && !isPreviewMode });
   const { data: ancestors } = useQuery({ queryKey: ['ancestors', pageId], queryFn: () => pageId ? getAncestors(pageId) : Promise.resolve([]), enabled: !!pageId && !isPreviewMode });
@@ -110,8 +144,6 @@ export default function ArticlePage({ pageId: propPageId, isPreviewMode = false 
     return isPreviewMode ? <div className="p-6">{errorContent}</div> : <KnowledgeLayout>{errorContent}</KnowledgeLayout>;
   }
   
-  // --- THIS IS THE FIX ---
-  // The breadcrumbs are now defined only AFTER we are sure the article data exists.
   const breadcrumbs = ancestors ? [...ancestors.map((ancestor, index) => { if (index === 0) { return { label: ancestor.title, href: `/category/${article.group}` }; } return { label: ancestor.title, href: `/page/${ancestor.id}` }; }), { label: article.title }] : [];
 
   const renderContent = () => (

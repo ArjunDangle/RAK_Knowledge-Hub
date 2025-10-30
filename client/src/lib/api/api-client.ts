@@ -188,3 +188,7 @@ export async function rejectArticle(pageId: string, payload: RejectPayload): Pro
 export async function resubmitArticle(pageId: string): Promise<void> {
   return apiFetch(`/cms/pages/${pageId}/resubmit`, { method: 'POST' });
 }
+
+export async function deletePage(pageId: string): Promise<void> {
+  return apiFetch(`/cms/admin/pages/${pageId}`, { method: 'DELETE' });
+}
