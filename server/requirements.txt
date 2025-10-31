@@ -14,6 +14,7 @@ cryptography==46.0.3
 Deprecated==1.2.18
 ecdsa==0.19.1
 fastapi==0.120.2
+gunicorn==23.0.0
 h11==0.16.0
 httpcore==1.0.9
 httptools==0.7.1
@@ -24,6 +25,7 @@ jmespath==1.0.1
 MarkupSafe==3.0.3
 nodeenv==1.9.1
 oauthlib==3.3.1
+packaging==25.0
 passlib==1.7.4
 prisma==0.15.0
 psycopg==3.2.12
