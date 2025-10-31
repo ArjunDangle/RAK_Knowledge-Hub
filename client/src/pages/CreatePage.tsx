@@ -42,10 +42,9 @@ export default function CreatePage() {
         mutationFn: uploadAttachment,
         onSuccess: (data) => {
             // --- THIS IS THE FIX ---
-            // Only update the state. Do NOT insert content here.
-            // The editor plugin is now responsible for visual replacement.
+            // Only update the state. The editor plugin is now responsible for all visual insertions.
             setAttachments(prev => [...prev, data]);
-            toast.success(`File "${data.file_name}" processed successfully.`);
+            toast.success(`File "${data.file_name}" processed.`);
         },
         onError: (error) => {
             toast.error("Upload failed", { description: error.message });

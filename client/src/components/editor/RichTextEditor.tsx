@@ -29,7 +29,6 @@ import { useCallback, useState, useEffect } from 'react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '../ui/dropdown-menu';
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { Extension } from '@tiptap/core';
-import { Slice, Fragment } from 'prosemirror-model';
 
 interface RichTextEditorProps {
   editor: Editor | null;
@@ -193,7 +192,6 @@ export const RichTextEditor = ({ editor }: RichTextEditorProps) => (
     </div>
 );
 
-// --- THIS IS THE DEFINITIVE FIX ---
 const PasteHandler = Extension.create<{ onFileUpload: (file: File) => void }>({
     name: 'pasteHandler',
 
@@ -222,41 +220,11 @@ const PasteHandler = Extension.create<{ onFileUpload: (file: File) => void }>({
                         }
                         return false;
                     },
-                    transformPasted: (slice: Slice) => {
-                        const { content } = slice;
-                        const newNodes: any[] = [];
-                        let modified = false;
-
-                        content.descendants((node, pos) => {
-                            if (node.type.name === 'image' && node.attrs.src && node.attrs.src.startsWith('data:image/')) {
-                                modified = true;
-                                try {
-                                    const file = dataURItoFile(node.attrs.src, `pasted-image-${Date.now()}.png`);
-                                    this.options.onFileUpload(file);
-                                    // We are intentionally not adding a placeholder here,
-                                    // because the CreatePage's onFileUpload will handle inserting the attachmentNode
-                                } catch (e) {
-                                    console.error("Could not process pasted base64 image", e);
-                                }
-                                return false; // Don't traverse into image node
-                            }
-                            return true;
-                        });
-                        
-                        // If we handled a base64 image, we return an empty slice for that part,
-                        // effectively removing the base64 `<img>` tag from the pasted content.
-                        if (modified) {
-                            return new Slice(Fragment.empty, slice.openStart, slice.openEnd);
-                        }
-                        
-                        return slice;
-                    }
                 }
             }),
         ];
     },
 });
-
 
 export const useConfiguredEditor = (
   initialContent: string = "",
