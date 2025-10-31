@@ -3,9 +3,8 @@ import { useEditor, EditorContent, Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import { 
-    Bold, Italic, Strikethrough, List, ListOrdered, Quote, Table2, Trash2, Pilcrow, MessageSquare, GripVertical, 
-    Undo, Redo, PilcrowLeft, PilcrowRight, Link as LinkIcon, Underline, Palette, Highlighter, AlignLeft, 
-    AlignCenter, AlignRight, AlignJustify, ListTodo, RemoveFormatting, ChevronsUpDown
+    Bold, Italic, Strikethrough, List, ListOrdered, Quote, Table2, Link as LinkIcon, 
+    Underline, Palette, Highlighter, AlignLeft, ListTodo, RemoveFormatting, ChevronDown
 } from 'lucide-react';
 import { Toggle } from '@/components/ui/toggle';
 import { AttachmentNode } from './extensions/attachmentNode';
@@ -25,8 +24,8 @@ import TaskItem from '@tiptap/extension-task-item';
 import { Button } from '../ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Input } from '../ui/input';
-import { useCallback, useState } from 'react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
+import { useCallback, useState, useEffect } from 'react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '../ui/dropdown-menu';
 
 interface RichTextEditorProps {
   editor: Editor | null;
@@ -35,14 +34,31 @@ interface RichTextEditorProps {
 const Toolbar = ({ editor }: { editor: Editor | null }) => {
   const [isLinkPopoverOpen, setIsLinkPopoverOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
+  const [, setForceUpdate] = useState(0);
+
+  useEffect(() => {
+      if (!editor) return;
+      const updateHandler = () => setForceUpdate(val => val + 1);
+      editor.on('update', updateHandler);
+      editor.on('selectionUpdate', updateHandler);
+      return () => {
+          editor.off('update', updateHandler);
+          editor.off('selectionUpdate', updateHandler);
+      };
+  }, [editor]);
 
   const setLink = useCallback(() => {
     if (!editor) return;
     if (linkUrl === '') {
       editor.chain().focus().extendMarkRange('link').unsetLink().run();
+      setIsLinkPopoverOpen(false);
       return;
     }
-    editor.chain().focus().extendMarkRange('link').setLink({ href: linkUrl }).run();
+    let finalUrl = linkUrl;
+    if (!/^https?:\/\//i.test(linkUrl)) {
+      finalUrl = 'https://' + linkUrl;
+    }
+    editor.chain().focus().extendMarkRange('link').setLink({ href: finalUrl }).run();
     setIsLinkPopoverOpen(false);
     setLinkUrl('');
   }, [editor, linkUrl]);
@@ -58,52 +74,40 @@ const Toolbar = ({ editor }: { editor: Editor | null }) => {
 
   const StyleDropdown = () => (
     <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="w-28 justify-between">
-                {
-                    editor.isActive('heading', { level: 1 }) ? 'Heading 1' :
-                    editor.isActive('heading', { level: 2 }) ? 'Heading 2' :
-                    editor.isActive('heading', { level: 3 }) ? 'Heading 3' :
-                    'Normal text'
-                }
-                <ChevronsUpDown className="h-4 w-4 opacity-50" />
-            </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent>
-            <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>Normal text</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>Heading 1</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>Heading 2</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>Heading 3</DropdownMenuItem>
-        </DropdownMenuContent>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm" className="w-32 justify-between text-left font-normal">
+          <span className="truncate">
+            { editor.isActive('heading', { level: 1 }) ? 'Heading 1' :
+              editor.isActive('heading', { level: 2 }) ? 'Heading 2' :
+              editor.isActive('heading', { level: 3 }) ? 'Heading 3' :
+              'Normal text' }
+          </span>
+          <ChevronDown className="h-4 w-4 opacity-50" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>Normal text</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>Heading 1</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>Heading 2</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>Heading 3</DropdownMenuItem>
+      </DropdownMenuContent>
     </DropdownMenu>
   );
 
   return (
-    <div className="border border-input rounded-md p-1 flex flex-wrap items-center gap-1 mb-2">
-        <Toggle size="sm" onPressedChange={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()}><Undo className="h-4 w-4" /></Toggle>
-        <Toggle size="sm" onPressedChange={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()}><Redo className="h-4 w-4" /></Toggle>
-
-        <Separator orientation="vertical" className="h-auto mx-1" />
-
+    <div className="border border-input rounded-t-md p-1 flex flex-wrap items-center gap-0.5">
         <StyleDropdown />
-        
-        <Separator orientation="vertical" className="h-auto mx-1" />
-        
-        <Toggle size="sm" pressed={editor.isActive('bold')} onPressedChange={() => editor.chain().focus().toggleBold().run()}><Bold className="h-4 w-4" /></Toggle>
-        <Toggle size="sm" pressed={editor.isActive('italic')} onPressedChange={() => editor.chain().focus().toggleItalic().run()}><Italic className="h-4 w-4" /></Toggle>
-        <Toggle size="sm" pressed={editor.isActive('underline')} onPressedChange={() => editor.chain().focus().toggleUnderline().run()}><Underline className="h-4 w-4" /></Toggle>
-        <Toggle size="sm" pressed={editor.isActive('strike')} onPressedChange={() => editor.chain().focus().toggleStrike().run()}><Strikethrough className="h-4 w-4" /></Toggle>
-        
-        <Separator orientation="vertical" className="h-auto mx-1" />
-
-        <label className="flex items-center cursor-pointer p-1.5 rounded-md hover:bg-muted"><Palette className="h-4 w-4" /><input type="color" value={editor.getAttributes('textStyle').color || '#000000'} onChange={e => editor.chain().focus().setColor(e.target.value).run()} className="w-0 h-0 p-0 border-0 overflow-hidden" /></label>
-        <Toggle size="sm" pressed={editor.isActive('highlight')} onPressedChange={() => editor.chain().focus().toggleHighlight().run()}><Highlighter className="h-4 w-4" /></Toggle>
-
-        <Separator orientation="vertical" className="h-auto mx-1" />
-
+        <Separator orientation="vertical" className="h-6 mx-1" />
+        <Toggle size="sm" title="Bold" pressed={editor.isActive('bold')} onPressedChange={() => editor.chain().focus().toggleBold().run()}><Bold className="h-4 w-4" /></Toggle>
+        <Toggle size="sm" title="Italic" pressed={editor.isActive('italic')} onPressedChange={() => editor.chain().focus().toggleItalic().run()}><Italic className="h-4 w-4" /></Toggle>
+        <Toggle size="sm" title="Underline" pressed={editor.isActive('underline')} onPressedChange={() => editor.chain().focus().toggleUnderline().run()}><Underline className="h-4 w-4" /></Toggle>
+        <Toggle size="sm" title="Strikethrough" pressed={editor.isActive('strike')} onPressedChange={() => editor.chain().focus().toggleStrike().run()}><Strikethrough className="h-4 w-4" /></Toggle>
+        <label className="flex items-center cursor-pointer p-1.5 rounded-md hover:bg-muted" title="Text Color"><Palette className="h-4 w-4" /><input type="color" value={editor.getAttributes('textStyle').color || '#000000'} onChange={e => editor.chain().focus().setColor(e.target.value).run()} className="w-0 h-0 p-0 border-0 overflow-hidden" /></label>
+        <Toggle size="sm" title="Highlight" pressed={editor.isActive('highlight')} onPressedChange={() => editor.chain().focus().toggleHighlight().run()}><Highlighter className="h-4 w-4" /></Toggle>
+        <Separator orientation="vertical" className="h-6 mx-1" />
         <Popover open={isLinkPopoverOpen} onOpenChange={setIsLinkPopoverOpen}>
           <PopoverTrigger asChild>
-              <Toggle size="sm" pressed={editor.isActive('link')} onClick={handleLinkPopoverOpen}><LinkIcon className="h-4 w-4" /></Toggle>
+              <Toggle size="sm" title="Link" pressed={editor.isActive('link')} onClick={handleLinkPopoverOpen}><LinkIcon className="h-4 w-4" /></Toggle>
           </PopoverTrigger>
           <PopoverContent className="w-80">
             <div className="grid gap-4">
@@ -113,46 +117,50 @@ const Toolbar = ({ editor }: { editor: Editor | null }) => {
             </div>
           </PopoverContent>
         </Popover>
-
-        <Separator orientation="vertical" className="h-auto mx-1" />
-        
-        <Toggle size="sm" pressed={editor.isActive({ textAlign: 'left' })} onPressedChange={() => editor.chain().focus().setTextAlign('left').run()}><AlignLeft className="h-4 w-4" /></Toggle>
-        <Toggle size="sm" pressed={editor.isActive({ textAlign: 'center' })} onPressedChange={() => editor.chain().focus().setTextAlign('center').run()}><AlignCenter className="h-4 w-4" /></Toggle>
-        <Toggle size="sm" pressed={editor.isActive({ textAlign: 'right' })} onPressedChange={() => editor.chain().focus().setTextAlign('right').run()}><AlignRight className="h-4 w-4" /></Toggle>
-        <Toggle size="sm" pressed={editor.isActive({ textAlign: 'justify' })} onPressedChange={() => editor.chain().focus().setTextAlign('justify').run()}><AlignJustify className="h-4 w-4" /></Toggle>
-
-        <Separator orientation="vertical" className="h-auto mx-1" />
-        
-        <Toggle size="sm" pressed={editor.isActive('bulletList')} onPressedChange={() => editor.chain().focus().toggleBulletList().run()}><List className="h-4 w-4" /></Toggle>
-        <Toggle size="sm" pressed={editor.isActive('orderedList')} onPressedChange={() => editor.chain().focus().toggleOrderedList().run()}><ListOrdered className="h-4 w-4" /></Toggle>
-        <Toggle size="sm" pressed={editor.isActive('taskList')} onPressedChange={() => editor.chain().focus().toggleTaskList().run()}><ListTodo className="h-4 w-4" /></Toggle>
-        <Toggle size="sm" onPressedChange={() => editor.chain().focus().sinkListItem('listItem').run()} disabled={!editor.can().sinkListItem('listItem')}><PilcrowRight className="h-4 w-4" /></Toggle>
-        <Toggle size="sm" onPressedChange={() => editor.chain().focus().liftListItem('listItem').run()} disabled={!editor.can().liftListItem('listItem')}><PilcrowLeft className="h-4 w-4" /></Toggle>
-
-        <Separator orientation="vertical" className="h-auto mx-1" />
-
-        <Toggle size="sm" pressed={editor.isActive('blockquote')} onPressedChange={() => editor.chain().focus().toggleBlockquote().run()}><Quote className="h-4 w-4" /></Toggle>
-        <Toggle size="sm" onPressedChange={() => editor.chain().focus().unsetAllMarks().run()}><RemoveFormatting className="h-4 w-4" /></Toggle>
-
-        <Separator orientation="vertical" className="h-auto mx-1" />
-        
-        <Toggle size="sm" onPressedChange={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}><Table2 className="h-4 w-4" /></Toggle>
-        {editor.isActive("table") && (
-          <>
-            <Toggle size="sm" onPressedChange={() => editor.chain().focus().addColumnBefore().run()}><GripVertical className="h-4 w-4 transform rotate-90" /></Toggle>
-            <Toggle size="sm" onPressedChange={() => editor.chain().focus().addColumnAfter().run()}><GripVertical className="h-4 w-4 transform rotate-90" /></Toggle>
-            <Toggle size="sm" onPressedChange={() => editor.chain().focus().deleteColumn().run()}><Trash2 className="h-4 w-4" /></Toggle>
-            <Separator orientation="vertical" className="h-auto mx-1" />
-            <Toggle size="sm" onPressedChange={() => editor.chain().focus().addRowBefore().run()}><GripVertical className="h-4 w-4" /></Toggle>
-            <Toggle size="sm" onPressedChange={() => editor.chain().focus().addRowAfter().run()}><GripVertical className="h-4 w-4" /></Toggle>
-            <Toggle size="sm" onPressedChange={() => editor.chain().focus().deleteRow().run()}><Trash2 className="h-4 w-4" /></Toggle>
-            <Separator orientation="vertical" className="h-auto mx-1" />
-            <Toggle size="sm" onPressedChange={() => editor.chain().focus().mergeCells().run()}><MessageSquare className="h-4 w-4" /></Toggle>
-            <Toggle size="sm" onPressedChange={() => editor.chain().focus().splitCell().run()}><Pilcrow className="h-4 w-4" /></Toggle>
-            <Separator orientation="vertical" className="h-auto mx-1" />
-            <Toggle size="sm" onPressedChange={() => editor.chain().focus().deleteTable().run()}><Trash2 className="h-4 w-4 text-red-500" /></Toggle>
-          </>
-        )}
+        <Toggle size="sm" title="Blockquote" pressed={editor.isActive('blockquote')} onPressedChange={() => editor.chain().focus().toggleBlockquote().run()}><Quote className="h-4 w-4" /></Toggle>
+        <Toggle size="sm" title="Clear Formatting" onPressedChange={() => editor.chain().focus().unsetAllMarks().run()}><RemoveFormatting className="h-4 w-4" /></Toggle>
+        <Separator orientation="vertical" className="h-6 mx-1" />
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-9 w-9" title="Alignment"><AlignLeft className="h-4 w-4" /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent>
+                <DropdownMenuItem onClick={() => editor.chain().focus().setTextAlign('left').run()}>Align Left</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => editor.chain().focus().setTextAlign('center').run()}>Align Center</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => editor.chain().focus().setTextAlign('right').run()}>Align Right</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => editor.chain().focus().setTextAlign('justify').run()}>Align Justify</DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-9 w-9" title="Lists"><List className="h-4 w-4" /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent>
+                <DropdownMenuItem onClick={() => editor.chain().focus().toggleBulletList().run()}>Bullet List</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => editor.chain().focus().toggleOrderedList().run()}>Numbered List</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => editor.chain().focus().toggleTaskList().run()}>Task List</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => editor.chain().focus().sinkListItem('listItem').run()} disabled={!editor.can().sinkListItem('listItem')}>Indent</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => editor.chain().focus().liftListItem('listItem').run()} disabled={!editor.can().liftListItem('listItem')}>Outdent</DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-9 w-9" title="Table"><Table2 className="h-4 w-4" /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent>
+                <DropdownMenuItem onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>Insert Table</DropdownMenuItem>
+                {editor.isActive("table") && <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => editor.chain().focus().addColumnBefore().run()}>Add Column Before</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => editor.chain().focus().addColumnAfter().run()}>Add Column After</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => editor.chain().focus().deleteColumn().run()}>Delete Column</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => editor.chain().focus().addRowBefore().run()}>Add Row Before</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => editor.chain().focus().addRowAfter().run()}>Add Row After</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => editor.chain().focus().deleteRow().run()}>Delete Row</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => editor.chain().focus().mergeCells().run()}>Merge Cells</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => editor.chain().focus().splitCell().run()}>Split Cell</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => editor.chain().focus().deleteTable().run()} className="text-red-600">Delete Table</DropdownMenuItem>
+                </>}
+            </DropdownMenuContent>
+        </DropdownMenu>
     </div>
   );
 };
@@ -164,7 +172,7 @@ export const RichTextEditor = ({ editor }: RichTextEditorProps) => {
             {editor && <Toolbar editor={editor} />}
             <EditorContent 
                 editor={editor} 
-                className="prose dark:prose-invert max-w-none border border-input rounded-md p-4 min-h-[300px]" 
+                className="prose dark:prose-invert max-w-none border border-input rounded-b-md p-4 min-h-[300px] focus:outline-none" 
             />
         </div>
     );
@@ -178,7 +186,8 @@ export const useConfiguredEditor = (
         extensions: [
             StarterKit,
             TiptapUnderline,
-            TextStyle,
+            TextStyle, // Keep for color, etc.
+            // FontFamily removed
             Color,
             Highlight.configure({ multicolor: true }),
             Link.configure({

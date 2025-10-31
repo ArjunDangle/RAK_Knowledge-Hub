@@ -113,4 +113,30 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* --- THIS IS THE FIX --- */
+  /* Tiptap Table Styles */
+  .prose table {
+    @apply w-full my-4 border-collapse border border-border-strong table-fixed;
+  }
+  .prose th,
+  .prose td {
+    @apply border border-border px-4 py-2 text-left align-top;
+  }
+  .prose thead {
+    @apply bg-muted/50;
+  }
+  .prose thead th {
+    @apply font-semibold;
+  }
+  .prose tbody tr:nth-of-type(even) {
+    @apply bg-muted/20;
+  }
+  /* Column Resizing Styles */
+  .tableWrapper {
+      @apply overflow-x-auto;
+  }
+  .resize-cursor {
+      @apply cursor-col-resize;
+  }
 }
