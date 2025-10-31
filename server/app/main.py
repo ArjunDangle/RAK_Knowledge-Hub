@@ -62,13 +62,13 @@ origins = [
     "http://127.0.0.1:8080",
     "https://rak-knowledge-hub.vercel.app",
 ]
-FRONTEND_URL = os.environ.get("FRONTEND_URL")
-if FRONTEND_URL:
-    origins.append(FRONTEND_URL)
+# FRONTEND_URL = os.environ.get("FRONTEND_URL")
+# if FRONTEND_URL:
+#     origins.append(FRONTEND_URL)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
