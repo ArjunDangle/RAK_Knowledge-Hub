@@ -15,8 +15,9 @@ from app.db import db
 from app.schemas.cms_schemas import ArticleSubmissionStatus
 from app.config import Settings
 from app.schemas.content_schemas import Article, Tag, Subsection, GroupInfo, PageContentItem, Ancestor
-from app.schemas.cms_schemas import PageCreate, AttachmentInfo, ContentNode # <-- THIS LINE IS NOW CORRECT
+from app.schemas.cms_schemas import PageCreate, AttachmentInfo, ContentNode
 from app.utils.html_translator import html_to_storage_format
+from app.broadcaster import broadcast
 
 UPLOAD_DIR = "/tmp/uploads"
 
@@ -33,6 +34,42 @@ class ConfluenceService:
         self.id_to_group_slug_map: Dict[str, str] = {v: k for k, v in self.root_page_ids.items()}
         if not self.root_page_ids:
             print("CRITICAL: Could not discover any root page IDs.")
+
+    # --- THIS IS THE CORRECTED FUNCTION ---
+    async def _notify_all_admins(self, message: str, link: str):
+        """
+        Fetches all admins, saves a notification to the DB for each one,
+        and pushes a real-time broadcast.
+        """
+        try:
+            admins = await db.user.find_many(where={'role': 'ADMIN'})
+            if not admins:
+                return
+
+            message_payload = json.dumps({
+                "message": message,
+                "link": link
+            })
+            
+            # Prepare notification data for all admins
+            notifications_to_create = []
+            for admin in admins:
+                notifications_to_create.append({
+                    'message': message,
+                    'link': link,
+                    'recipientId': admin.id
+                })
+            
+            # 1. Save all notifications to the database in one go
+            await db.notification.create_many(data=notifications_to_create)
+
+            # 2. Push the real-time event to all connected admins
+            for admin in admins:
+                await broadcast.push(admin.id, message_payload)
+
+        except Exception as e:
+            print(f"Error notifying admins: {e}")
+    # --- END OF CORRECTED FUNCTION ---
 
     def _discover_root_pages(self) -> Dict[str, str]:
         space_key = self.settings.confluence_space_key
@@ -96,18 +133,18 @@ class ConfluenceService:
         author_info = page_data.get("version", {}).get("by", {})
         author_name = author_info.get("displayName") if author_info else "Unknown"
         
-        article_data = { 
-            "id": page_data["id"], 
-            "slug": self._slugify(page_data["title"]), 
-            "title": page_data["title"], 
-            "excerpt": excerpt, 
-            "html": html_content, 
-            "tags": tags, 
-            "group": group_slug, 
-            "subsection": subsection_slug, 
-            "updatedAt": page_data["version"]["when"], 
-            "views": 0, 
-            "readMinutes": read_minutes, 
+        article_data = {
+            "id": page_data["id"],
+            "slug": self._slugify(page_data["title"]),
+            "title": page_data["title"],
+            "excerpt": excerpt,
+            "html": html_content,
+            "tags": tags,
+            "group": group_slug,
+            "subsection": subsection_slug,
+            "updatedAt": page_data["version"]["when"],
+            "views": 0,
+            "readMinutes": read_minutes,
             "author": author_name
         }
         return Article.model_validate(article_data)
@@ -141,7 +178,8 @@ class ConfluenceService:
             "tags": tags, "articleCount": article_count, "updatedAt": page_data["version"]["when"],
         }
         return Subsection.model_validate(subsection_data)
-        
+    
+    
     def _fetch_and_transform_articles_from_cql(self, cql: str, limit: int, is_admin_view: bool = False) -> List[Article]:
         try:
             search_path = f'/rest/api/content/search?cql={cql}&limit={limit}&expand=body.view,version,metadata.labels,ancestors'
@@ -155,6 +193,7 @@ class ConfluenceService:
         except Exception as e:
             print(f"Error during CQL fetch and transform: {e}")
             return []
+    
     
     def get_groups(self) -> List[GroupInfo]:
         return [
@@ -191,7 +230,8 @@ class ConfluenceService:
             return None
     
     def get_article_for_preview(self, page_id: str) -> Optional[Article]:
-        """ Fetches an article by its ID without status checks, for admin previews. """
+        """ Fetches an article by its ID without status checks, for admin previews.
+        """
         try:
             article_page = self.confluence.get_page_by_id(page_id, expand="body.view,version,metadata.labels,ancestors")
             if not article_page:
@@ -232,6 +272,7 @@ class ConfluenceService:
         except Exception as e:
             print(f"Error in get_page_contents for parent {parent_page_id}: {e}")
             return []
+    
     
     def get_ancestors(self, page_id: str) -> List[Ancestor]:
         try:
@@ -287,7 +328,8 @@ class ConfluenceService:
         except Exception as e:
             print(f"Error fetching attachment '{file_name}' for page ID {page_id}: {e}")
             return None
-            
+         
+    
     def get_recent_articles(self, limit: int = 6) -> List[Article]:
         cql = f'space = "{self.settings.confluence_space_key}" and type = page and label != "status-unpublished" and label != "status-rejected" order by lastModified desc'
         return self._fetch_and_transform_articles_from_cql(cql, limit)
@@ -356,7 +398,8 @@ class ConfluenceService:
             if not new_page: raise Exception("Page creation returned None.")
             page_id = new_page['id']
             
-            await db.articlesubmission.create(
+            
+            db_submission = await db.articlesubmission.create(
                 data={
                     'confluencePageId': page_id,
                     'title': page_data.title,
@@ -364,6 +407,13 @@ class ConfluenceService:
                     'status': ArticleSubmissionStatus.PENDING_REVIEW,
                 }
             )
+
+            # --- NOTIFICATION FOR ADMINS ---
+            await self._notify_all_admins(
+                message=f"New article '{page_data.title}' submitted by {author_name} is pending review.",
+                link="/admin/dashboard"
+            )
+            # --- END NOTIFICATION ---
 
             time.sleep(5)
             attachment_url = f"{self.settings.confluence_url}/rest/api/content/{page_id}/child/attachment"
@@ -400,7 +450,7 @@ class ConfluenceService:
         try:
             pending_submissions = await db.articlesubmission.find_many(
                 where={'status': ArticleSubmissionStatus.PENDING_REVIEW},
-                include={'author': True}, 
+                include={'author': True},
                 order={'updatedAt': 'desc'}
             )
 
@@ -430,10 +480,30 @@ class ConfluenceService:
     async def approve_page(self, page_id: str) -> bool:
         try:
             self._remove_label_from_page(page_id, "status-unpublished")
-            await db.articlesubmission.update(
+            submission = await db.articlesubmission.update(
                 where={'confluencePageId': page_id},
                 data={'status': ArticleSubmissionStatus.PUBLISHED}
             )
+            
+            # --- NOTIFICATION FOR AUTHOR ---
+            if submission:
+                message_payload = json.dumps({
+                    "message": f"Your article '{submission.title}' has been approved and published.",
+                    "link": f"/article/{page_id}"
+                })
+                # 1. Save to DB
+                await db.notification.create(data={
+                    'message': f"Your article '{submission.title}' has been approved and published.",
+                    'link': f"/article/{page_id}",
+                    'recipientId': submission.authorId
+                })
+                # 2. Push real-time
+                await broadcast.push(
+                    user_id=submission.authorId,
+                    message=message_payload
+                )
+            # --- END NOTIFICATION ---
+
             return True
         except Exception as e:
             print(f"Error approving page {page_id}: {e}")
@@ -450,10 +520,30 @@ class ConfluenceService:
             self._add_label_to_page(page_id, "status-rejected")
             
             # Step 3: Update the status in our database
-            await db.articlesubmission.update(
+            submission = await db.articlesubmission.update(
                 where={'confluencePageId': page_id},
                 data={'status': ArticleSubmissionStatus.REJECTED}
             )
+
+            # --- NOTIFICATION FOR AUTHOR ---
+            if submission:
+                message_payload = json.dumps({
+                    "message": f"Your article '{submission.title}' was rejected. See comments for feedback.",
+                    "link": "/my-submissions"
+                })
+                # 1. Save to DB
+                await db.notification.create(data={
+                    'message': f"Your article '{submission.title}' was rejected. See comments for feedback.",
+                    'link': "/my-submissions",
+                    'recipientId': submission.authorId
+                })
+                # 2. Push real-time
+                await broadcast.push(
+                    user_id=submission.authorId,
+                    message=message_payload
+                )
+            # --- END NOTIFICATION ---
+
             return True
         except Exception as e:
             print(f"Error rejecting page {page_id}: {e}")
@@ -491,7 +581,8 @@ class ConfluenceService:
         return root_nodes
 
     async def _get_child_nodes_recursive(self, parent_id: str) -> List[ContentNode]:
-        """ Helper function to recursively fetch and build the content tree for children of a given page. """
+        """ Helper function to recursively fetch and build the content tree for children of a given page.
+        """
         children_nodes = []
         try:
             # Get all child pages from Confluence
@@ -500,7 +591,6 @@ class ConfluenceService:
             for child_page_stub in child_pages:
                 child_id = child_page_stub['id']
                 
-                # Fetch full details for each child
                 child_page_details = self.confluence.get_page_by_id(child_id, expand="version")
                 if not child_page_details:
                     continue
@@ -536,7 +626,8 @@ class ConfluenceService:
         return children_nodes
     
     async def get_submissions_by_author(self, author_id: int) -> List[dict]:
-        """ Fetches all article submissions for a specific author from the database. """
+        """ Fetches all article submissions for a specific author from the database.
+        """
         try:
             submissions = await db.articlesubmission.find_many(
                 where={'authorId': author_id},
@@ -548,21 +639,34 @@ class ConfluenceService:
             return []
     
     async def resubmit_page_for_review(self, page_id: str) -> bool:
-        """ Changes a page's status from REJECTED back to PENDING_REVIEW. """
+        """ Changes a page's status from REJECTED back to PENDING_REVIEW.
+        """
         try:
             # Step 1: Swap the labels in Confluence
             self._remove_label_from_page(page_id, "status-rejected")
             self._add_label_to_page(page_id, "status-unpublished")
             
             # Step 2: Update the status in our database
-            await db.articlesubmission.update(
+            submission = await db.articlesubmission.update(
                 where={'confluencePageId': page_id},
                 data={'status': ArticleSubmissionStatus.PENDING_REVIEW}
             )
+
+            # --- NOTIFICATION FOR ADMINS ---
+            if submission:
+                author = await db.user.find_unique(where={'id': submission.authorId})
+                author_name = author.name if author else "A user"
+                await self._notify_all_admins(
+                    message=f"Article '{submission.title}' was resubmitted by {author_name} and is pending review.",
+                    link="/admin/dashboard"
+                )
+            # --- END NOTIFICATION ---
+
             return True
         except Exception as e:
             print(f"Error resubmitting page {page_id}: {e}")
             return False
+    
     
     async def delete_page_permanently(self, page_id: str) -> bool:
         """
