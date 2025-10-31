@@ -1,5 +1,7 @@
 // client/src/components/layout/SiteHeader.tsx
-import { Search, Menu, PlusCircle, LayoutDashboard, LogOut, User as UserIcon, FileText, ListTree } from "lucide-react"; // Import FileText and ListTree
+
+// --- 1. ADD "NotificationBell" TO THE IMPORTS ---
+import { Search, Menu, PlusCircle, LayoutDashboard, LogOut, User as UserIcon, FileText, ListTree } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link, useNavigate } from "react-router-dom";
@@ -9,6 +11,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Separator } from "@/components/ui/separator";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { NotificationBell } from "@/components/layout/NotificationBell"; // <-- ADD THIS LINE
 
 interface SiteHeaderProps {
   showSidebarToggle?: boolean;
@@ -51,7 +54,7 @@ export function SiteHeader({
         )}
         
         <div className="flex items-center space-x-2 mr-auto">
-           <Link to="/" className="flex items-center space-x-3">
+          <Link to="/" className="flex items-center space-x-3">
             {logoSrc ? (
               <img src={logoSrc} alt="RAKwireless Logo" className="h-10 w-auto" />
             ) : (
@@ -64,7 +67,7 @@ export function SiteHeader({
               <div className="font-semibold text-foreground">RAKwireless</div>
               <div className="text-xs text-muted-foreground -mt-1">Knowledge Hub</div>
             </div>
-           </Link>
+          </Link>
         </div>
 
         <div className="flex items-center gap-2">
@@ -80,7 +83,7 @@ export function SiteHeader({
           </form>
           <Button variant="ghost" size="icon" className="md:hidden" asChild>
             <Link to="/search">
-             <Search className="h-5 w-5" />
+              <Search className="h-5 w-5" />
               <span className="sr-only">Search</span>
             </Link>
           </Button>
@@ -96,6 +99,9 @@ export function SiteHeader({
                   </Link>
               </Button>
 
+              {/* --- 2. ADD THE COMPONENT HERE --- */}
+              <NotificationBell />
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-9 w-9 rounded-full">
@@ -103,7 +109,7 @@ export function SiteHeader({
                       <AvatarFallback>
                         {user?.username ? user.username.charAt(0).toUpperCase() : <UserIcon />}
                       </AvatarFallback>
-                    </Avatar>
+                   </Avatar>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-56" align="end" forceMount>

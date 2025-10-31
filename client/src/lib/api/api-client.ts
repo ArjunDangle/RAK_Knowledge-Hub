@@ -57,6 +57,16 @@ export interface ContentNode {
   confluenceUrl: string;
   children: ContentNode[];
 }
+
+export interface Notification {
+  id: number;
+  message: string;
+  link: string | null;
+  isRead: boolean;
+  createdAt: string;
+}
+
+
 // -----------------------------
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -128,6 +138,18 @@ export async function getWhatsNew(): Promise<UpdateEntry[]> {
 // --- CMS & ADMIN FUNCTIONS ---
 export async function getArticleForPreview(pageId: string): Promise<Article | null> {
     return apiFetch<Article | null>(`/cms/admin/preview/${pageId}`);
+}
+
+// Add these functions at the end of the file, after the CMS/Admin functions
+export async function getNotifications(): Promise<Notification[]> {
+  return apiFetch<Notification[]>('/notifications');
+}
+
+export async function markAllNotificationsAsRead(): Promise<void> {
+  return apiFetch<void>('/notifications/read-all', { 
+    method: 'POST',
+    body: JSON.stringify({}) // Send empty body for POST
+  });
 }
 
 // --- NEW FUNCTION FOR PHASE 3 ---

@@ -25,6 +25,7 @@ model User {
 
   // Relation to the new ArticleSubmission table
   submissions ArticleSubmission[]
+  notifications Notification[]
 }
 
 // New table to track article submissions, ownership, and status
@@ -39,4 +40,17 @@ model ArticleSubmission {
   // Establishes a many-to-one relationship with User
   author   User @relation(fields: [authorId], references: [id])
   authorId Int
+}
+
+// Add this model to server/prisma/schema.prisma
+model Notification {
+  id          Int      @id @default(autoincrement())
+  message     String
+  link        String?
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  // Relation to the User who receives it
+  recipient   User     @relation(fields: [recipientId], references: [id])
+  recipientId Int
 }
