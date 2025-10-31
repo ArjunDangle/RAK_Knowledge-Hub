@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Paperclip, Code, X, Tag as TagIcon } from "lucide-react";
+import { Loader2, Paperclip, X, Tag as TagIcon } from "lucide-react";
 import { KnowledgeLayout } from "./KnowledgeLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,10 +32,7 @@ export default function CreatePage() {
     const navigate = useNavigate();
     const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [isHtmlModalOpen, setIsHtmlModalOpen] = useState(false);
-    const [rawHtml, setRawHtml] = useState("");
     
-    // --- NEW STATE FOR TAGS ---
     const [tagInputValue, setTagInputValue] = useState('');
     const [currentTags, setCurrentTags] = useState<string[]>([]);
     const [isTagModalOpen, setIsTagModalOpen] = useState(false);
@@ -44,32 +41,17 @@ export default function CreatePage() {
     const attachmentMutation = useMutation({
         mutationFn: uploadAttachment,
         onSuccess: (data) => {
+            // --- THIS IS THE FIX ---
+            // Only update the state. Do NOT insert content here.
+            // The editor plugin is now responsible for visual replacement.
             setAttachments(prev => [...prev, data]);
-            toast.success(`File "${data.file_name}" uploaded successfully.`);
-            
-            const extension = data.file_name.split('.').pop()?.toLowerCase();
-            let attachmentType = 'file';
-
-            if (['png', 'jpg', 'jpeg', 'gif'].includes(extension || '')) {
-                attachmentType = 'image';
-            } else if (extension === 'pdf') {
-                attachmentType = 'pdf';
-            } else if (['mp4', 'mov', 'avi', 'webm'].includes(extension || '')) {
-                attachmentType = 'video';
-            }
-
-            editor?.chain().focus().setAttachment({ 
-                'data-file-name': data.file_name,
-                'data-attachment-type': attachmentType 
-            }).run();
+            toast.success(`File "${data.file_name}" processed successfully.`);
         },
         onError: (error) => {
             toast.error("Upload failed", { description: error.message });
         },
     });
 
-    // --- THIS IS THE FIX ---
-    // Pass the mutation function to the editor hook.
     const editor = useConfiguredEditor('', attachmentMutation.mutate);
 
     const { data: allTags } = useQuery({
@@ -108,8 +90,6 @@ export default function CreatePage() {
         setTagInputValue('');
     };
 
-
-
     const pageMutation = useMutation({
         mutationFn: createPage,
         onSuccess: () => {
@@ -126,12 +106,6 @@ export default function CreatePage() {
         if (file) {
             attachmentMutation.mutate(file);
         }
-    };
-
-    const handleShowHtml = () => {
-        const currentHtml = editor?.getHTML() || '';
-        setRawHtml(currentHtml);
-        setIsHtmlModalOpen(true);
     };
     
     const handleRemoveTag = (tagToRemove: string) => {
@@ -160,7 +134,10 @@ export default function CreatePage() {
         });
     };
 
-    const handleApplyTagSelection = () => setCurrentTags(Array.from(temporarySelectedTags));
+    const handleApplyTagSelection = () => {
+      setCurrentTags(Array.from(temporarySelectedTags));
+      setIsTagModalOpen(false);
+    }
 
     const onSubmit = (data: CreatePageFormData) => {
         const content = editor?.getHTML() || '';
@@ -173,7 +150,7 @@ export default function CreatePage() {
             title: data.title,
             parent_id: data.parent_id,
             content: content,
-            tags: data.tags ? data.tags.split(',').map(tag => tag.trim()).filter(Boolean) : [],
+            tags: currentTags.filter(Boolean),
             attachments: attachments,
         };
         pageMutation.mutate(payload);
@@ -259,18 +236,6 @@ export default function CreatePage() {
                     </CardContent>
                 </Card>
             </div>
-            
-            <Dialog open={isHtmlModalOpen} onOpenChange={setIsHtmlModalOpen}>
-                <DialogContent className="max-w-3xl">
-                    <DialogHeader>
-                        <DialogTitle>Raw HTML Content</DialogTitle>
-                        <DialogDescription>This is the exact HTML that will be sent to the backend for translation.</DialogDescription>
-                    </DialogHeader>
-                    <ScrollArea className="h-[60vh] rounded-md border p-4">
-                        <pre className="text-sm"><code>{rawHtml}</code></pre>
-                    </ScrollArea>
-                </DialogContent>
-            </Dialog>
             
             <Dialog open={isTagModalOpen} onOpenChange={handleModalOpen}>
                 <DialogContent className="sm:max-w-2xl">

@@ -21,14 +21,37 @@ import Link from '@tiptap/extension-link';
 import TextAlign from '@tiptap/extension-text-align';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
+import FontFamily from '@tiptap/extension-font-family';
 import { Button } from '../ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Input } from '../ui/input';
 import { useCallback, useState, useEffect } from 'react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '../ui/dropdown-menu';
+import { Plugin, PluginKey } from 'prosemirror-state';
+import { Extension } from '@tiptap/core';
+import { Slice, Fragment } from 'prosemirror-model';
 
 interface RichTextEditorProps {
   editor: Editor | null;
+}
+
+// Helper function to convert a base64 data URI to a File object
+function dataURItoFile(dataURI: string, filename: string): File {
+    const arr = dataURI.split(',');
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    if (!mimeMatch) {
+        const bstr = atob(arr[1] || '');
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while(n--){ u8arr[n] = bstr.charCodeAt(n); }
+        return new File([u8arr], filename);
+    }
+    const mime = mimeMatch[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while(n--){ u8arr[n] = bstr.charCodeAt(n); }
+    return new File([u8arr], filename, {type:mime});
 }
 
 const Toolbar = ({ editor }: { editor: Editor | null }) => {
@@ -39,11 +62,9 @@ const Toolbar = ({ editor }: { editor: Editor | null }) => {
   useEffect(() => {
       if (!editor) return;
       const updateHandler = () => setForceUpdate(val => val + 1);
-      editor.on('update', updateHandler);
-      editor.on('selectionUpdate', updateHandler);
+      editor.on('transaction', updateHandler);
       return () => {
-          editor.off('update', updateHandler);
-          editor.off('selectionUpdate', updateHandler);
+          editor.off('transaction', updateHandler);
       };
   }, [editor]);
 
@@ -165,18 +186,77 @@ const Toolbar = ({ editor }: { editor: Editor | null }) => {
   );
 };
 
+export const RichTextEditor = ({ editor }: RichTextEditorProps) => (
+    <div>
+        {editor && <Toolbar editor={editor} />}
+        <EditorContent editor={editor} className="prose dark:prose-invert max-w-none border border-input rounded-b-md p-4 min-h-[300px] focus:outline-none" />
+    </div>
+);
 
-export const RichTextEditor = ({ editor }: RichTextEditorProps) => {
-    return (
-        <div>
-            {editor && <Toolbar editor={editor} />}
-            <EditorContent 
-                editor={editor} 
-                className="prose dark:prose-invert max-w-none border border-input rounded-b-md p-4 min-h-[300px] focus:outline-none" 
-            />
-        </div>
-    );
-};
+// --- THIS IS THE DEFINITIVE FIX ---
+const PasteHandler = Extension.create<{ onFileUpload: (file: File) => void }>({
+    name: 'pasteHandler',
+
+    addOptions() {
+        return {
+            onFileUpload: () => {},
+        };
+    },
+
+    addProseMirrorPlugins() {
+        return [
+            new Plugin({
+                key: new PluginKey('paste-handler'),
+                props: {
+                    handlePaste: (view, event) => {
+                        const files = event.clipboardData?.files;
+                        if (files && files.length > 0) {
+                            let imagePasted = false;
+                            for (const file of Array.from(files)) {
+                                if (file.type.startsWith("image/")) {
+                                    this.options.onFileUpload(file);
+                                    imagePasted = true;
+                                }
+                            }
+                            if (imagePasted) return true;
+                        }
+                        return false;
+                    },
+                    transformPasted: (slice: Slice) => {
+                        const { content } = slice;
+                        const newNodes: any[] = [];
+                        let modified = false;
+
+                        content.descendants((node, pos) => {
+                            if (node.type.name === 'image' && node.attrs.src && node.attrs.src.startsWith('data:image/')) {
+                                modified = true;
+                                try {
+                                    const file = dataURItoFile(node.attrs.src, `pasted-image-${Date.now()}.png`);
+                                    this.options.onFileUpload(file);
+                                    // We are intentionally not adding a placeholder here,
+                                    // because the CreatePage's onFileUpload will handle inserting the attachmentNode
+                                } catch (e) {
+                                    console.error("Could not process pasted base64 image", e);
+                                }
+                                return false; // Don't traverse into image node
+                            }
+                            return true;
+                        });
+                        
+                        // If we handled a base64 image, we return an empty slice for that part,
+                        // effectively removing the base64 `<img>` tag from the pasted content.
+                        if (modified) {
+                            return new Slice(Fragment.empty, slice.openStart, slice.openEnd);
+                        }
+                        
+                        return slice;
+                    }
+                }
+            }),
+        ];
+    },
+});
+
 
 export const useConfiguredEditor = (
   initialContent: string = "",
@@ -184,56 +264,19 @@ export const useConfiguredEditor = (
 ) => {
     const editor = useEditor({
         extensions: [
-            StarterKit,
-            TiptapUnderline,
-            TextStyle, // Keep for color, etc.
-            // FontFamily removed
-            Color,
+            StarterKit, TiptapUnderline, TextStyle, FontFamily, Color,
             Highlight.configure({ multicolor: true }),
-            Link.configure({
-                openOnClick: false,
-                autolink: true,
-            }),
-            TextAlign.configure({
-                types: ['heading', 'paragraph'],
-            }),
-            TaskList,
-            TaskItem.configure({
-                nested: true,
-            }),
-            Image.configure({
-                inline: false,
-            }),
+            Link.configure({ openOnClick: false, autolink: true }),
+            TextAlign.configure({ types: ['heading', 'paragraph'] }),
+            TaskList, TaskItem.configure({ nested: true }),
+            Image.configure({ inline: true, allowBase64: true }),
             AttachmentNode,
-            Table.configure({
-              resizable: true,
-            }),
-            TableRow,
-            TableHeader,
-            TableCell,
+            Table.configure({ resizable: true }), TableRow, TableHeader, TableCell,
+            PasteHandler.configure({ onFileUpload }),
         ],
         content: initialContent,
         editorProps: {
-            attributes: {
-                class: 'focus:outline-none',
-            },
-            handlePaste: (view, event) => {
-                const files = event.clipboardData?.files;
-                if (!files || files.length === 0) {
-                    return false; 
-                }
-
-                let imagePasted = false;
-                for (let i = 0; i < files.length; i++) {
-                    const file = files[i];
-                    if (file.type.startsWith("image/")) {
-                        imagePasted = true;
-                        onFileUpload(file);
-                    }
-                }
-
-                return imagePasted;
-            },
+            attributes: { class: 'focus:outline-none' },
         },
     });
 
