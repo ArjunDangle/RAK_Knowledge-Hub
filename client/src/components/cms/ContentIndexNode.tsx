@@ -1,14 +1,13 @@
 // client/src/components/cms/ContentIndexNode.tsx
 import { useState } from 'react';
 import { ChevronRight, Edit, ExternalLink, Send, Check, X, MoreVertical, Trash2, Loader2 } from 'lucide-react';
-import { ContentNode } from '@/lib/api/api-client';
+import { ContentNode, approveArticle, rejectArticle, deletePage, getContentIndex } from '@/lib/api/api-client'; // <-- FIX: Import getContentIndex
 import { cn } from '@/lib/utils';
 import { formatRelativeTime } from '@/lib/utils/date';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { approveArticle, rejectArticle, deletePage } from '@/lib/api/api-client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // <-- FIX: Import useQuery
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -20,6 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Skeleton } from '../ui/skeleton'; // <-- FIX: Import Skeleton
 
 interface ContentIndexNodeProps {
   node: ContentNode;
@@ -47,6 +47,14 @@ export const ContentIndexNode = ({ node, level }: ContentIndexNodeProps) => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const queryClient = useQueryClient();
 
+  // --- FIX: ADD QUERY TO FETCH CHILDREN ON DEMAND ---
+  const { data: children, isLoading: childrenLoading } = useQuery({
+    queryKey: ['contentIndex', node.id],
+    queryFn: () => getContentIndex(node.id),
+    enabled: isExpanded && node.hasChildren, // Only fetch if it's expanded and has children
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
   const approveMutation = useMutation({
     mutationFn: approveArticle,
     onSuccess: () => {
@@ -65,31 +73,29 @@ export const ContentIndexNode = ({ node, level }: ContentIndexNodeProps) => {
     onError: (error) => toast.error("Rejection failed", { description: error.message }),
   });
 
-  // --- THIS IS THE FIX ---
-  // The onSuccess handler now manually updates the query cache
   const deleteMutation = useMutation({
     mutationFn: deletePage,
-    onSuccess: (_, pageId) => { // The second argument is the variable passed to mutate()
+    onSuccess: (_, pageId) => {
         toast.success(`'${node.title}' has been deleted.`);
-        
-        // Manually update the 'contentIndex' query cache
-        queryClient.setQueryData(['contentIndex'], (oldData: ContentNode[] | undefined) => {
+        queryClient.setQueryData(['contentIndex', 'root'], (oldData: ContentNode[] | undefined) => {
             if (!oldData) return [];
             return removeNodeFromTree(oldData, pageId);
         });
+        queryClient.invalidateQueries({ queryKey: ['contentIndex'] });
     },
     onError: (error) => toast.error("Deletion failed", { description: error.message }),
   });
-  // --- END OF FIX ---
 
-  const hasChildren = node.children && node.children.length > 0;
   const status = statusConfig[node.status] || { text: 'Unknown', className: 'bg-gray-200' };
 
   return (
     <>
         <div className="flex items-center hover:bg-muted/50 rounded-md py-1 group">
             <div style={{ paddingLeft: `${level * 1.5}rem` }} className="flex items-center flex-1 min-w-0">
-                {hasChildren ? (
+                {/* --- FIX: UPDATE EXPANDER LOGIC --- */}
+                {childrenLoading ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : node.hasChildren ? (
                     <ChevronRight
                         className={cn("h-4 w-4 mr-2 cursor-pointer transition-transform", isExpanded && "rotate-90")}
                         onClick={() => setIsExpanded(!isExpanded)}
@@ -154,9 +160,11 @@ export const ContentIndexNode = ({ node, level }: ContentIndexNodeProps) => {
             </div>
         </div>
 
-        {isExpanded && hasChildren && (
+        {/* --- FIX: UPDATE CHILDREN RENDERING LOGIC --- */}
+        {isExpanded && (
             <div>
-                {node.children.map(childNode => (
+                {childrenLoading && <div className="pl-8 py-2"><Skeleton className="h-6 w-3/4" /></div>}
+                {children?.map(childNode => (
                     <ContentIndexNode key={childNode.id} node={childNode} level={level + 1} />
                 ))}
             </div>

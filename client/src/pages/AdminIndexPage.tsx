@@ -28,31 +28,29 @@ export default function AdminIndexPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [statusFilter, setStatusFilter] = useState<ArticleSubmissionStatus | "ALL">("ALL");
 
+    // --- FIX: ONLY FETCH THE ROOT NODES INITIALLY ---
     const { data: contentTree, isLoading, isError, error } = useQuery<ContentNode[]>({
-        queryKey: ['contentIndex'],
-        queryFn: getContentIndex,
+        queryKey: ['contentIndex', 'root'],
+        queryFn: () => getContentIndex(), // Fetch without a parentId to get the top level
     });
 
+    // This filter now only applies to the nodes currently loaded in the UI
     const filteredTree = useMemo(() => {
         if (!contentTree) return [];
 
         const filterNodes = (nodes: ContentNode[]): ContentNode[] => {
             return nodes.map(node => {
-                // Recursively filter children first
                 const filteredChildren = node.children ? filterNodes(node.children) : [];
-
-                // Check if the current node matches the filters
                 const titleMatch = node.title.toLowerCase().includes(searchTerm.toLowerCase());
                 const statusMatch = statusFilter === "ALL" || node.status === statusFilter;
-
-                // A node is kept if it matches directly, or if it has any children that were kept
                 if ((titleMatch && statusMatch) || filteredChildren.length > 0) {
                     return { ...node, children: filteredChildren };
                 }
                 return null;
             }).filter((node): node is ContentNode => node !== null);
         };
-
+        // Note: For a pure lazy-loaded approach, filtering would be done on the server.
+        // This client-side approach will only filter the nodes that have been expanded.
         return filterNodes(contentTree);
     }, [contentTree, searchTerm, statusFilter]);
 

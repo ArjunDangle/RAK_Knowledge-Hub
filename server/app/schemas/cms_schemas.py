@@ -46,6 +46,7 @@ class ContentNode(BaseModel):
     updatedAt: datetime
     confluenceUrl: str
     children: List['ContentNode'] = []
+    hasChildren: bool = False # <-- FIX: ADD THIS LINE
 
 ContentNode.model_rebuild()
 

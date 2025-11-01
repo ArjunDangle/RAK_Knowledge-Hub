@@ -56,6 +56,7 @@ export interface ContentNode {
   updatedAt: string;
   confluenceUrl: string;
   children: ContentNode[];
+  hasChildren: boolean; // <-- FIX: ADD THIS PROPERTY
 }
 
 export interface Notification {
@@ -157,8 +158,10 @@ export async function getMySubmissions(): Promise<ArticleSubmission[]> {
   return apiFetch('/cms/my-submissions');
 }
 
-export async function getContentIndex(): Promise<ContentNode[]> {
-  return apiFetch('/cms/admin/content-index');
+// --- FIX: MODIFY THIS FUNCTION ---
+export async function getContentIndex(parentId?: string): Promise<ContentNode[]> {
+  const endpoint = parentId ? `/cms/admin/content-index?parent_id=${parentId}` : '/cms/admin/content-index';
+  return apiFetch(endpoint);
 }
 
 export async function getAllSubsections(): Promise<Subsection[]> {

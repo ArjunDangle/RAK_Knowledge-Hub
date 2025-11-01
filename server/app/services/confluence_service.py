@@ -552,36 +552,71 @@ class ConfluenceService:
             print(f"Error rejecting page {page_id}: {e}")
             return False
 
-    async def get_full_content_tree(self) -> List[ContentNode]:
+    # In server/app/services/confluence_service.py
+
+# ... (other methods in the ConfluenceService class)
+
+    async def get_content_index_nodes(self, parent_id: Optional[str] = None) -> List[ContentNode]:
         """
-        Recursively builds a tree of all content, enriching it with author and status data from the local DB.
+        Fetches one level of the content index tree.
+        - If parent_id is None, it fetches the root pages.
+        - If parent_id is provided, it fetches the direct children of that page.
         """
-        root_nodes = []
-        for slug, root_id in self.root_page_ids.items():
+        nodes = []
+        page_ids_to_fetch = []
+
+        if parent_id is None:
+            # Fetching root nodes from the discovered IDs
+            page_ids_to_fetch = list(self.root_page_ids.values())
+        else:
+            # Fetching children of a specific parent from Confluence
             try:
-                # Fetch root page details from Confluence
-                root_page = self.confluence.get_page_by_id(root_id, expand="version")
-                if not root_page:
+                child_pages = self.confluence.get_child_pages(parent_id)
+                page_ids_to_fetch = [child['id'] for child in child_pages]
+            except Exception as e:
+                print(f"Error fetching children for page {parent_id}: {e}")
+                return []
+
+        for page_id in page_ids_to_fetch:
+            try:
+                # Get basic details for the current page
+                page_details = self.confluence.get_page_by_id(page_id, expand="version")
+                if not page_details:
                     continue
 
-                # Recursively fetch children
-                children = await self._get_child_nodes_recursive(root_id)
+                # Perform a quick, lightweight check to see if this page has children
+                grand_children_cql = f'parent={page_id}'
+                grand_children_results = self.confluence.cql(grand_children_cql, limit=1).get('results', [])
+                has_children = len(grand_children_results) > 0
+                
+                # Get submission status and author from our local database
+                submission = await db.articlesubmission.find_unique(where={'confluencePageId': page_id})
+                
+                author_name = "System"  # Default for root pages or pages not in our system
+                status = ArticleSubmissionStatus.PUBLISHED # Default status
 
+                if submission:
+                    author = await db.user.find_unique(where={'id': submission.authorId})
+                    if author:
+                        author_name = author.name
+                    status = submission.status
+                
+                # Construct the ContentNode for this level
                 node = ContentNode(
-                    id=root_id,
-                    title=root_page['title'],
-                    # Root pages don't have authors/status in our system, so we can mock it
-                    author="System",
-                    status=ArticleSubmissionStatus.PUBLISHED,
-                    updatedAt=root_page['version']['when'],
-                    confluenceUrl=f"{self.settings.confluence_url}/spaces/{self.settings.confluence_space_key}/pages/{root_id}",
-                    children=children
+                    id=page_id,
+                    title=page_details['title'],
+                    author=author_name,
+                    status=status,
+                    updatedAt=page_details['version']['when'],
+                    confluenceUrl=f"{self.settings.confluence_url}/spaces/{self.settings.confluence_space_key}/pages/{page_id}",
+                    children=[],  # Children are always empty; they will be fetched on demand
+                    hasChildren=has_children
                 )
-                root_nodes.append(node)
+                nodes.append(node)
             except Exception as e:
-                print(f"Error processing root page {slug} ({root_id}): {e}")
-
-        return root_nodes
+                print(f"Error processing node for page {page_id}: {e}")
+        
+        return nodes
 
     async def _get_child_nodes_recursive(self, parent_id: str) -> List[ContentNode]:
         """ Helper function to recursively fetch and build the content tree for children of a given page.
