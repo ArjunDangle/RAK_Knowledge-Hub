@@ -11,9 +11,11 @@ pip install --no-cache-dir -r requirements.txt
 npm install
 
 # 3. Apply database migrations
-# This command will work because the binaries are now
-# in the node_modules directory
 npx prisma migrate deploy
+
+# 4. Explicitly generate the Prisma client
+# This ensures the client is available to the running application.
+npx prisma generate
 
 
 echo "✅ Build finished successfully!"
