@@ -425,8 +425,11 @@ class ConfluenceService:
                         content_type, _ = mimetypes.guess_type(attachment.file_name)
                         if content_type is None: content_type = 'application/octet-stream'
                         with open(temp_file_path, 'rb') as file_handle:
+                            # --- THIS IS THE FIX ---
+                            # Use the library's session object for consistent requests.
+                            # The `auth` parameter is no longer needed as the session handles it.
                             files = {'file': (attachment.file_name, file_handle, content_type)}
-                            response = requests.post(attachment_url, headers=headers, files=files, auth=(self.settings.confluence_username, self.settings.confluence_api_token))
+                            response = self.confluence.session.post(attachment_url, headers=headers, files=files)
                             response.raise_for_status()
                     finally:
                         os.remove(temp_file_path)
