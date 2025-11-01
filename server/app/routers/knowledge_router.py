@@ -17,8 +17,6 @@ def get_groups():
 @router.get("/subsections/{group_slug}", response_model=List[content_schemas.Subsection], tags=["Knowledge Hub"])
 def get_subsections(group_slug: str):
     subsections = confluence_service.get_subsections_by_group(group_slug)
-    if not subsections:
-        raise HTTPException(status_code=404, detail=f"Group '{group_slug}' not found or has no subsections.")
     return subsections
 
 @router.get("/contents/by-parent/{parent_id}", response_model=List[content_schemas.PageContentItem], tags=["Knowledge Hub"])
