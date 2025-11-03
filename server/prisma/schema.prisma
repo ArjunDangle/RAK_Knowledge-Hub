@@ -15,10 +15,51 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Enum to clearly define the type of a page.
+// This helps in querying for only categories (SUBSECTION) or only articles (ARTICLE).
+enum PageType {
+  SUBSECTION
+  ARTICLE
+}
+
+// The core model for our local metadata library.
+// Every page in Confluence that is part of our knowledge hub will have a corresponding record here.
+model Page {
+  id                 Int      @id @default(autoincrement())
+  confluenceId       String   @unique // The ID from Confluence, our source of truth link.
+  title              String   // The title of the page.
+  slug               String   @unique // A URL-friendly version of the title.
+  description        String   // The new, manually written description for UI cards.
+  pageType           PageType // Defines if this page is a category or a final article.
+  parentConfluenceId String?  // The Confluence ID of the parent page. This is the sole field used to build the hierarchy.
+  authorName         String?  // The name of the original author.
+  views              Int      @default(0) // We can now track views locally.
+  updatedAt          DateTime // The last modified date from Confluence.
+
+  // --- Relationships ---
+  // Establishes a many-to-many relationship with the Tag model.
+  tags       Tag[]
+  // Establishes a one-to-one relationship with the ArticleSubmission model.
+  submission ArticleSubmission?
+
+  // --- Index for faster parent-child lookups ---
+  @@index([parentConfluenceId])
+}
+
+// Central table for all unique tags (labels) in our system.
+model Tag {
+  id    Int    @id @default(autoincrement())
+  name  String @unique // The name of the tag, e.g., "getting-started".
+  slug  String @unique // The URL-friendly version of the name.
+
+  // Establishes the other side of the many-to-many relationship with Page.
+  pages Page[]
+}
+
 model User {
   id              Int      @id @default(autoincrement())
   username        String   @unique
-  name            String   // <-- NEW FIELD
+  name            String
   hashed_password String
   role            String   // 'MEMBER' or 'ADMIN'
   createdAt       DateTime @default(now())
@@ -28,7 +69,7 @@ model User {
   notifications Notification[]
 }
 
-// New table to track article submissions, ownership, and status
+// MODIFIED: This table tracks the review workflow for a page.
 model ArticleSubmission {
   id               Int      @id @default(autoincrement())
   confluencePageId String   @unique
@@ -40,9 +81,12 @@ model ArticleSubmission {
   // Establishes a many-to-one relationship with User
   author   User @relation(fields: [authorId], references: [id])
   authorId Int
+
+  // This now creates a one-to-one link to the Page model.
+  page Page @relation(fields: [confluencePageId], references: [confluenceId])
 }
 
-// Add this model to server/prisma/schema.prisma
+// This model remains unchanged for this step.
 model Notification {
   id          Int      @id @default(autoincrement())
   message     String
