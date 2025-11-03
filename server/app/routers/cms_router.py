@@ -1,4 +1,4 @@
-# In server/app/routers/cms_router.py
+# server/app/routers/cms_router.py
 import os
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
@@ -24,11 +24,10 @@ confluence_service = ConfluenceService(settings)
     response_model=List[ContentNode],
     dependencies=[Depends(get_current_admin_user)]
 )
-async def get_content_index(parent_id: Optional[str] = Query(None)): # <-- FIX: ACCEPT OPTIONAL PARENT_ID
+async def get_content_index(parent_id: Optional[str] = Query(None)):
     """
     Provides a hierarchical tree of content. If parent_id is provided, fetches children of that node.
     """
-    # --- FIX: CALL THE NEW, EFFICIENT METHOD ---
     content_nodes = await confluence_service.get_content_index_nodes(parent_id)
     return content_nodes
 
@@ -86,6 +85,42 @@ async def create_page(
             detail="Failed to create page in Confluence."
         )
     return created_page
+
+# NEW ENDPOINT as per the plan
+@router.put(
+    "/pages/update/{page_id}",
+    status_code=status.HTTP_204_NO_CONTENT
+)
+async def update_page_endpoint(
+    page_id: str,
+    page_data: cms_schemas.PageUpdate,
+    current_user: auth_schemas.UserResponse = Depends(get_current_user)
+):
+    """
+    Updates an existing page.
+    Only the original author or an admin can perform this action.
+    """
+    # Authorization Check: User must be the author or an admin.
+    submission = await db.articlesubmission.find_unique(where={'confluencePageId': page_id})
+    
+    is_author = submission and submission.authorId == current_user.id
+    is_admin = current_user.role == "ADMIN"
+    
+    if not is_author and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not authorized to edit this article."
+        )
+
+    # Call the service to perform the update
+    success = await confluence_service.update_page(page_id, page_data)
+    if not success:
+        # The service layer will raise a more specific exception
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while updating the page."
+        )
+    return
 
 @router.get(
     "/admin/preview/{page_id}",
@@ -158,7 +193,6 @@ async def resubmit_page_endpoint(
     """
     Allows an author to resubmit their own rejected article for review.
     """
-    # Security Check: Ensure the user owns this submission
     submission = await db.articlesubmission.find_unique(where={'confluencePageId': page_id})
     if not submission or submission.authorId != current_user.id:
         raise HTTPException(
@@ -179,7 +213,6 @@ async def resubmit_page_endpoint(
 async def delete_page_permanently_endpoint(page_id: str):
     """
     Deletes a page from Confluence and its corresponding record from the local database.
-    This is a destructive action.
     """
     success = await confluence_service.delete_page_permanently(page_id)
     if not success:

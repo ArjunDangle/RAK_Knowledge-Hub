@@ -331,6 +331,119 @@ class ConfluenceService:
         except Exception as e:
             print(f"Error fetching page tree for parent {parent_id}: {e}")
             raise HTTPException(status_code=503, detail="Could not fetch page hierarchy.")
+    
+
+    async def get_page_contents_from_db(self, parent_confluence_id: str, page: int, page_size: int) -> dict:
+        """
+        NEW: Fetches paginated contents (children) of a given parent page directly from the local database.
+        """
+        skip = (page - 1) * page_size
+        
+        # Query for the children of the parent
+        child_pages = await db.page.find_many(
+            where={'parentConfluenceId': parent_confluence_id},
+            include={'tags': True},
+            skip=skip,
+            take=page_size,
+            order={'title': 'asc'}
+        )
+        
+        total_items = await db.page.count(where={'parentConfluenceId': parent_confluence_id})
+        
+        return {
+            "items": child_pages,
+            "total": total_items,
+            "page": page,
+            "pageSize": page_size,
+            "hasNext": (skip + len(child_pages)) < total_items
+        }
+
+    async def get_article_by_id_hybrid(self, page_id: str) -> Optional[dict]:
+        """
+        NEW HYBRID MODEL: Fetches metadata from local DB and content from Confluence.
+        """
+        # Step 1: Fetch metadata from our fast local DB
+        page_metadata = await db.page.find_unique(
+            where={'confluenceId': page_id},
+            include={'tags': True}
+        )
+
+        if not page_metadata:
+            return None
+
+        # Step 2: Fetch only the heavy HTML content from Confluence
+        try:
+            page_content_data = self.confluence.get_page_by_id(page_id, expand="body.view")
+            html_content = page_content_data.get("body", {}).get("view", {}).get("value", "")
+        except Exception as e:
+            print(f"CRITICAL: Could not fetch content for page {page_id} from Confluence, but metadata exists. Error: {e}")
+            html_content = "<p>Error: Could not load document content from the source.</p>"
+        
+        # Step 3: Merge the two data sources into a single response object
+        # Note: We are now returning a dictionary, not a Pydantic model, to easily merge them.
+        # The endpoint's response_model will handle validation.
+        merged_data = {
+            "id": page_metadata.confluenceId,
+            "slug": page_metadata.slug,
+            "title": page_metadata.title,
+            "excerpt": page_metadata.description, # Using our DB description as the excerpt
+            "description": page_metadata.description,
+            "html": html_content,
+            "tags": page_metadata.tags,
+            "author": page_metadata.authorName,
+            "updatedAt": page_metadata.updatedAt.isoformat(),
+            "views": page_metadata.views,
+            "readMinutes": page_metadata.readMinutes,
+            # These fields might need to be backfilled or derived differently
+            "group": "unknown", 
+            "subsection": "unknown",
+        }
+        return merged_data
+
+    async def search_content_hybrid(self, query: str, page: int, page_size: int) -> dict:
+        """
+        NEW HYBRID SEARCH: Searches Confluence for IDs, then enriches with local DB metadata.
+        """
+        # Step 1: Search Confluence but only ask for IDs and titles to keep it fast.
+        # Note: Confluence's CQL search is not case-sensitive.
+        cql = f'space = "{self.settings.confluence_space_key}" and text ~ "{query}" and label != "status-unpublished" and label != "status-rejected"'
+        
+        # We fetch one extra to see if there is a next page.
+        limit = page_size + 1
+        start = (page - 1) * page_size
+        
+        try:
+            search_results = self.confluence.cql(cql, start=start, limit=limit, expand="title").get('results', [])
+        except Exception as e:
+            print(f"Error searching Confluence: {e}")
+            raise HTTPException(status_code=503, detail="Search service is currently unavailable.")
+
+        has_next_page = len(search_results) > page_size
+        # Trim the extra item if it exists
+        if has_next_page:
+            search_results = search_results[:-1]
+            
+        confluence_ids = [result['content']['id'] for result in search_results]
+
+        if not confluence_ids:
+            return {"items": [], "hasNext": False, "total": 0}
+
+        # Step 2: Enrich these IDs with a single query to our fast local database.
+        enriched_pages = await db.page.find_many(
+            where={'confluenceId': {'in': confluence_ids}},
+            include={'tags': True}
+        )
+
+        # Optional: Re-order the DB results to match the relevance order from Confluence search
+        enriched_map = {page.confluenceId: page for page in enriched_pages}
+        ordered_enriched_pages = [enriched_map[cid] for cid in confluence_ids if cid in enriched_map]
+
+        return {
+            "items": ordered_enriched_pages,
+            "hasNext": has_next_page,
+            # Note: Total is not easily available from CQL, so we omit it for now for performance.
+            "total": -1 # Indicates that total count is not available
+        }
 
     def get_attachment_data(self, page_id: str, file_name: str) -> Optional[StreamingResponse]:
         try:
@@ -400,19 +513,73 @@ class ConfluenceService:
     def _post_comment_to_page(self, page_id: str, comment_text: str):
         self.confluence.add_comment(page_id=page_id, text=comment_text)
 
+    # In server/app/services/confluence_service.py
+
     async def create_page_for_review(self, page_data: PageCreate, author_id: int, author_name: str) -> dict:
+        """
+        Creates a page in Confluence, then saves its metadata to the local database.
+        Follows the "Confluence first, then DB" pattern.
+        """
+        page_id = None
         try:
+            # Step 1: Create the page in Confluence
             translated_content = html_to_storage_format(page_data.content)
             full_content = f"<p><em>Submitted by: {author_name}</em></p>{translated_content}"
-            new_page = self.confluence.create_page(space=self.settings.confluence_space_key, title=page_data.title, parent_id=page_data.parent_id, body=full_content, representation='storage')
-            if not new_page: 
-                raise Exception("Page creation in Confluence returned a null response.")
-            page_id = new_page['id']
             
-            await db.articlesubmission.create(data={'confluencePageId': page_id, 'title': page_data.title, 'authorId': author_id, 'status': ArticleSubmissionStatus.PENDING_REVIEW})
-            await self._notify_all_admins(message=f"New article '{page_data.title}' submitted by {author_name} is pending review.", link="/admin/dashboard")
+            new_page_in_confluence = self.confluence.create_page(
+                space=self.settings.confluence_space_key,
+                title=page_data.title,
+                parent_id=page_data.parent_id,
+                body=full_content,
+                representation='storage'
+            )
 
-            time.sleep(5)
+            if not new_page_in_confluence:
+                raise Exception("Page creation in Confluence returned a null response.")
+            
+            page_id = new_page_in_confluence['id']
+            updated_at = new_page_in_confluence['version']['when']
+
+            # Step 2: Create the Page metadata record in our DB. This must be done
+            # before creating the ArticleSubmission due to the schema relation.
+            
+            # Upsert tags and get their IDs for connection
+            tag_connect_ops = []
+            for tag_name in page_data.tags:
+                slug = self._slugify(tag_name)
+                tag = await db.tag.upsert(
+                    where={'name': tag_name},
+                    data={
+                        'create': {'name': tag_name, 'slug': slug},
+                        'update': {'slug': slug}
+                    }
+                )
+                tag_connect_ops.append({'id': tag.id})
+
+            # Create the Page record
+            await db.page.create(data={
+                'confluenceId': page_id,
+                'title': page_data.title,
+                'slug': self._slugify(page_data.title),
+                'description': page_data.description,
+                'pageType': 'ARTICLE', # New pages are always articles
+                'parentConfluenceId': page_data.parent_id,
+                'authorName': author_name,
+                'updatedAt': updated_at,
+                'tags': {'connect': tag_connect_ops}
+            })
+            
+            # Step 3: Create the ArticleSubmission record, which links to the new Page record
+            await db.articlesubmission.create(data={
+                'confluencePageId': page_id, # This creates the relation to the Page
+                'title': page_data.title,
+                'authorId': author_id,
+                'status': ArticleSubmissionStatus.PENDING_REVIEW
+            })
+
+            # Step 4: Handle Attachments and Labels in Confluence
+            time.sleep(1) # Give Confluence a moment to process the new page
+            
             attachment_url = f"{self.settings.confluence_url}/rest/api/content/{page_id}/child/attachment"
             headers = {"X-Atlassian-Token": "no-check"}
             for attachment in page_data.attachments:
@@ -431,30 +598,159 @@ class ConfluenceService:
             self._add_label_to_page(page_id, 'status-unpublished')
             for tag in page_data.tags:
                 self._add_label_to_page(page_id, tag)
+
+            # Step 5: Notify admins
+            await self._notify_all_admins(
+                message=f"New article '{page_data.title}' submitted by {author_name} is pending review.",
+                link="/admin/dashboard"
+            )
                 
             return {"id": page_id, "title": page_data.title, "status": "unpublished"}
+
         except Exception as e:
             print(f"Failed to create page for review: {e}")
-            raise HTTPException(status_code=503, detail="Failed to create page in Confluence.")
+            if page_id:
+                try:
+                    self.confluence.remove_page(page_id, status='draft')
+                    print(f"Cleaned up draft page {page_id} in Confluence after DB error.")
+                except Exception as cleanup_e:
+                    print(f"Failed to clean up draft page {page_id}: {cleanup_e}")
+            raise HTTPException(status_code=503, detail="Failed to create page.")
     
     async def get_pending_submissions_from_db(self) -> List[Article]:
         pending_submissions = await db.articlesubmission.find_many(where={'status': ArticleSubmissionStatus.PENDING_REVIEW}, include={'author': True}, order={'updatedAt': 'desc'})
         return [Article.model_validate({"id": sub.confluencePageId, "title": sub.title, "author": sub.author.name if sub.author else "Unknown", "updatedAt": sub.updatedAt.isoformat(), "slug": self._slugify(sub.title), "excerpt": "Content available for preview.", "html": "", "tags": [], "group": "unknown", "subsection": "unknown", "views": 0, "readMinutes": 0}) for sub in pending_submissions]
 
+
     async def approve_page(self, page_id: str) -> bool:
+        """
+        Approves a page by updating its labels in Confluence and syncing the
+        latest metadata back to the local database.
+        """
         try:
+            # Step 1: Update labels in Confluence to make the page public
             self._remove_label_from_page(page_id, "status-unpublished")
-            submission = await db.articlesubmission.update(where={'confluencePageId': page_id}, data={'status': ArticleSubmissionStatus.PUBLISHED})
+            self._remove_label_from_page(page_id, "status-rejected") # Also remove rejected just in case
+
+            # Step 2: Fetch the latest, now public, page data from Confluence for syncing
+            page_data = self.confluence.get_page_by_id(
+                page_id, expand="body.view,version,metadata.labels"
+            )
+            if not page_data:
+                raise HTTPException(status_code=404, detail="Page not found in Confluence after attempting approval.")
+
+            # Step 3: Extract metadata from the fresh Confluence data
+            title = page_data["title"]
+            author_name = page_data.get("version", {}).get("by", {}).get("displayName", "Unknown")
+            updated_at = page_data["version"]["when"]
+            html_content = page_data.get("body", {}).get("view", {}).get("value", "")
+            plain_text = BeautifulSoup(html_content, 'html.parser').get_text(" ", strip=True)
+            description = (plain_text[:250] + '...') if len(plain_text) > 250 else "No description available."
+            
+            # Determine Page Type
+            children_response = self.confluence.get_child_pages(page_id, limit=1)
+            page_type = "SUBSECTION" if list(children_response) else "ARTICLE"
+            
+            # Process and upsert Tags
+            tag_ops = []
+            raw_labels = page_data.get("metadata", {}).get("labels", {}).get("results", [])
+            for label in raw_labels:
+                tag_name = label["name"]
+                if not tag_name.startswith("status-"):
+                    slug = self._slugify(tag_name)
+                    tag = await db.tag.upsert(
+                        where={'name': tag_name},
+                        data={'create': {'name': tag_name, 'slug': slug}, 'update': {'slug': slug}}
+                    )
+                    tag_ops.append({'id': tag.id})
+            
+            # Step 4: Sync the latest metadata to our local Page record
+            await db.page.update(
+                where={'confluenceId': page_id},
+                data={
+                    'title': title,
+                    'slug': self._slugify(title),
+                    'description': description,
+                    'pageType': page_type,
+                    'authorName': author_name,
+                    'updatedAt': updated_at,
+                    'tags': {'set': tag_ops} # Use 'set' to ensure tags are perfectly in sync
+                }
+            )
+
+            # Step 5: Update the submission status and notify the author
+            submission = await db.articlesubmission.update(
+                where={'confluencePageId': page_id},
+                data={'status': ArticleSubmissionStatus.PUBLISHED}
+            )
             if submission:
                 message = f"Your article '{submission.title}' has been approved and published."
                 link = f"/article/{page_id}"
                 await db.notification.create(data={'message': message, 'link': link, 'recipientId': submission.authorId})
                 await broadcast.push(user_id=submission.authorId, message=json.dumps({"message": message, "link": link}))
+            
             return True
         except Exception as e:
             print(f"Error approving page {page_id}: {e}")
-            raise HTTPException(status_code=503, detail=f"Failed to approve page {page_id} in Confluence.")
+            # Attempt to roll back by re-adding the unpublished label
+            try:
+                self._add_label_to_page(page_id, "status-unpublished")
+            except Exception as rollback_e:
+                print(f"Error during rollback of approval for page {page_id}: {rollback_e}")
+            raise HTTPException(status_code=503, detail=f"Failed to approve and sync page {page_id}.")
     
+    # In server/app/services/confluence_service.py
+
+    async def update_page(self, page_id: str, page_data: PageUpdate) -> bool:
+        """
+        Updates a page's title and content in Confluence, and syncs the
+        title, slug, and description to the local database.
+        """
+        try:
+            # Step 1: Update the page in Confluence
+            translated_content = html_to_storage_format(page_data.content)
+            
+            # To update a page, we need its current version number
+            current_page = self.confluence.get_page_by_id(page_id, expand="version")
+            if not current_page:
+                raise HTTPException(status_code=404, detail="Page to update not found in Confluence.")
+            
+            # The update call implicitly increments the version number.
+            self.confluence.update_page(
+                page_id=page_id,
+                title=page_data.title,
+                body=translated_content,
+                parent_id=None, # We are not changing the parent
+                version_comment="Content updated via Knowledge Hub portal",
+                representation='storage'
+            )
+
+            # Step 2: Fetch the latest version info after update for sync
+            updated_page_data = self.confluence.get_page_by_id(page_id, expand="version")
+            updated_at = updated_page_data["version"]["when"]
+
+            # Step 3: Update the local Page record with new metadata
+            await db.page.update(
+                where={'confluenceId': page_id},
+                data={
+                    'title': page_data.title,
+                    'slug': self._slugify(page_data.title),
+                    'description': page_data.description,
+                    'updatedAt': updated_at,
+                }
+            )
+
+            # Step 4: Also update the submission record's title to keep it in sync
+            await db.articlesubmission.update(
+                where={'confluencePageId': page_id},
+                data={'title': page_data.title}
+            )
+
+            return True
+        except Exception as e:
+            print(f"Error updating page {page_id}: {e}")
+            raise HTTPException(status_code=503, detail=f"Failed to update page {page_id} in Confluence or DB.")
+
     async def reject_page(self, page_id: str, comment: Optional[str] = None) -> bool:
         try:
             if comment: self._post_comment_to_page(page_id, comment)
