@@ -169,15 +169,26 @@ class ConfluenceService:
         plain_text = self._get_plain_text(html_content)
         description = (plain_text[:250] + '...') if len(plain_text) > 250 else plain_text
         
-        child_pages_generator = self.confluence.get_child_pages(page_data['id'])
-        article_count = len(list(child_pages_generator))
-      
+        try:
+            cql = f'parent={page_data["id"]} and label != "status-unpublished" and label != "status-rejected"'
+            count_results = self.confluence.cql(cql, limit=0)
+            article_count = count_results.get('size', 0)
+        except Exception as e:
+            print(f"Could not efficiently count children for page {page_data['id']}: {e}")
+            article_count = 0
         subsection_data = {
-            "id": page_data["id"], "slug": self._slugify(page_data["title"]), "title": page_data["title"],
-            "description": description or "No description available.", "html": html_content, "group": group_slug,
-            "tags": tags, "articleCount": article_count, "updatedAt": page_data["version"]["when"],
+            "id": page_data["id"], 
+            "slug": self._slugify(page_data["title"]), 
+            "title": page_data["title"],
+            "description": description or "No description available.", 
+            "html": html_content, 
+            "group": group_slug,
+            "tags": tags, 
+            "articleCount": article_count, 
+            "updatedAt": page_data["version"]["when"],
         }
         return Subsection.model_validate(subsection_data)
+
     
     def _fetch_and_transform_articles_from_cql(self, cql: str, limit: int, is_admin_view: bool = False) -> List[Article]:
         try:
