@@ -430,10 +430,7 @@ class ConfluenceService:
             "description": page_metadata.description,
             "html": html_content,
             
-            # --- THIS IS THE FIX ---
-            "tags": page_metadata.tags or [], # Use an empty list if tags are None
-            # --- END OF FIX ---
-
+            "tags": page_metadata.tags,
             "author": page_metadata.authorName,
             "updatedAt": page_metadata.updatedAt.isoformat(),
             "views": page_metadata.views,
@@ -457,6 +454,7 @@ class ConfluenceService:
         limit = page_size + 1
         start = (page - 1) * page_size
         
+        # --- FIX: Initialize has_next_page before try block ---
         has_next_page = False 
         try:
             search_results = self.confluence.cql(cql, start=start, limit=limit, expand="title").get('results', [])
@@ -487,7 +485,7 @@ class ConfluenceService:
         
         return {
             "items": ordered_enriched_pages,
-            "hasNext": has_next_page,
+            "hasNext": has_next_page, # <-- Now this variable is correctly in scope
             # Note: Total is not easily available from CQL, so we omit it for now for performance.
             "total": -1 # Indicates that total count is not available
         }
@@ -905,7 +903,9 @@ class ConfluenceService:
             submission = await db.articlesubmission.update(where={'confluencePageId': page_id}, data={'status': ArticleSubmissionStatus.PENDING_REVIEW})
             if submission:
                 author = await db.user.find_unique(where={'id': submission.authorId})
+                # --- THIS LINE IS FIX ---
                 author_name = author.name if author else "A user"
+                # --- END OF FIX ---
                 await self._notify_all_admins(message=f"Article '{submission.title}' was resubmitted by {author_name} and is pending review.", link="/admin/dashboard")
             return True
         except Exception as e:
@@ -922,4 +922,4 @@ class ConfluenceService:
         except Exception as e:
      
             print(f"Error during permanent deletion of page {page_id}: {e}")
-            raise HTTPException(status_code=5G03, detail="Failed to delete the page.")
+            raise HTTPException(status_code=503, detail="Failed to delete the page.")
