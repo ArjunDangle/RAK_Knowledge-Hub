@@ -28,11 +28,15 @@ interface CategoryCardProps {
 }
 
 function CategoryPreviewContent({ subsectionId }: { subsectionId: string }) {
-  const { data: children, isLoading } = useQuery({
+  const { data: paginatedResponse, isLoading } = useQuery({
     queryKey: ["preview-children", subsectionId],
-    queryFn: () => getPageContents(subsectionId),
+    // Fetch page 1, which is all we need for a preview
+    queryFn: () => getPageContents(subsectionId, 1), 
     staleTime: 5 * 60 * 1000,
   });
+
+  // --- FIX: Extract items from the paginated response ---
+  const children = paginatedResponse?.items;
 
   if (isLoading) {
     return (
@@ -44,6 +48,7 @@ function CategoryPreviewContent({ subsectionId }: { subsectionId: string }) {
     );
   }
 
+  // --- FIX: Check the 'items' array for length ---
   if (!children || children.length === 0) {
     return (
       <p className="p-4 text-sm text-center text-muted-foreground">
@@ -55,6 +60,7 @@ function CategoryPreviewContent({ subsectionId }: { subsectionId: string }) {
   return (
     <ScrollArea className="h-auto max-h-64">
       <div className="p-2 space-y-1">
+        {/* --- FIX: Map over 'children' (which is now the 'items' array) --- */}
         {children.map((child) => {
           const isArticle = child.type === "article";
           const Icon = isArticle ? FileText : Folder;
@@ -160,6 +166,7 @@ export function CategoryCard({
                 </HoverCard>
               )}
             </div>
+            {/* --- THIS IS THE FIX: Corrected the typo 'T;' to '<span>' --- */}
             {updatedAt && <span>Updated {formatDate(updatedAt)}</span>}
           </div>
         </div>
@@ -167,3 +174,4 @@ export function CategoryCard({
     </Card>
   );
 }
+

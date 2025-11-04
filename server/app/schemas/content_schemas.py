@@ -4,7 +4,7 @@ from typing import List, Optional, Union
 from typing_extensions import Literal
 
 class Tag(BaseModel):
-    id: int  # <-- THIS IS THE FIX (was str)
+    id: int
     name: str
     slug: str
 
@@ -44,7 +44,18 @@ class Article(BaseModel):
     class Config:
         from_attributes = True
 
-PageContentItem = Union[Subsection, Article]
+# --- THIS IS THE FIX ---
+# Re-adding the PageContentItem type alias
+PageContentItem = Union[Article, Subsection]
+# --- END OF FIX ---
+
+# This is a paginated response wrapper
+class PaginatedResponse(BaseModel):
+    items: List[PageContentItem] # Use the type alias here
+    total: int
+    page: int
+    pageSize: int
+    hasNext: bool
 
 class Ancestor(BaseModel):
     id: str
@@ -54,3 +65,4 @@ class PageTreeNode(BaseModel):
     id: str
     title: str
     hasChildren: bool
+
