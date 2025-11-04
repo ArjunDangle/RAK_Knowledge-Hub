@@ -30,12 +30,10 @@ interface CategoryCardProps {
 function CategoryPreviewContent({ subsectionId }: { subsectionId: string }) {
   const { data: paginatedResponse, isLoading } = useQuery({
     queryKey: ["preview-children", subsectionId],
-    // Fetch page 1, which is all we need for a preview
     queryFn: () => getPageContents(subsectionId, 1), 
     staleTime: 5 * 60 * 1000,
   });
 
-  // --- FIX: Extract items from the paginated response ---
   const children = paginatedResponse?.items;
 
   if (isLoading) {
@@ -48,7 +46,6 @@ function CategoryPreviewContent({ subsectionId }: { subsectionId: string }) {
     );
   }
 
-  // --- FIX: Check the 'items' array for length ---
   if (!children || children.length === 0) {
     return (
       <p className="p-4 text-sm text-center text-muted-foreground">
@@ -60,7 +57,6 @@ function CategoryPreviewContent({ subsectionId }: { subsectionId: string }) {
   return (
     <ScrollArea className="h-auto max-h-64">
       <div className="p-2 space-y-1">
-        {/* --- FIX: Map over 'children' (which is now the 'items' array) --- */}
         {children.map((child) => {
           const isArticle = child.type === "article";
           const Icon = isArticle ? FileText : Folder;
@@ -127,10 +123,12 @@ export function CategoryCard({
             <div className="flex items-center gap-2">
               {articleCount !== undefined && (
                 <span>
+                  {/* --- THIS IS THE FIX --- */}
+                  {/* Reverted to "item/items" as it's now counting all children */}
                   {articleCount} {articleCount === 1 ? "item" : "items"}
                 </span>
               )}
-              {subsection && articleCount && articleCount > 0 && (
+              {subsection && articleCount > 0 && (
                 <HoverCard>
                   <HoverCardTrigger asChild>
                     <Button
@@ -166,7 +164,6 @@ export function CategoryCard({
                 </HoverCard>
               )}
             </div>
-            {/* --- THIS IS THE FIX: Corrected the typo 'T;' to '<span>' --- */}
             {updatedAt && <span>Updated {formatDate(updatedAt)}</span>}
           </div>
         </div>
@@ -174,4 +171,3 @@ export function CategoryCard({
     </Card>
   );
 }
-

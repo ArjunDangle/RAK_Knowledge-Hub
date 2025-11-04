@@ -53,9 +53,12 @@ class PageRepository:
 
     async def _format_page_as_subsection(self, page: PageModel, group_slug: str, html_content: str = "") -> Subsection:
         """Formats a Prisma Page model into a Subsection schema."""
+        # --- THIS IS THE CORRECTED LOGIC ---
+        # This now counts all direct children (both SUBSECTION and ARTICLE).
         article_count = await self.db.page.count(
-            where={'parentConfluenceId': page.confluenceId, 'pageType': PageType.ARTICLE}
+            where={'parentConfluenceId': page.confluenceId}
         )
+        
         return Subsection(
             type='subsection',
             id=page.confluenceId,
@@ -136,15 +139,12 @@ class PageRepository:
         ancestors = []
         current_page = page
         while current_page and current_page.parentConfluenceId:
-            # --- THIS IS THE FIX ---
-            # Removed the 'select' argument which caused the TypeError
             parent = await self.db.page.find_unique(
                 where={'confluenceId': current_page.parentConfluenceId}
             )
-            # --- END OF FIX ---
             
             if parent:
-                ancestors.append(Ancestor(id=parent.confluenceId, title=parent.title, slug=parent.slug)) # <-- UPDATE THIS LINE
+                ancestors.append(Ancestor(id=parent.confluenceId, title=parent.title, slug=parent.slug))
                 current_page = parent
             else:
                 break
@@ -277,4 +277,3 @@ class PageRepository:
                 'tags': {'set': tag_ops} 
             }
         )
-
