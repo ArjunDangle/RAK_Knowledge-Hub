@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from typing import List, Optional
 
 from app.services.confluence_service import ConfluenceService
-from app.db import db
+# from app.db import db  <-- REMOVED: Routers no longer access the DB directly
+from app.services.submission_repository import SubmissionRepository # <-- ADDED
 from app.schemas import cms_schemas, content_schemas, auth_schemas
 from app.schemas.content_schemas import PageTreeNode
 from app.schemas.cms_schemas import ContentNode
@@ -17,7 +18,9 @@ router = APIRouter(
     tags=["CMS"]
 )
 
+# Instantiate the service and new repository
 confluence_service = ConfluenceService(settings)
+submission_repo = SubmissionRepository() # <-- ADDED
 
 @router.get(
     "/admin/content-index",
@@ -37,6 +40,7 @@ async def get_content_index(parent_id: Optional[str] = Query(None)):
     dependencies=[Depends(get_current_user)]
 )
 async def upload_attachment_endpoint(file: UploadFile = File(...)):
+    # This logic is self-contained and does not call the service logic we refactored.
     UPLOAD_DIR = "/tmp/uploads"
     if not os.path.exists(UPLOAD_DIR):
         os.makedirs(UPLOAD_DIR)
@@ -78,6 +82,7 @@ async def create_page(
     page_data: cms_schemas.PageCreate,
     current_user: auth_schemas.UserResponse = Depends(get_current_user)
 ):
+    """Orchestrates page creation via the Confluence service."""
     created_page = await confluence_service.create_page_for_review(page_data, current_user.id, current_user.name)
     if not created_page:
         raise HTTPException(
@@ -86,7 +91,6 @@ async def create_page(
         )
     return created_page
 
-# NEW ENDPOINT as per the plan
 @router.put(
     "/pages/update/{page_id}",
     status_code=status.HTTP_204_NO_CONTENT
@@ -98,10 +102,10 @@ async def update_page_endpoint(
 ):
     """
     Updates an existing page.
-    Only the original author or an admin can perform this action.
+    Authorization is checked within the service layer.
     """
     # Authorization Check: User must be the author or an admin.
-    submission = await db.articlesubmission.find_unique(where={'confluencePageId': page_id})
+    submission = await submission_repo.get_by_confluence_id(page_id)
     
     is_author = submission and submission.authorId == current_user.id
     is_admin = current_user.role == "ADMIN"
@@ -115,7 +119,6 @@ async def update_page_endpoint(
     # Call the service to perform the update
     success = await confluence_service.update_page(page_id, page_data)
     if not success:
-        # The service layer will raise a more specific exception
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while updating the page."
@@ -127,12 +130,11 @@ async def update_page_endpoint(
     response_model=content_schemas.Article,
     dependencies=[Depends(get_current_admin_user)]
 )
-def get_article_preview_endpoint(page_id: str):
+async def get_article_preview_endpoint(page_id: str):
     """
     Fetches the full content of a pending article for an admin to preview.
-    Bypasses the regular status checks for publication.
     """
-    article = confluence_service.get_article_for_preview(page_id)
+    article = await confluence_service.get_article_for_preview(page_id)
     if not article:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -146,6 +148,7 @@ def get_article_preview_endpoint(page_id: str):
     dependencies=[Depends(get_current_admin_user)]
 )
 async def get_pages_pending_review():
+    """Fetches all submissions pending review."""
     return await confluence_service.get_pending_submissions_from_db()
 
 @router.post(
@@ -154,6 +157,7 @@ async def get_pages_pending_review():
     dependencies=[Depends(get_current_admin_user)]
 )
 async def approve_page_endpoint(page_id: str):
+    """Approves a page."""
     success = await confluence_service.approve_page(page_id)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to approve page.")
@@ -165,6 +169,7 @@ async def approve_page_endpoint(page_id: str):
     dependencies=[Depends(get_current_admin_user)]
 )
 async def reject_page_endpoint(page_id: str, payload: cms_schemas.PageReject):
+    """Rejects a page."""
     success = await confluence_service.reject_page(page_id, payload.comment)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to reject page.")
@@ -193,12 +198,14 @@ async def resubmit_page_endpoint(
     """
     Allows an author to resubmit their own rejected article for review.
     """
-    submission = await db.articlesubmission.find_unique(where={'confluencePageId': page_id})
+    # --- UPDATED: Use SubmissionRepository for auth check ---
+    submission = await submission_repo.get_by_confluence_id(page_id)
     if not submission or submission.authorId != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not authorized to resubmit this article."
         )
+    # --- END UPDATED SECTION ---
 
     success = await confluence_service.resubmit_page_for_review(page_id)
     if not success:

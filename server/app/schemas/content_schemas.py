@@ -4,7 +4,7 @@ from typing import List, Optional, Union
 from typing_extensions import Literal
 
 class Tag(BaseModel):
-    id: str
+    id: int  # <-- THIS IS THE FIX (was str)
     name: str
     slug: str
 
