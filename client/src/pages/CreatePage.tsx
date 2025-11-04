@@ -1,204 +1,271 @@
-// client/src/pages/CategoryPage.tsx
-import { useParams } from "react-router-dom";
-import { useQuery, useInfiniteQuery } from "@tanstack/react-query"; // <-- STEP 4.2: IMPORT ADDED
-import { Fragment } from "react"; // <-- STEP 4.2: IMPORT ADDED
-import { Loader2 } from "lucide-react"; // <-- STEP 4.2: IMPORT ADDED
+// client/src/pages/CreatePage.tsx
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Loader2, Upload, Paperclip, X } from "lucide-react";
 
-import { ArticleCard } from "@/components/cards/ArticleCard";
-import { CategoryCard } from "@/components/cards/CategoryCard";
-import { ArticleCardSkeleton, CategoryCardSkeleton } from "@/components/ui/loading-skeleton";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button"; // <-- STEP 4.2: IMPORT ADDED
-import { KnowledgeLayout } from "@/pages/KnowledgeLayout";
-import { getSubsectionsByGroup, getPageContents, getPageById, getAncestors } from "@/lib/api/api-client";
-import { Group } from "@/lib/types/content";
-import { getColorFromId } from "@/lib/utils/visual-utils";
+import { KnowledgeLayout } from "./KnowledgeLayout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+// --- THIS IS THE FIX: Removed the stray underscore ---
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { toast } from "@/components/ui/sonner";
+import { RichTextEditor, useConfiguredEditor } from "@/components/editor/RichTextEditor";
+import { TreeSelect } from "@/components/cms/TreeSelect";
+import { MultiSelect, MultiSelectOption } from "@/components/ui/multi-select";
+import { getAllTags, createPage, PageCreatePayload, uploadAttachment, AttachmentInfo } from "@/lib/api/api-client";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-const groupInfo = {
-  departments: { title: "Departments", description: "Resources organized by team functions" },
-  "resource-centre": { title: "Resource Centre", description: "Comprehensive knowledge base and documentation" },
-  tools: { title: "Tools", description: "Development tools, utilities, and platform guides" }
-};
+// Validation schema
+const createPageSchema = z.object({
+  title: z.string().min(5, { message: "Title must be at least 5 characters long." }),
+  description: z.string().min(10, "Description must be at least 10-15 words.").max(150, "Description must be 10-15 words (max 150 chars)."),
+  parent_id: z.string().min(1, { message: "You must select a parent category." }),
+  tags: z.array(z.string()).min(1, { message: "Select at least one tag." }),
+});
 
-export default function CategoryPage() {
-  const { group, pageId } = useParams<{ group?: Group; pageId?: string }>();
-  
-  const isTopLevelPage = !!group && !pageId;
-  const isNestedPage = !!pageId;
-  
-  const { data: currentPageData, isLoading: pageDetailsLoading, isError: pageDetailsError } = useQuery({
-    queryKey: ['pageDetails', pageId],
-    queryFn: () => getPageById(pageId!),
-    enabled: isNestedPage,
+type CreatePageFormData = z.infer<typeof createPageSchema>;
+
+interface UploadedFile {
+  file: File;
+  tempId: string;
+  type: 'image' | 'video' | 'pdf' | 'file';
+}
+
+export default function CreatePage() {
+  const navigate = useNavigate();
+  const [attachments, setAttachments] = useState<UploadedFile[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // Fetch tags for the multi-select
+  const { data: allTags, isLoading: isLoadingTags } = useQuery({
+    queryKey: ['allTags'],
+    queryFn: getAllTags,
   });
 
-  // --- STEP 4.2: 'useQuery' for contents REPLACED with 'useInfiniteQuery' ---
-  const {
-    data,
-    isLoading,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useInfiniteQuery({
-    queryKey: ['pageContents', pageId],
-    queryFn: ({ pageParam = 1 }) => getPageContents(pageId!, pageParam),
-    initialPageParam: 1,
-    getNextPageParam: (lastPage) => {
-      return lastPage.hasNext ? lastPage.page + 1 : undefined;
-    },
-    enabled: isNestedPage,
-  });
-  // --- END OF REFACTOR ---
+  const tagOptions: MultiSelectOption[] = allTags ? allTags.map(tag => ({ value: tag.name, label: tag.name })) : [];
+  
+  // --- Editor Setup ---
+  const handleFileUpload = async (file: File) => {
+    setIsUploading(true);
+    try {
+      const response = await uploadAttachment(file);
+      
+      const fileType = file.type.startsWith('image/') ? 'image' :
+                       file.type.startsWith('video/') ? 'video' :
+                       file.type === 'application/pdf' ? 'pdf' : 'file';
 
-  const { data: topLevelSubsections, isLoading: subsectionsLoading } = useQuery({
-    queryKey: ['topLevelSubsections', group],
-    queryFn: () => getSubsectionsByGroup(group!),
-    enabled: isTopLevelPage,
-  });
-  
-  const { data: ancestors } = useQuery({
-    queryKey: ['ancestors', pageId],
-    queryFn: () => getAncestors(pageId!),
-    enabled: isNestedPage,
-  });
-  
-  const currentGroup = isNestedPage ? currentPageData?.group as Group : group;
-  
-  if (!currentGroup || !(currentGroup in groupInfo)) {
-    if (pageDetailsLoading || subsectionsLoading || isLoading) { // Added isLoading
-      return <KnowledgeLayout><div className="text-center py-12"><h1 className="text-2xl font-bold">Loading...</h1></div></KnowledgeLayout>;
+      const newAttachment: UploadedFile = {
+        file: file,
+        tempId: response.temp_id,
+        type: fileType,
+      };
+      setAttachments(prev => [...prev, newAttachment]);
+
+      // Insert a placeholder into the editor
+      if (editor) {
+        editor.chain().focus().setAttachment({
+          'data-file-name': file.name,
+          'data-attachment-type': fileType,
+        }).run();
+      }
+      toast.success("Attachment uploaded successfully.");
+
+    } catch (error) {
+      toast.error("Upload failed", { description: (error as Error).message });
+    } finally {
+      setIsUploading(false);
     }
-    return <KnowledgeLayout><div className="text-center py-12"><h1 className="text-2xl font-bold">Category Not Found</h1></div></KnowledgeLayout>;
-  }
-  
-  const info = groupInfo[currentGroup];
-  const responsiveGridClass = "grid grid-cols-[repeat(auto-fit,minmax(20rem,1fr))] gap-6";
+  };
 
-  const breadcrumbs = isNestedPage 
-    ? (ancestors || []).map((ancestor, index) => {
-        if (index === 0) {
-          return { label: ancestor.title, href: `/category/${currentGroup}` };
-        }
-        return { label: ancestor.title, href: `/page/${ancestor.id}` };
-      }).concat(currentPageData ? [{ label: currentPageData.title }] : [])
-    : [{ label: info.title }];
-  
-  if (isNestedPage) {
-    return (
-      <KnowledgeLayout breadcrumbs={breadcrumbs}>
-        <div>
-          <div className="max-w-4xl mx-auto">
-            {pageDetailsLoading ? (
-              <div className="space-y-4 mb-8">
-                <Skeleton className="h-10 w-3/4 mx-auto" />
-                <Skeleton className="h-5 w-full" />
-                <Skeleton className="h-5 w-5/6" />
-              </div>
-            ) : pageDetailsError || !currentPageData ? (
-              <div className="text-center py-12"><h1 className="text-2xl font-bold">Page Not Found</h1></div>
-            ) : (
-              <div className="mb-6">
-                <header className="mb-6 text-center">
-                  <h1 className="text-4xl font-bold text-foreground mb-4 leading-tight">{currentPageData.title}</h1>
-                </header>
-                {currentPageData.html && (
-                  <>
-                    <Separator className="mb-6" />
-                    <div 
-                      className="prose dark:prose-invert max-w-none"
-                      dangerouslySetInnerHTML={{ __html: currentPageData.html }} 
-                    />
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-          
-          {/* --- STEP 4.3: UI UPDATE for Loading State --- */}
-          {isLoading ? (
-            <div className={`${responsiveGridClass} mt-12`}>{Array.from({ length: 6 }).map((_, i) => <ArticleCardSkeleton key={i} />)}</div>
-          
-          /* --- STEP 4.3: UI UPDATE for Data Rendering --- */
-          ) : data && data.pages.length > 0 && data.pages[0].items.length > 0 ? (
-            <>
-              <div className={`${responsiveGridClass} mt-12`}>
-                {data.pages.map((page, i) => (
-                  <Fragment key={i}>
-                    {page.items.map((item) => item.type === 'subsection' ? (
-                      <CategoryCard key={item.id} title={item.title} description={item.description} subsection={item} articleCount={item.articleCount} updatedAt={item.updatedAt} href={`/page/${item.id}`} />
-                    ) : (
-                      <ArticleCard key={item.id} article={item} pastelColor={getColorFromId(item.id)} />
-                    ))}
-                  </Fragment>
-                ))}
-              </div>
+  const editor = useConfiguredEditor("", handleFileUpload);
+  // --- End Editor Setup ---
 
-              {/* --- STEP 4.3: "LOAD MORE" BUTTON ADDED --- */}
-              {hasNextPage && (
-                <div className="mt-10 text-center">
-                  <Button
-                    onClick={() => fetchNextPage()}
-                    disabled={isFetchingNextPage}
-                  >
-                    {isFetchingNextPage ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Loading...
-                      </>
-                    ) : (
-                      'Load More'
-                    )}
-                  </Button>
-                </div>
-              )}
-            </>
-          /* --- STEP 4.3: UI UPDATE for Empty State --- */
-          ) : !pageDetailsLoading && (
-            <div className="text-center py-12 bg-muted/20 rounded-lg max-w-4xl mx-auto"><p className="text-muted-foreground">This section is empty.</p></div>
-          )}
+  // Form setup
+  const form = useForm<CreatePageFormData>({
+    resolver: zodResolver(createPageSchema),
+    defaultValues: {
+      title: "",
+      description: "",
+      parent_id: "",
+      tags: [],
+    },
+  });
 
-          {currentPageData && currentPageData.tags.length > 0 && (
-            <div className="max-w-4xl mx-auto">
-              <Separator className="my-8" />
-              <div className="flex flex-wrap gap-2 justify-center">{currentPageData.tags.map((tag) => <Badge key={tag.id} variant="outline">{tag.name}</Badge>)}</div>
-            </div>
-          )}
-        </div>
-      </KnowledgeLayout>
-    );
-  }
+  // Mutation for creating the page
+  const mutation = useMutation({
+    mutationFn: (data: PageCreatePayload) => createPage(data),
+    onSuccess: (data) => {
+      toast.success("Article submitted for review!");
+      navigate(`/article/${data.id}`);
+    },
+    onError: (error) => {
+      toast.error("Submission failed", { description: error.message });
+    },
+  });
 
-  // This is the top-level page (e.g., /category/departments)
-  // This query was not specified as paginated, so it remains a normal useQuery
+  // Handle form submission
+  const onSubmit = (data: CreatePageFormData) => {
+    const content = editor?.getHTML() || '';
+    if (content.length < 50) {
+        toast.error("Content is too short", { description: "Content must be at least 50 characters." });
+        return;
+    }
+
+    const attachmentPayload: AttachmentInfo[] = attachments.map(a => ({
+        temp_id: a.tempId,
+        file_name: a.file.name,
+    }));
+    
+    const payload: PageCreatePayload = {
+      title: data.title,
+      description: data.description,
+      content: content,
+      parent_id: data.parent_id,
+      tags: data.tags,
+      attachments: attachmentPayload,
+    };
+    
+    mutation.mutate(payload);
+  };
+
+  const breadcrumbs = [{ label: "Create New Article" }];
+
   return (
     <KnowledgeLayout breadcrumbs={breadcrumbs}>
-      <div>
-        <div className="mb-8 max-w-4xl mx-auto text-center">
-          <h1 className="text-3xl font-bold text-foreground mb-4">{info.title}</h1>
-          <p className="text-lg text-muted-foreground">{info.description}</p>
-        </div>
-        {subsectionsLoading ? (
-          <div className={responsiveGridClass}>{Array.from({ length: 6 }).map((_, i) => <CategoryCardSkeleton key={i} />)}</div>
-        ) : topLevelSubsections && topLevelSubsections.length > 0 ? (
-          <div className={responsiveGridClass}>
-            {topLevelSubsections.map((subsection) => (
-              <CategoryCard 
-                key={subsection.id} 
-                title={subsection.title} 
-                description={subsection.description} 
-                subsection={subsection}
-                articleCount={subsection.articleCount} 
-                updatedAt={subsection.updatedAt} 
-                href={`/page/${subsection.id}`}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-12"><p className="text-muted-foreground">No subsections found in this category.</p></div>
-        )}
+      <div className="max-w-4xl mx-auto">
+        <Card>
+          <CardHeader>
+            <CardTitle>Create New Article</CardTitle>
+            <CardDescription>
+              Fill out the details below to submit a new article for review.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                
+                <FormField
+                  control={form.control}
+                  name="title"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Title</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Your article's title" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="A brief, 10-15 word description for the article card."
+                          maxLength={150}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="parent_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Category</FormLabel>
+                      <FormControl>
+                        <TreeSelect
+                          placeholder="Select a parent category..."
+                          value={field.value}
+                          onChange={field.onChange}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="tags"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tags</FormLabel>
+                      <FormControl>
+                        <MultiSelect
+                          placeholder={isLoadingTags ? "Loading tags..." : "Select tags..."}
+                          options={tagOptions}
+                          selected={field.value}
+                          onChange={field.onChange}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div>
+                  <FormLabel>Content</FormLabel>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Write your article below. You can paste images directly into the editor to upload them.
+                  </p>
+                  <RichTextEditor editor={editor} />
+                  {isUploading && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Uploading attachment...
+                    </div>
+                  )}
+                </div>
+
+                <Alert>
+                  <Paperclip className="h-4 w-4" />
+                  <AlertTitle>Attachments</AlertTitle>
+                  <AlertDescription>
+                    {attachments.length === 0 ? "No attachments uploaded." : (
+                        <ul className="list-disc pl-5 space-y-1 mt-2">
+                            {attachments.map(att => (
+                                <li key={att.tempId} className="flex justify-between items-center">
+                                    <span>{att.file.name}</span>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => {
+                                        // This just removes from the list. It doesn't delete from the server.
+                                        // Deleting from editor is a separate action.
+                                        setAttachments(prev => prev.filter(a => a.tempId !== att.tempId));
+                                    }}>
+                                        <X className="h-4 w-4" />
+                                    </Button>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                  </AlertDescription>
+                </Alert>
+                
+                <Button type="submit" disabled={mutation.isPending || isUploading}>
+                  {(mutation.isPending || isUploading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Submit for Review
+                </Button>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
       </div>
     </KnowledgeLayout>
   );
 }
+
