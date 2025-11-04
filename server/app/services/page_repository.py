@@ -144,7 +144,7 @@ class PageRepository:
             # --- END OF FIX ---
             
             if parent:
-                ancestors.append(Ancestor(id=parent.confluenceId, title=parent.title))
+                ancestors.append(Ancestor(id=parent.confluenceId, title=parent.title, slug=parent.slug)) # <-- UPDATE THIS LINE
                 current_page = parent
             else:
                 break

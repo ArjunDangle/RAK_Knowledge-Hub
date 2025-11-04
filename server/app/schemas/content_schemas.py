@@ -60,6 +60,7 @@ class PaginatedResponse(BaseModel):
 class Ancestor(BaseModel):
     id: str
     title: str
+    slug: str
 
 class PageTreeNode(BaseModel):
     id: str
