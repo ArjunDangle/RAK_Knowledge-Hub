@@ -113,7 +113,7 @@ export function CategoryCard({
             <Icon className="h-14 w-14 text-foreground" />
             <h3 className="mt-4 text-lg font-bold text-foreground">{title}</h3>
             <p className="mt-2 text-sm text-muted-foreground line-clamp-2">
-              {description}
+              {description} 
             </p>
           </div>
 

@@ -1,266 +1,204 @@
-// client/src/pages/CreatePage.tsx
-import { useState, useRef, useMemo, useEffect } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
-import { Loader2, Paperclip, X, Tag as TagIcon } from "lucide-react";
-import { KnowledgeLayout } from "./KnowledgeLayout";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { toast } from "@/components/ui/sonner";
-import { createPage, PageCreatePayload, uploadAttachment, AttachmentInfo, getAllTags } from "@/lib/api/api-client";
-import { Tag } from "@/lib/types/content";
-import { RichTextEditor, useConfiguredEditor } from "@/components/editor/RichTextEditor";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { TreeSelect } from "@/components/cms/TreeSelect";
+// client/src/pages/CategoryPage.tsx
+import { useParams } from "react-router-dom";
+import { useQuery, useInfiniteQuery } from "@tanstack/react-query"; // <-- STEP 4.2: IMPORT ADDED
+import { Fragment } from "react"; // <-- STEP 4.2: IMPORT ADDED
+import { Loader2 } from "lucide-react"; // <-- STEP 4.2: IMPORT ADDED
+
+import { ArticleCard } from "@/components/cards/ArticleCard";
+import { CategoryCard } from "@/components/cards/CategoryCard";
+import { ArticleCardSkeleton, CategoryCardSkeleton } from "@/components/ui/loading-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button"; // <-- STEP 4.2: IMPORT ADDED
+import { KnowledgeLayout } from "@/pages/KnowledgeLayout";
+import { getSubsectionsByGroup, getPageContents, getPageById, getAncestors } from "@/lib/api/api-client";
+import { Group } from "@/lib/types/content";
+import { getColorFromId } from "@/lib/utils/visual-utils";
 
-const createPageSchema = z.object({
-  title: z.string().min(5, { message: "Title must be at least 5 characters long." }),
-  parent_id: z.string({ required_error: "Please select a parent category." }),
-  tags: z.string().optional(),
-});
-type CreatePageFormData = z.infer<typeof createPageSchema>;
+const groupInfo = {
+  departments: { title: "Departments", description: "Resources organized by team functions" },
+  "resource-centre": { title: "Resource Centre", description: "Comprehensive knowledge base and documentation" },
+  tools: { title: "Tools", description: "Development tools, utilities, and platform guides" }
+};
 
-export default function CreatePage() {
-    const navigate = useNavigate();
-    const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    
-    const [tagInputValue, setTagInputValue] = useState('');
-    const [currentTags, setCurrentTags] = useState<string[]>([]);
-    const [isTagModalOpen, setIsTagModalOpen] = useState(false);
-    const [temporarySelectedTags, setTemporarySelectedTags] = useState<Set<string>>(new Set());
+export default function CategoryPage() {
+  const { group, pageId } = useParams<{ group?: Group; pageId?: string }>();
+  
+  const isTopLevelPage = !!group && !pageId;
+  const isNestedPage = !!pageId;
+  
+  const { data: currentPageData, isLoading: pageDetailsLoading, isError: pageDetailsError } = useQuery({
+    queryKey: ['pageDetails', pageId],
+    queryFn: () => getPageById(pageId!),
+    enabled: isNestedPage,
+  });
 
-    const attachmentMutation = useMutation({
-        mutationFn: uploadAttachment,
-        onSuccess: (data) => {
-            // --- THIS IS THE FIX ---
-            // Only update the state. The editor plugin is now responsible for all visual insertions.
-            setAttachments(prev => [...prev, data]);
-            toast.success(`File "${data.file_name}" processed.`);
-        },
-        onError: (error) => {
-            toast.error("Upload failed", { description: error.message });
-        },
-    });
+  // --- STEP 4.2: 'useQuery' for contents REPLACED with 'useInfiniteQuery' ---
+  const {
+    data,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['pageContents', pageId],
+    queryFn: ({ pageParam = 1 }) => getPageContents(pageId!, pageParam),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      return lastPage.hasNext ? lastPage.page + 1 : undefined;
+    },
+    enabled: isNestedPage,
+  });
+  // --- END OF REFACTOR ---
 
-    const editor = useConfiguredEditor('', attachmentMutation.mutate);
-
-    const { data: allTags } = useQuery({
-        queryKey: ['allTags'],
-        queryFn: getAllTags,
-    });
-
-    const form = useForm<CreatePageFormData>({
-        resolver: zodResolver(createPageSchema),
-        defaultValues: { title: "", parent_id: "", tags: "" },
-    });
-
-    useEffect(() => {
-        form.setValue('tags', currentTags.join(','));
-    }, [currentTags, form]);
-
-    const groupedTags = useMemo(() => {
-        if (!allTags) return {};
-        const groups: { [key: string]: Tag[] } = { 'A-C': [], 'D-L': [], 'M-R': [], 'S-Z': [], '#': [] };
-        allTags.forEach(tag => {
-            const firstLetter = tag.name[0]?.toUpperCase();
-            if (firstLetter >= 'A' && firstLetter <= 'C') groups['A-C'].push(tag);
-            else if (firstLetter >= 'D' && firstLetter <= 'L') groups['D-L'].push(tag);
-            else if (firstLetter >= 'M' && firstLetter <= 'R') groups['M-R'].push(tag);
-            else if (firstLetter >= 'S' && firstLetter <= 'Z') groups['S-Z'].push(tag);
-            else groups['#'].push(tag);
-        });
-        return Object.fromEntries(Object.entries(groups).filter(([, tags]) => tags.length > 0));
-    }, [allTags]);
-
-    const handleAddTag = (tagToAdd: string) => {
-        const newTag = tagToAdd.trim().replace(/,/g, '');
-        if (newTag && !currentTags.includes(newTag)) {
-            setCurrentTags(prev => [...prev, newTag]);
-        }
-        setTagInputValue('');
-    };
-
-    const pageMutation = useMutation({
-        mutationFn: createPage,
-        onSuccess: () => {
-            toast.success("Article submitted for review!");
-            navigate("/");
-        },
-        onError: (error) => {
-            toast.error("Submission failed", { description: error.message });
-        },
-    });
-    
-    const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (file) {
-            attachmentMutation.mutate(file);
-        }
-    };
-    
-    const handleRemoveTag = (tagToRemove: string) => {
-        setCurrentTags(prev => prev.filter(tag => tag !== tagToRemove));
-    };
-
-    const handleTagInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter' || e.key === ',') {
-            e.preventDefault();
-            handleAddTag(tagInputValue);
-        }
-    };
-
-    const handleModalOpen = (isOpen: boolean) => {
-        if (isOpen) {
-            setTemporarySelectedTags(new Set(currentTags));
-        }
-        setIsTagModalOpen(isOpen);
-    };
-
-    const handleTemporaryTagToggle = (tagName: string) => {
-        setTemporarySelectedTags(prev => {
-            const newSet = new Set(prev);
-            newSet.has(tagName) ? newSet.delete(tagName) : newSet.add(tagName);
-            return newSet;
-        });
-    };
-
-    const handleApplyTagSelection = () => {
-      setCurrentTags(Array.from(temporarySelectedTags));
-      setIsTagModalOpen(false);
+  const { data: topLevelSubsections, isLoading: subsectionsLoading } = useQuery({
+    queryKey: ['topLevelSubsections', group],
+    queryFn: () => getSubsectionsByGroup(group!),
+    enabled: isTopLevelPage,
+  });
+  
+  const { data: ancestors } = useQuery({
+    queryKey: ['ancestors', pageId],
+    queryFn: () => getAncestors(pageId!),
+    enabled: isNestedPage,
+  });
+  
+  const currentGroup = isNestedPage ? currentPageData?.group as Group : group;
+  
+  if (!currentGroup || !(currentGroup in groupInfo)) {
+    if (pageDetailsLoading || subsectionsLoading || isLoading) { // Added isLoading
+      return <KnowledgeLayout><div className="text-center py-12"><h1 className="text-2xl font-bold">Loading...</h1></div></KnowledgeLayout>;
     }
+    return <KnowledgeLayout><div className="text-center py-12"><h1 className="text-2xl font-bold">Category Not Found</h1></div></KnowledgeLayout>;
+  }
+  
+  const info = groupInfo[currentGroup];
+  const responsiveGridClass = "grid grid-cols-[repeat(auto-fit,minmax(20rem,1fr))] gap-6";
 
-    const onSubmit = (data: CreatePageFormData) => {
-        const content = editor?.getHTML() || '';
-        if (content.length < 50 && attachments.length === 0) {
-            form.setError("root", { message: "Content must be at least 50 characters, or have an attachment." });
-            return;
+  const breadcrumbs = isNestedPage 
+    ? (ancestors || []).map((ancestor, index) => {
+        if (index === 0) {
+          return { label: ancestor.title, href: `/category/${currentGroup}` };
         }
-
-        const payload: PageCreatePayload = {
-            title: data.title,
-            parent_id: data.parent_id,
-            content: content,
-            tags: currentTags.filter(Boolean),
-            attachments: attachments,
-        };
-        pageMutation.mutate(payload);
-    };
-
+        return { label: ancestor.title, href: `/page/${ancestor.id}` };
+      }).concat(currentPageData ? [{ label: currentPageData.title }] : [])
+    : [{ label: info.title }];
+  
+  if (isNestedPage) {
     return (
-        <KnowledgeLayout breadcrumbs={[{ label: "Create New Content" }]}>
+      <KnowledgeLayout breadcrumbs={breadcrumbs}>
+        <div>
+          <div className="max-w-4xl mx-auto">
+            {pageDetailsLoading ? (
+              <div className="space-y-4 mb-8">
+                <Skeleton className="h-10 w-3/4 mx-auto" />
+                <Skeleton className="h-5 w-full" />
+                <Skeleton className="h-5 w-5/6" />
+              </div>
+            ) : pageDetailsError || !currentPageData ? (
+              <div className="text-center py-12"><h1 className="text-2xl font-bold">Page Not Found</h1></div>
+            ) : (
+              <div className="mb-6">
+                <header className="mb-6 text-center">
+                  <h1 className="text-4xl font-bold text-foreground mb-4 leading-tight">{currentPageData.title}</h1>
+                </header>
+                {currentPageData.html && (
+                  <>
+                    <Separator className="mb-6" />
+                    <div 
+                      className="prose dark:prose-invert max-w-none"
+                      dangerouslySetInnerHTML={{ __html: currentPageData.html }} 
+                    />
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          
+          {/* --- STEP 4.3: UI UPDATE for Loading State --- */}
+          {isLoading ? (
+            <div className={`${responsiveGridClass} mt-12`}>{Array.from({ length: 6 }).map((_, i) => <ArticleCardSkeleton key={i} />)}</div>
+          
+          /* --- STEP 4.3: UI UPDATE for Data Rendering --- */
+          ) : data && data.pages.length > 0 && data.pages[0].items.length > 0 ? (
+            <>
+              <div className={`${responsiveGridClass} mt-12`}>
+                {data.pages.map((page, i) => (
+                  <Fragment key={i}>
+                    {page.items.map((item) => item.type === 'subsection' ? (
+                      <CategoryCard key={item.id} title={item.title} description={item.description} subsection={item} articleCount={item.articleCount} updatedAt={item.updatedAt} href={`/page/${item.id}`} />
+                    ) : (
+                      <ArticleCard key={item.id} article={item} pastelColor={getColorFromId(item.id)} />
+                    ))}
+                  </Fragment>
+                ))}
+              </div>
+
+              {/* --- STEP 4.3: "LOAD MORE" BUTTON ADDED --- */}
+              {hasNextPage && (
+                <div className="mt-10 text-center">
+                  <Button
+                    onClick={() => fetchNextPage()}
+                    disabled={isFetchingNextPage}
+                  >
+                    {isFetchingNextPage ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      'Load More'
+                    )}
+                  </Button>
+                </div>
+              )}
+            </>
+          /* --- STEP 4.3: UI UPDATE for Empty State --- */
+          ) : !pageDetailsLoading && (
+            <div className="text-center py-12 bg-muted/20 rounded-lg max-w-4xl mx-auto"><p className="text-muted-foreground">This section is empty.</p></div>
+          )}
+
+          {currentPageData && currentPageData.tags.length > 0 && (
             <div className="max-w-4xl mx-auto">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Submit a New Article</CardTitle>
-                        <CardDescription>
-                            Fill out the form below to create a new article. It will be sent for review before publication.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Form {...form}>
-                            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                                <FormField control={form.control} name="title" render={({ field }) => (
-                                    <FormItem><FormLabel>Title</FormLabel><FormControl><Input placeholder="e.g., How to Configure the WisGate Edge Lite 2" {...field} /></FormControl><FormMessage /></FormItem>
-                                )} />
-                                
-                                <FormField control={form.control} name="parent_id" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Parent Category</FormLabel>
-                                        <FormControl>
-                                            <TreeSelect
-                                                value={field.value}
-                                                onChange={field.onChange}
-                                                placeholder="Select a parent page..."
-                                            />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )} />
-                                
-                                <div>
-                                    <FormLabel>Content</FormLabel>
-                                    <RichTextEditor editor={editor} />
-                                    <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" accept="image/*,video/*,.pdf" />
-                                    <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => fileInputRef.current?.click()} disabled={attachmentMutation.isPending}>
-                                        <Paperclip className="mr-2 h-4 w-4" />
-                                        {attachmentMutation.isPending ? 'Uploading...' : 'Attach File'}
-                                    </Button>
-                                    {form.formState.errors.root && <p className="text-sm font-medium text-destructive">{form.formState.errors.root.message}</p>}
-                                </div>
-                                
-                                <FormField control={form.control} name="tags" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Tags</FormLabel>
-                                        <FormControl>
-                                            <div className="flex items-center gap-2 flex-wrap p-2 border rounded-md min-h-[40px]">
-                                                {currentTags.map((tag) => (
-                                                    <Badge key={tag} variant="secondary">
-                                                        {tag}
-                                                        <button type="button" onClick={() => handleRemoveTag(tag)} className="ml-1.5 rounded-full hover:bg-background/50 p-0.5">
-                                                            <X className="h-3 w-3" />
-                                                        </button>
-                                                    </Badge>
-                                                ))}
-                                                <Input value={tagInputValue} onChange={(e) => setTagInputValue(e.target.value)} onKeyDown={handleTagInputKeyDown} placeholder="Add a tag..." className="border-none focus-visible:ring-0 focus-visible:ring-offset-0 flex-1 min-w-[120px] h-auto p-0" />
-                                            </div>
-                                        </FormControl>
-                                        <div className="flex justify-between items-start mt-2">
-                                            <p className="text-xs text-muted-foreground">Type a tag and press Enter, or select existing ones.</p>
-                                            <Button type="button" variant="outline" size="sm" onClick={() => handleModalOpen(true)}>
-                                                <TagIcon className="mr-2 h-4 w-4" />
-                                                Browse Tags
-                                            </Button>
-                                        </div>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}  />
-                                
-                                <div className="flex items-center gap-4">
-                                    <Button type="submit" disabled={pageMutation.isPending}>
-                                        {pageMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                        Submit for Review
-                                    </Button>
-                                </div>
-                            </form>
-                        </Form>
-                    </CardContent>
-                </Card>
+              <Separator className="my-8" />
+              <div className="flex flex-wrap gap-2 justify-center">{currentPageData.tags.map((tag) => <Badge key={tag.id} variant="outline">{tag.name}</Badge>)}</div>
             </div>
-            
-            <Dialog open={isTagModalOpen} onOpenChange={handleModalOpen}>
-                <DialogContent className="sm:max-w-2xl">
-                    <DialogHeader>
-                        <DialogTitle>Select Tags</DialogTitle>
-                        <DialogDescription>Select one or more existing tags, or create new ones in the input field.</DialogDescription>
-                    </DialogHeader>
-                    <ScrollArea className="h-[60vh] rounded-md border p-4">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-4">
-                            {Object.entries(groupedTags).map(([groupName, tagsInGroup]) => (
-                                <div key={groupName} className="space-y-2">
-                                    <h4 className="font-semibold text-sm text-muted-foreground border-b pb-1 mb-2">{groupName}</h4>
-                                    <div className="flex flex-col items-start space-y-1">
-                                        {(tagsInGroup as Tag[]).map(tag => (
-                                            <button key={tag.id} type="button" onClick={() => handleTemporaryTagToggle(tag.name)} className={cn("text-sm text-foreground text-left rounded-sm px-1 -mx-1 hover:bg-accent w-full", temporarySelectedTags.has(tag.name) && "bg-accent text-accent-foreground font-semibold")}>
-                                                {tag.name}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </ScrollArea>
-                    <DialogFooter><Button variant="ghost" onClick={() => setIsTagModalOpen(false)}>Cancel</Button><Button onClick={handleApplyTagSelection}>Apply Tags</Button></DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </KnowledgeLayout>
+          )}
+        </div>
+      </KnowledgeLayout>
     );
+  }
+
+  // This is the top-level page (e.g., /category/departments)
+  // This query was not specified as paginated, so it remains a normal useQuery
+  return (
+    <KnowledgeLayout breadcrumbs={breadcrumbs}>
+      <div>
+        <div className="mb-8 max-w-4xl mx-auto text-center">
+          <h1 className="text-3xl font-bold text-foreground mb-4">{info.title}</h1>
+          <p className="text-lg text-muted-foreground">{info.description}</p>
+        </div>
+        {subsectionsLoading ? (
+          <div className={responsiveGridClass}>{Array.from({ length: 6 }).map((_, i) => <CategoryCardSkeleton key={i} />)}</div>
+        ) : topLevelSubsections && topLevelSubsections.length > 0 ? (
+          <div className={responsiveGridClass}>
+            {topLevelSubsections.map((subsection) => (
+              <CategoryCard 
+                key={subsection.id} 
+                title={subsection.title} 
+                description={subsection.description} 
+                subsection={subsection}
+                articleCount={subsection.articleCount} 
+                updatedAt={subsection.updatedAt} 
+                href={`/page/${subsection.id}`}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12"><p className="text-muted-foreground">No subsections found in this category.</p></div>
+        )}
+      </div>
+    </KnowledgeLayout>
+  );
 }

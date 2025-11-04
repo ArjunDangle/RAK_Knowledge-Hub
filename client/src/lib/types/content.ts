@@ -33,7 +33,8 @@ export type Article = {
   id: string;
   slug: string;
   title: string;
-  excerpt: string;
+  description: string; // <-- STEP 3: Field added
+  excerpt: string; // Kept for compatibility, but description is preferred
   html: string;
   tags: Tag[];
   group: Group;
@@ -46,6 +47,16 @@ export type Article = {
 
 // NEW: This type allows us to handle a mixed list of articles and subsections
 export type ContentItem = Subsection | Article;
+
+// --- STEP 4.1: PAGINATION TYPE ADDED ---
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasNext: boolean;
+}
+// --- END OF ADDED TYPE ---
 
 export type SearchMode = 'all' | 'title' | 'tags' | 'content';
 
@@ -63,6 +74,7 @@ export type SearchFilters = {
   tags: string[];
   groups: Group[];
   sort: 'relevance' | 'date' | 'views';
+  // Pagination will be handled by the query function
 };
 
 export type UpdateEntry = {

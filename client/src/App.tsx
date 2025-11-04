@@ -14,6 +14,7 @@ import ScrollToTop from "./components/ScrollToTop";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/LoginPage";
 import CreatePage from "./pages/CreatePage";
+import EditPage from "./pages/EditPage"; // <-- STEP 2.1: IMPORT ADDED
 import AdminDashboard from "./pages/AdminDashboard";
 import MySubmissionsPage from "./pages/MySubmissionsPage";
 import AdminIndexPage from "./pages/AdminIndexPage";
@@ -69,6 +70,7 @@ const App = () => (
             <Route element={<ProtectedRoute />}>
               <Route path="/create" element={<CreatePage />} />
               <Route path="/my-submissions" element={<MySubmissionsPage />} />
+              <Route path="/edit/:pageId" element={<EditPage />} /> {/* <-- STEP 2.1: ROUTE ADDED */}
             </Route>
 
             {/* Protected Routes for Admins */}
@@ -85,4 +87,5 @@ const App = () => (
     </TooltipProvider>
   </QueryClientProvider>
 );
+
 export default App;

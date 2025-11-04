@@ -1,18 +1,21 @@
+// client/src/pages/Landing.tsx
 import { useQuery } from "@tanstack/react-query";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SearchBar } from "@/components/search/SearchBar";
 import { CategoryCard } from "@/components/cards/CategoryCard";
 import { ArticleCard } from "@/components/cards/ArticleCard";
-import { CategoryCardSkeleton, ArticleCardSkeleton } from "@/components/ui/loading-skeleton";
-import { getGroups, getSubsectionsByGroup, getPopularArticles, getRecentArticles } from "@/lib/api/api-client";
-import { Subsection, Article, SearchMode } from "@/lib/types/content";
+// --- STEP 5: CLEANUP ---
+// Skeletons removed as metadata now loads near-instantly from the DB
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link, useNavigate } from "react-router-dom";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Loader2 } from "lucide-react"; // Added Loader2 for loading
 import { formatRelativeTime } from "@/lib/utils/date";
 import ChatbotWidget from "@/components/chatbot/ChatbotWidget";
 import { useState } from "react";
+// --- FIX: CORRECTED IMPORT PATH ---
 import { getColorFromId } from "@/lib/utils/visual-utils";
+import { Subsection, Article, SearchMode } from "@/lib/types/content";
+import { getGroups, getSubsectionsByGroup, getPopularArticles, getRecentArticles } from "@/lib/api/api-client";
 
 export default function Landing() {
   const { data: groups, isLoading: groupsLoading } = useQuery({ queryKey: ['groups'], queryFn: getGroups });
@@ -21,7 +24,7 @@ export default function Landing() {
   const { data: toolSubs, isLoading: toolsLoading } = useQuery({ queryKey: ['subsections', 'tools'], queryFn: () => getSubsectionsByGroup('tools') });
   const { data: popularArticles, isLoading: popularLoading } = useQuery({ queryKey: ['articles', 'popular'], queryFn: () => getPopularArticles(4) });
   const { data: recentArticles, isLoading: recentLoading } = useQuery({ queryKey: ['articles', 'recent'], queryFn: () => getRecentArticles(7) });
-
+  
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<SearchMode>('all');
@@ -44,8 +47,11 @@ export default function Landing() {
         <p className="text-muted-foreground">{description}</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* --- STEP 5: SKELETONS REMOVED --- */}
         {loading ? (
-          Array.from({ length: 4 }).map((_, i) => <CategoryCardSkeleton key={i} />)
+          <div className="flex items-center justify-center col-span-4 h-40">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
         ) : (
           subsections?.slice(0, 4).map((subsection) => (
             <CategoryCard
@@ -98,7 +104,11 @@ export default function Landing() {
       </div>
       
       <main className="container max-w-7xl mx-auto px-6 py-12">
-        {groupsLoading ? <p>Loading categories...</p> : groups?.map(groupInfo => (
+        {groupsLoading ? (
+          <div className="flex items-center justify-center h-40">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : groups?.map(groupInfo => (
           <div key={groupInfo.id}>
             {renderCategorySection(
               groupInfo.title,
@@ -117,9 +127,11 @@ export default function Landing() {
                 <h2 className="text-2xl font-bold text-foreground mb-2">Popular Articles</h2>
                 <p className="text-muted-foreground">Most viewed content across all categories</p>
               </div>
+              {/* --- STEP 5: SKELETONS REMOVED --- */}
               {popularLoading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {Array.from({ length: 4 }).map((_, i) => <ArticleCardSkeleton key={i} />)}
+                  <Skeleton className="h-48 w-full" />
+                  <Skeleton className="h-48 w-full" />
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -140,6 +152,7 @@ export default function Landing() {
                 <p className="text-muted-foreground">The latest updates and new content</p>
               </div>
               <div className="border rounded-lg">
+                {/* --- STEP 5: SKELETONS REMOVED --- */}
                 {recentLoading ? (
                   <div className="p-3 space-y-3">
                     {Array.from({ length: 7 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}

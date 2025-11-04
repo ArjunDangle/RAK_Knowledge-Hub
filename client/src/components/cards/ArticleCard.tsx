@@ -63,9 +63,11 @@ export function ArticleCard({
           </CardHeader>
 
           <CardContent className="p-0 flex-grow">
+            {/* --- STEP 3: UPDATED --- */}
             <p className="text-muted-foreground text-sm leading-relaxed mb-4">
-              {article.excerpt}
+              {(article as any).description || article.excerpt}
             </p>
+            {/* --- END OF UPDATE --- */}
           </CardContent>
 
           <div className="mt-auto">
