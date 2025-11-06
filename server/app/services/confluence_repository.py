@@ -13,6 +13,30 @@ from app.schemas.content_schemas import Tag
 
 UPLOAD_DIR = "/tmp/uploads"
 
+ROOT_PAGE_CONFIG = [
+    {
+        "confluence_title": "Department",
+        "slug": "departments",
+        "display_title": "Departments",
+        "description": "Resources organized by team functions",
+        "icon": "Building2"
+    },
+    {
+        "confluence_title": "Resource Centre",
+        "slug": "resource-centre",
+        "display_title": "Resource Centre",
+        "description": "Comprehensive knowledge base and documentation",
+        "icon": "BookOpen"
+    },
+    {
+        "confluence_title": "Tools",
+        "slug": "tools",
+        "display_title": "Tools",
+        "description": "Development tools, utilities, and platform guides",
+        "icon": "Wrench"
+    }
+]
+
 class ConfluenceRepository:
     """
     Handles all raw API communication with the Atlassian Confluence service.
@@ -31,17 +55,14 @@ class ConfluenceRepository:
         self.id_to_group_slug_map = {v: k for k, v in self.root_page_ids.items()}
 
     def _discover_root_pages(self) -> Dict[str, str]:
-        """Finds the top-level category pages (e.g., "Departments") on startup."""
+        """Dynamically discovers root pages based on the ROOT_PAGE_CONFIG."""
         space_key = self.settings.confluence_space_key
         discovered_ids = {}
-        # These titles must match exactly what is in Confluence
-        expected_titles = {
-            "Department": "departments",
-            "Resource Centre": "resource-centre",
-            "Tools": "tools"
-        }
         
-        for title, slug in expected_titles.items():
+        # --- MODIFIED LOGIC ---
+        for config in ROOT_PAGE_CONFIG:
+            title = config["confluence_title"]
+            slug = config["slug"]
             try:
                 search_path = f'/rest/api/content?spaceKey={space_key}&title={title}&limit=1'
                 results = self.confluence.get(search_path).get('results', [])

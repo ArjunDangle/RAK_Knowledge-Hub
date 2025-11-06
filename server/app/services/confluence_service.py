@@ -13,7 +13,7 @@ from app.utils.html_translator import html_to_storage_format
 from prisma.enums import PageType
 
 # Import Repositories and Services
-from app.services.confluence_repository import ConfluenceRepository
+from app.services.confluence_repository import ConfluenceRepository, ROOT_PAGE_CONFIG
 from app.services.page_repository import PageRepository
 from app.services.submission_repository import SubmissionRepository
 from app.services.notification_service import NotificationService
@@ -120,12 +120,19 @@ class ConfluenceService:
     # --- Knowledge Hub Read Endpoints (Orchestration) ---
 
     def get_groups(self) -> List[GroupInfo]:
-        """Returns static group information."""
-        return [
-            GroupInfo(id='departments', title='Departments', description='Resources organized by team functions', icon='Building2'),
-            GroupInfo(id='resource-centre', title='Resource Centre', description='Comprehensive knowledge base and docs', icon='BookOpen'),
-            GroupInfo(id='tools', title='Tools', description='Development tools, utilities, and guides', icon='Wrench'),
-        ]
+        """Dynamically returns group info based on the centralized config."""
+        # --- MODIFIED LOGIC ---
+        groups = []
+        for config in ROOT_PAGE_CONFIG:
+            # Check if the root page was successfully discovered at startup
+            if config["slug"] in self.root_page_ids:
+                groups.append(GroupInfo(
+                    id=config["slug"],
+                    title=config["display_title"],
+                    description=config["description"],
+                    icon=config["icon"]
+                ))
+        return groups
 
     async def get_subsections_by_group(self, group_slug: str) -> List[Subsection]:
         """

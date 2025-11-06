@@ -6,7 +6,7 @@ export type Tag = {
   slug: string;
 };
 
-export type Group = 'departments' | 'resource-centre' | 'tools';
+export type Group = string;
 
 export type GroupInfo = {
   id: Group;
