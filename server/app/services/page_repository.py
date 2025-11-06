@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Optional
 from bs4 import BeautifulSoup 
 
 from app.db import db
-from app.schemas.content_schemas import Tag, Article, Subsection, Ancestor
+from app.schemas.content_schemas import Tag, Article, Subsection, Ancestor, PageTreeNode
 from prisma.enums import PageType
 from prisma.models import Page as PageModel
 from prisma.types import PageInclude
@@ -18,7 +18,7 @@ class PageRepository:
         self.db = db
         self._page_include: PageInclude = {'tags': True}
 
-    async def _slugify(self, text: str) -> str:
+    def _slugify(self, text: str) -> str:
         """Internal slugify, as this repo doesn't import from Confluence service."""
         import re
         text = text.lower()
@@ -103,8 +103,10 @@ class PageRepository:
             subsections.append(await self._format_page_as_subsection(page, group_slug, ""))
         return subsections
 
-    async def get_paginated_children(self, parent_confluence_id: str, page: int, page_size: int) -> dict:
-        """Fetches paginated children (both Articles and Subsections) for a parent page."""
+    async def get_paginated_children(
+        self, parent_confluence_id: str, page: int, page_size: int, group_slug: str
+    ) -> dict:
+        """Fetches paginated children and formats them within the same method."""
         skip = (page - 1) * page_size
         
         child_pages = await self.db.page.find_many(
@@ -112,13 +114,26 @@ class PageRepository:
             include=self._page_include,
             skip=skip,
             take=page_size,
-            order={'title': 'asc'}
+            order=[
+                {'pageType': 'asc'}, 
+                {'title': 'asc'}
+            ]
         )
         
         total_items = await self.db.page.count(where={'parentConfluenceId': parent_confluence_id})
         
+        # Now, format the items directly in the repository
+        formatted_items = []
+        parent_slug = (await self.db.page.find_unique(where={'confluenceId': parent_confluence_id})).slug
+        
+        for item in child_pages:
+            if item.pageType == PageType.SUBSECTION:
+                formatted_items.append(await self._format_page_as_subsection(item, group_slug, ""))
+            else: # It's an ARTICLE
+                formatted_items.append(await self._format_page_as_article(item, group_slug, parent_slug))
+
         return {
-            "items": child_pages, # The service layer will format these
+            "items": formatted_items,
             "total": total_items,
             "page": page,
             "pageSize": page_size,
@@ -194,7 +209,7 @@ class PageRepository:
         
         tag_connect_ops = []
         for tag_name in tag_names:
-            tag_slug = await self._slugify(tag_name)
+            tag_slug = self._slugify(tag_name)
             tag = await self.db.tag.upsert(
                 where={'name': tag_name},
                 data={
@@ -258,7 +273,7 @@ class PageRepository:
         for label in raw_labels:
             tag_name = label["name"]
             if not tag_name.startswith("status-"):
-                tag_slug = await self._slugify(tag_name)
+                tag_slug = self._slugify(tag_name)
                 tag = await self.db.tag.upsert(
                     where={'name': tag_name},
                     data={'create': {'name': tag_name, 'slug': tag_slug}, 'update': {'slug': tag_slug}}
@@ -269,7 +284,7 @@ class PageRepository:
             where={'confluenceId': confluence_id},
             data={
                 'title': title,
-                'slug': await self._slugify(title),
+                'slug': self._slugify(title),
                 'description': description,
                 'pageType': page_type,
                 'authorName': author_name,
@@ -277,3 +292,32 @@ class PageRepository:
                 'tags': {'set': tag_ops} 
             }
         )
+    
+    async def get_tree_nodes_by_parent_id(self, parent_id: Optional[str]) -> List[PageTreeNode]:
+        """
+        Fetches pages from the local DB and formats them for the tree select component.
+        This queries our own database instead of the live Confluence API.
+        """
+        nodes_to_return = []
+        
+        # Query for pages based on the parent ID.
+        # If parent_id is None, it fetches the root-level pages.
+        child_pages = await self.db.page.find_many(
+            where={'parentConfluenceId': parent_id},
+            order={'title': 'asc'}
+        )
+
+        # For each page found, check if it has children to set the 'hasChildren' flag.
+        for page in child_pages:
+            child_count = await self.db.page.count(
+                where={'parentConfluenceId': page.confluenceId}
+            )
+            nodes_to_return.append(
+                PageTreeNode(
+                    id=page.confluenceId,
+                    title=page.title,
+                    hasChildren=child_count > 0
+                )
+            )
+            
+        return nodes_to_return

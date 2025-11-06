@@ -1,5 +1,5 @@
 // client/src/pages/CreatePage.tsx
-import { useState } from "react";
+import { useState, useRef, ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -12,14 +12,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-// --- THIS IS THE FIX: Removed the stray underscore ---
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from "@/components/ui/sonner";
 import { RichTextEditor, useConfiguredEditor } from "@/components/editor/RichTextEditor";
 import { TreeSelect } from "@/components/cms/TreeSelect";
 import { MultiSelect, MultiSelectOption } from "@/components/ui/multi-select";
 import { getAllTags, createPage, PageCreatePayload, uploadAttachment, AttachmentInfo } from "@/lib/api/api-client";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 // Validation schema
 const createPageSchema = z.object({
@@ -41,8 +39,8 @@ export default function CreatePage() {
   const navigate = useNavigate();
   const [attachments, setAttachments] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch tags for the multi-select
   const { data: allTags, isLoading: isLoadingTags } = useQuery({
     queryKey: ['allTags'],
     queryFn: getAllTags,
@@ -50,16 +48,18 @@ export default function CreatePage() {
 
   const tagOptions: MultiSelectOption[] = allTags ? allTags.map(tag => ({ value: tag.name, label: tag.name })) : [];
   
-  // --- Editor Setup ---
+  // --- Editor and Attachment Setup ---
   const handleFileUpload = async (file: File) => {
     setIsUploading(true);
     try {
+      // Step 1: Immediately start the upload to the server in the background
       const response = await uploadAttachment(file);
       
       const fileType = file.type.startsWith('image/') ? 'image' :
                        file.type.startsWith('video/') ? 'video' :
                        file.type === 'application/pdf' ? 'pdf' : 'file';
 
+      // Step 2: Add the file to our state for the final submission payload
       const newAttachment: UploadedFile = {
         file: file,
         tempId: response.temp_id,
@@ -67,13 +67,29 @@ export default function CreatePage() {
       };
       setAttachments(prev => [...prev, newAttachment]);
 
-      // Insert a placeholder into the editor
+      // --- THIS IS THE FIX ---
+      // Step 3: Decide how to display the attachment in the editor
       if (editor) {
-        editor.chain().focus().setAttachment({
-          'data-file-name': file.name,
-          'data-attachment-type': fileType,
-        }).run();
+        if (fileType === 'image') {
+          // For images, create a local preview and insert it as a visible image
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const src = e.target?.result as string;
+            if (src) {
+              editor.chain().focus().setImage({ src }).run();
+            }
+          };
+          reader.readAsDataURL(file);
+        } else {
+          // For all other file types (PDF, video), insert the generic placeholder
+          editor.chain().focus().setAttachment({
+            'data-file-name': file.name,
+            'data-attachment-type': fileType,
+          }).run();
+        }
       }
+      // --- END OF FIX ---
+
       toast.success("Attachment uploaded successfully.");
 
     } catch (error) {
@@ -83,8 +99,18 @@ export default function CreatePage() {
     }
   };
 
+  const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      handleFileUpload(file);
+    }
+    if (event.target) {
+      event.target.value = "";
+    }
+  };
+
   const editor = useConfiguredEditor("", handleFileUpload);
-  // --- End Editor Setup ---
+  // --- End Setup ---
 
   // Form setup
   const form = useForm<CreatePageFormData>({
@@ -102,7 +128,7 @@ export default function CreatePage() {
     mutationFn: (data: PageCreatePayload) => createPage(data),
     onSuccess: (data) => {
       toast.success("Article submitted for review!");
-      navigate(`/article/${data.id}`);
+      navigate(`/article/${data.id}?status=pending`);
     },
     onError: (error) => {
       toast.error("Submission failed", { description: error.message });
@@ -225,36 +251,50 @@ export default function CreatePage() {
                     Write your article below. You can paste images directly into the editor to upload them.
                   </p>
                   <RichTextEditor editor={editor} />
-                  {isUploading && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Uploading attachment...
-                    </div>
-                  )}
                 </div>
 
-                <Alert>
-                  <Paperclip className="h-4 w-4" />
-                  <AlertTitle>Attachments</AlertTitle>
-                  <AlertDescription>
-                    {attachments.length === 0 ? "No attachments uploaded." : (
-                        <ul className="list-disc pl-5 space-y-1 mt-2">
-                            {attachments.map(att => (
-                                <li key={att.tempId} className="flex justify-between items-center">
-                                    <span>{att.file.name}</span>
-                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => {
-                                        // This just removes from the list. It doesn't delete from the server.
-                                        // Deleting from editor is a separate action.
-                                        setAttachments(prev => prev.filter(a => a.tempId !== att.tempId));
-                                    }}>
-                                        <X className="h-4 w-4" />
-                                    </Button>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                  </AlertDescription>
-                </Alert>
+                <div className="space-y-4">
+                  <FormLabel>Attachments</FormLabel>
+                  {attachments.length > 0 && (
+                    <div className="rounded-md border p-4 space-y-2">
+                      {attachments.map(att => (
+                        <div key={att.tempId} className="flex justify-between items-center text-sm">
+                          <span className="flex items-center gap-2 truncate text-muted-foreground">
+                            <Paperclip className="h-4 w-4 flex-shrink-0" />
+                            <span className="truncate">{att.file.name}</span>
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 flex-shrink-0"
+                            onClick={() => {
+                              setAttachments(prev => prev.filter(a => a.tempId !== att.tempId));
+                              toast.info(`Removed attachment: ${att.file.name}`);
+                            }}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div>
+                    <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+                      {isUploading ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                          <Upload className="mr-2 h-4 w-4" />
+                      )}
+                      Add Attachment
+                    </Button>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+                  </div>
+                </div>
                 
                 <Button type="submit" disabled={mutation.isPending || isUploading}>
                   {(mutation.isPending || isUploading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -268,4 +308,3 @@ export default function CreatePage() {
     </KnowledgeLayout>
   );
 }
-

@@ -1,7 +1,7 @@
 // client/src/pages/ArticlePage.tsx
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Clock, Eye, Calendar, Share, Printer } from "lucide-react";
+import { Clock, Eye, Calendar, Share, Printer, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -18,6 +18,8 @@ import { PdfSlideshow } from "@/components/pdf/PdfSlideshow";
 import { VideoPlayer } from "@/components/video/VideoPlayer";
 import { getColorFromId } from "@/lib/utils/visual-utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useAuth } from "@/context/AuthContext";
 
 interface ArticlePageProps {
   pageId?: string;
@@ -26,7 +28,20 @@ interface ArticlePageProps {
 
 export default function ArticlePage({ pageId: propPageId, isPreviewMode = false }: ArticlePageProps) {
   const params = useParams<{ pageId: string }>();
+  const [searchParams] = useSearchParams();
+  const { isAuthenticated } = useAuth();
+
   const pageId = propPageId || params.pageId;
+  
+  const noticeStatus = searchParams.get('status');
+  const shouldShowNotice = isAuthenticated && (noticeStatus === 'pending' || noticeStatus === 'preview');
+    
+  const noticeContent = {
+      title: noticeStatus === 'pending' ? "Pending Approval" : "Admin Preview Mode",
+      description: noticeStatus === 'pending'
+          ? "This article hasn't been approved by the admin yet, but this is how it will look after it has been approved."
+          : "You are viewing this article in admin preview mode. This content is not yet visible to regular users."
+  };
 
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isHtmlModalOpen, setIsHtmlModalOpen] = useState(false);
@@ -48,14 +63,10 @@ export default function ArticlePage({ pageId: propPageId, isPreviewMode = false 
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = fullHtml;
 
-    // --- THIS IS THE DEFINITIVE FIX ---
-    // Find all image tags and rewrite their src to point to our backend proxy.
-    // This works regardless of whether the original src is relative or absolute.
     const images = tempDiv.getElementsByTagName('img');
     for (let i = 0; i < images.length; i++) {
         const img = images[i];
         const src = img.getAttribute('src');
-        // Check if the src contains the Confluence download path
         if (src && src.includes('/wiki/download/attachments/')) {
             const urlParts = src.split('/');
             const filenameIndex = urlParts.findIndex(part => part === 'attachments') + 2;
@@ -65,7 +76,6 @@ export default function ArticlePage({ pageId: propPageId, isPreviewMode = false 
             }
         }
     }
-    // --- END OF URL REWRITING FIX ---
 
     const blocks: { type: 'html' | 'pdf' | 'video'; content?: string; fileName?: string }[] = [];
     let currentHtml = '';
@@ -77,7 +87,6 @@ export default function ArticlePage({ pageId: propPageId, isPreviewMode = false 
         if (node.nodeType === Node.ELEMENT_NODE) {
             const element = node as HTMLElement;
 
-            // Handle PDF macros
             if (element.matches('div[data-macro-name="viewpdf"]')) {
                 if (currentHtml.trim() !== '') { blocks.push({ type: 'html', content: currentHtml }); currentHtml = ''; }
                 const attachmentName = element.querySelector('div[data-attachment-name]')?.getAttribute('data-attachment-name');
@@ -86,7 +95,6 @@ export default function ArticlePage({ pageId: propPageId, isPreviewMode = false 
                 }
                 nodeHandled = true;
             }
-            // Handle embedded videos
             else if (element.matches('span.confluence-embedded-file-wrapper')) {
                 const link = element.querySelector('a');
                 const href = link?.getAttribute('href') || '';
@@ -196,6 +204,15 @@ export default function ArticlePage({ pageId: propPageId, isPreviewMode = false 
   return (
     <KnowledgeLayout breadcrumbs={breadcrumbs}>
       <div className="max-w-4xl mx-auto">
+        {shouldShowNotice && (
+            <Alert className="mb-8 border-yellow-300 bg-yellow-50 text-yellow-900 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
+                <Info className="h-4 w-4" />
+                <AlertTitle>{noticeContent.title}</AlertTitle>
+                <AlertDescription className="italic">
+                    {noticeContent.description}
+                </AlertDescription>
+            </Alert>
+        )}
         {renderContent()}
       </div>
        {!isPreviewMode && (

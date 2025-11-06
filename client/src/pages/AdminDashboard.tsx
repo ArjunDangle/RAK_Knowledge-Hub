@@ -1,7 +1,8 @@
 // client/src/pages/AdminDashboard.tsx
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle, XCircle, FileClock, Loader2, Eye } from "lucide-react";
+import { CheckCircle, XCircle, FileClock, Loader2, Eye, ExternalLink } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 import { KnowledgeLayout } from "./KnowledgeLayout";
 import { getPendingArticles, approveArticle, rejectArticle } from "@/lib/api/api-client";
@@ -13,12 +14,12 @@ import { toast } from "@/components/ui/sonner";
 import { formatRelativeTime } from "@/lib/utils/date";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import ArticlePage from "./ArticlePage";
-import { Textarea } from "@/components/ui/textarea"; // <-- Import Textarea
-import { Label } from "@/components/ui/label"; // <-- Import Label
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 export default function AdminDashboard() {
     const [reviewingArticle, setReviewingArticle] = useState<Article | null>(null);
-    const [rejectionComment, setRejectionComment] = useState(""); // <-- State for the comment
+    const [rejectionComment, setRejectionComment] = useState("");
     const queryClient = useQueryClient();
     
     const { data: pendingArticles, isLoading } = useQuery({
@@ -26,7 +27,6 @@ export default function AdminDashboard() {
         queryFn: getPendingArticles,
     });
     
-    // --- NEW: Optimistic update handler ---
     const onActionSuccess = (pageId: string, message: string) => {
         toast.success(message);
         queryClient.setQueryData(['pendingArticles'], (oldData: Article[] | undefined) => {
@@ -63,7 +63,7 @@ export default function AdminDashboard() {
     
     const handleCloseModal = () => {
         setReviewingArticle(null);
-        setRejectionComment(""); // Clear comment on close
+        setRejectionComment("");
     };
 
     const breadcrumbs = [{ label: "Admin Dashboard" }];
@@ -128,16 +128,25 @@ export default function AdminDashboard() {
 
             <Dialog open={!!reviewingArticle} onOpenChange={(isOpen) => !isOpen && handleCloseModal()}>
                 <DialogContent className="max-w-6xl h-[95vh] flex flex-col p-0">
-                    <DialogHeader className="p-6 pb-2">
-                        <DialogTitle>Article Preview</DialogTitle>
-                        <DialogDescription>Review the article content. You can approve it directly or add comments before rejecting.</DialogDescription>
+                    <DialogHeader className="p-6 pb-2 flex-row items-start justify-between">
+                        <div>
+                            <DialogTitle>Article Preview</DialogTitle>
+                            <DialogDescription>Review the article content. You can approve it directly or add comments before rejecting.</DialogDescription>
+                        </div>
+                        {reviewingArticle && (
+                            <Button variant="outline" size="sm" asChild>
+                                <a href={`/article/${reviewingArticle.id}?status=preview`} target="_blank" rel="noopener noreferrer">
+                                    <ExternalLink className="h-4 w-4 mr-2" />
+                                    Preview in Full Page
+                                </a>
+                            </Button>
+                        )}
                     </DialogHeader>
                     <div className="flex-1 overflow-y-auto px-1">
                         {reviewingArticle && (
                             <ArticlePage pageId={reviewingArticle.id} isPreviewMode={true} />
                         )}
                     </div>
-                    {/* --- NEW COMMENT SECTION --- */}
                     <DialogFooter className="p-6 bg-muted/50 border-t flex-col sm:flex-col md:flex-row items-start md:items-center">
                         <div className="w-full space-y-2">
                            <Label htmlFor="rejection-comment">Rejection Comments (Required to Reject)</Label>

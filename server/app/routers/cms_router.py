@@ -65,13 +65,13 @@ async def upload_attachment_endpoint(file: UploadFile = File(...)):
     response_model=List[PageTreeNode],
     dependencies=[Depends(get_current_user)]
 )
-def get_page_tree_structure(parent_id: Optional[str] = Query(None)):
+async def get_page_tree_structure(parent_id: Optional[str] = Query(None)):
     """
-    Fetches the page hierarchy in a tree structure for the CMS.
+    Fetches the page hierarchy in a tree structure for the CMS from the local database.
     - If `parent_id` is not provided, returns the top-level root pages.
     - If `parent_id` is provided, returns the direct children of that page.
     """
-    return confluence_service.get_page_tree(parent_id)
+    return await confluence_service.get_page_tree(parent_id)
 
 @router.post(
     "/pages/create", 
@@ -149,7 +149,7 @@ async def get_article_preview_endpoint(page_id: str):
 )
 async def get_pages_pending_review():
     """Fetches all submissions pending review."""
-    return await confluence_service.get_pending_submissions_from_db()
+    return await confluence_service.get_pending_submissions()
 
 @router.post(
     "/admin/pages/{page_id}/approve", 
@@ -207,7 +207,7 @@ async def resubmit_page_endpoint(
         )
     # --- END UPDATED SECTION ---
 
-    success = await confluence_service.resubmit_page_for_review(page_id)
+    success = await confluence_service.resubmit_page_for_review(page_id, current_user.name)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to resubmit page.")
     return

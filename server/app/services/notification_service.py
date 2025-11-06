@@ -27,7 +27,7 @@ class NotificationService:
 
     async def _get_admin_ids(self) -> List[int]:
         """Fetches all admin user IDs."""
-        admins = await self.db.user.find_many(where={'role': 'ADMIN'}, select={'id': True})
+        admins = await self.db.user.find_many(where={'role': 'ADMIN'})
         return [admin.id for admin in admins]
 
     async def _notify_user(self, user_id: int, message: str, link: str):

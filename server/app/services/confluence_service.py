@@ -1,12 +1,12 @@
 # server/app/services/confluence_service.py
 import re
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Union
 from bs4 import BeautifulSoup
 from fastapi import HTTPException, status
 from fastapi.responses import StreamingResponse
 
 from app.config import Settings
-from app.schemas.content_schemas import Article, Tag, Subsection, GroupInfo, PageContentItem, Ancestor
+from app.schemas.content_schemas import Article, Tag, Subsection, GroupInfo, PageContentItem, Ancestor, PageTreeNode
 from app.schemas.cms_schemas import PageCreate, PageUpdate, ContentNode
 from app.schemas.cms_schemas import ArticleSubmissionStatus
 from app.utils.html_translator import html_to_storage_format
@@ -39,7 +39,7 @@ class ConfluenceService:
 
     # --- Utility & Transformation Methods ---
 
-    async def _slugify(self, text: str) -> str:
+    def _slugify(self, text: str) -> str:
         """Creates a URL-friendly slug from text."""
         text = text.lower()
         text = re.sub(r'[\s_&]+', '-', text)
@@ -52,14 +52,18 @@ class ConfluenceService:
         soup = BeautifulSoup(html_content, 'html.parser')
         return soup.get_text(" ", strip=True)
         
-    def _get_group_from_ancestors(self, ancestors: List[Ancestor]) -> str:
-        """Finds the root-level group (e.g., 'departments') from an ancestor list."""
+    def _get_group_from_ancestors(self, ancestors: List[Union[Ancestor, Dict[str, Any]]]) -> str:
+        """
+        Finds the root-level group from an ancestor list.
+        Handles both Pydantic 'Ancestor' objects (from DB) and dicts (from Confluence API).
+        """
         for ancestor in ancestors:
-            if ancestor.id in self.id_to_group_slug_map:
-                return self.id_to_group_slug_map[ancestor.id]
+            ancestor_id = ancestor['id'] if isinstance(ancestor, dict) else ancestor.id
+            if ancestor_id in self.id_to_group_slug_map:
+                return self.id_to_group_slug_map[ancestor_id]
         return "unknown" # Fallback
 
-    def _transform_raw_page_to_article(self, page_data: dict, is_admin_view: bool = False) -> Optional[Article]:
+    async def _transform_raw_page_to_article(self, page_data: dict, is_admin_view: bool = False) -> Optional[Article]:
         """
         Transforms a raw Confluence page dictionary (from ConfluenceRepository)
         into a validated Article schema.
@@ -139,30 +143,25 @@ class ConfluenceService:
         Fetches paginated contents (children) of a given parent page
         directly from the local database via the PageRepository.
         """
-        # --- FIX: Get parent page details to determine group and subsection slugs ---
-        parent_page = await self.page_repo.get_page_by_id(parent_confluence_id)
-        if not parent_page:
-            raise HTTPException(status_code=404, detail="Parent page not found")
-
-        ancestors = await self.page_repo.get_ancestors_from_db(parent_page)
-        group_slug = self._get_group_from_ancestors(ancestors)
-        subsection_slug = parent_page.slug # The parent *is* the subsection
-        # --- END FIX ---
-
-        paginated_result = await self.page_repo.get_paginated_children(parent_confluence_id, page, page_size)
-
-        # Format the paginated items
-        formatted_items = []
-        for item in paginated_result["items"]:
-            if item.pageType == PageType.SUBSECTION:
-                # Pass empty HTML for list view
-                formatted_items.append(await self.page_repo._format_page_as_subsection(item, group_slug, ""))
-            else:
-                # Pass correct group and subsection slug
-                formatted_items.append(await self.page_repo._format_page_as_article(item, group_slug, subsection_slug))
-        
-        paginated_result["items"] = formatted_items
-        return paginated_result
+        try:
+            parent_page = await self.page_repo.get_page_by_id(parent_confluence_id)
+            if not parent_page:
+                raise HTTPException(status_code=404, detail="Parent page not found")
+                
+            ancestors = await self.page_repo.get_ancestors_from_db(parent_page)
+            group_slug = self._get_group_from_ancestors(ancestors)
+            
+            return await self.page_repo.get_paginated_children(
+                parent_confluence_id=parent_confluence_id,
+                page=page,
+                page_size=page_size,
+                group_slug=group_slug
+            )
+        except HTTPException as e:
+            raise e
+        except Exception as e:
+            print(f"Error in get_page_contents router: {e}")
+            raise HTTPException(status_code=500, detail="Failed to fetch page contents.")
 
     async def get_article_by_id_hybrid(self, page_id: str) -> Optional[Article]:
         """
@@ -203,7 +202,7 @@ class ConfluenceService:
             html=html_content,
             tags=[Tag.model_validate(t.model_dump()) for t in page_metadata.tags],
             group=group_slug,
-            subsection=await self._slugify(subsection_slug), # Slugify the title
+            subsection=self._slugify(subsection_slug), # Slugify the title
             updatedAt=page_metadata.updatedAt.isoformat(),
             views=page_metadata.views,
             readMinutes=read_minutes,
@@ -342,7 +341,7 @@ class ConfluenceService:
             page = await self.page_repo.create_page(
                 confluence_id=page_id,
                 title=page_data.title,
-                slug=await self._slugify(page_data.title),
+                slug=self._slugify(page_data.title),
                 description=page_data.description,
                 page_type=PageType.ARTICLE, # New pages are always articles
                 parent_confluence_id=page_data.parent_id,
@@ -434,8 +433,8 @@ class ConfluenceService:
         page_data = self.confluence_repo.get_page_by_id(page_id, expand="body.view,version,metadata.labels,ancestors")
         if not page_data:
             return None
-        # This old transform is fine for a preview, as it's not tied to our DB
-        return self._transform_raw_page_to_article(page_data, is_admin_view=True)
+        # Use await here because the transform method is now async
+        return await self._transform_raw_page_to_article(page_data, is_admin_view=True)
 
     async def get_pending_submissions(self) -> List[Article]:
         """Fetches pending submissions from the DB and formats them as Articles."""
@@ -448,7 +447,7 @@ class ConfluenceService:
                 "title": sub.title,
                 "author": sub.author.name if sub.author else "Unknown",
                 "updatedAt": sub.updatedAt.isoformat(),
-                "slug": await self._slugify(sub.title),
+                "slug": self._slugify(sub.title),
                 "excerpt": "Content available for preview.",
                 "description": "Content available for preview.",
                 "html": "", "tags": [], "group": "unknown", "subsection": "unknown",
@@ -610,6 +609,13 @@ class ConfluenceService:
         except Exception as e:
             print(f"Error fetching page tree for parent {parent_id}: {e}")
             raise HTTPException(status_code=503, detail="Could not fetch page hierarchy.")
+    
+    async def get_page_tree(self, parent_id: Optional[str] = None) -> List[PageTreeNode]:
+        """
+        Orchestrates fetching the page hierarchy for the CMS tree select
+        by calling the page repository, which uses the local database.
+        """
+        return await self.page_repo.get_tree_nodes_by_parent_id(parent_id)
 
     async def get_content_index_nodes(self, parent_id: Optional[str] = None) -> List[ContentNode]:
         """
