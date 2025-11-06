@@ -122,14 +122,14 @@ class ConfluenceRepository:
             print(f"Error creating Confluence page: {e}")
             raise
 
-    def update_page(self, page_id: str, title: str, content_storage_format: str, current_version_number: int, version_comment: str) -> Dict[str, Any]:
+    def update_page(self, page_id: str, title: str, body: str, current_version_number: int, version_comment: str, parent_id: Optional[str] = None) -> Dict[str, Any]:
         """Updates an existing page in Confluence."""
         try:
             updated_page = self.confluence.update_page(
                 page_id=page_id,
                 title=title,
-                body=content_storage_format,
-                parent_id=None, # Not changing parent
+                body=body, # The content is passed via this parameter.
+                parent_id=parent_id,
                 version_comment=version_comment,
                 representation='storage'
             )

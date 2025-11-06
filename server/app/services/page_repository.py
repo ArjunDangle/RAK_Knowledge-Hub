@@ -237,17 +237,38 @@ class PageRepository:
         title: str,
         slug: str,
         description: str,
-        updated_at_str: str
+        updated_at_str: str,
+        parent_id: Optional[str] = None,
+        tag_names: Optional[List[str]] = None
     ) -> PageModel:
-        """Updates the metadata of an existing Page record."""
+        """Updates the metadata of an existing Page record, including tags and parent."""
+        
+        update_data = {
+            'title': title,
+            'slug': slug,
+            'description': description,
+            'updatedAt': updated_at_str,
+            'parentConfluenceId': parent_id,
+        }
+
+        if tag_names is not None:
+            tag_connect_ops = []
+            for tag_name in tag_names:
+                tag_slug = self._slugify(tag_name)
+                tag = await self.db.tag.upsert(
+                    where={'name': tag_name},
+                    data={
+                        'create': {'name': tag_name, 'slug': tag_slug},
+                        'update': {'slug': tag_slug}
+                    }
+                )
+                tag_connect_ops.append({'id': tag.id})
+            # 'set' will disconnect old tags and connect the new list
+            update_data['tags'] = {'set': tag_connect_ops}
+
         return await self.db.page.update(
             where={'confluenceId': confluence_id},
-            data={
-                'title': title,
-                'slug': slug,
-                'description': description,
-                'updatedAt': updated_at_str,
-            }
+            data=update_data
         )
 
     async def sync_page_from_confluence_data(

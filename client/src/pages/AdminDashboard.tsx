@@ -1,6 +1,6 @@
 // client/src/pages/AdminDashboard.tsx
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle, XCircle, FileClock, Loader2, Eye, ExternalLink } from "lucide-react";
+import { CheckCircle, XCircle, FileClock, Loader2, Eye, ExternalLink, Edit } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -106,6 +106,11 @@ export default function AdminDashboard() {
                                             <TableCell>{article.author || 'N/A'}</TableCell>
                                             <TableCell>{formatRelativeTime(article.updatedAt)}</TableCell>
                                             <TableCell className="text-right space-x-2">
+                                            <Button variant="outline" size="sm" asChild>
+                                                    <Link to={`/admin/edit/${article.id}`}>
+                                                        <Edit className="h-4 w-4 mr-2" />Edit
+                                                    </Link>
+                                                </Button>
                                                 <Button variant="outline" size="sm" onClick={() => setReviewingArticle(article)}>
                                                     <Eye className="h-4 w-4 mr-2" />Review
                                                 </Button>

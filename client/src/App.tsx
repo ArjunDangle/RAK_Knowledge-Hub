@@ -14,10 +14,11 @@ import ScrollToTop from "./components/ScrollToTop";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/LoginPage";
 import CreatePage from "./pages/CreatePage";
-import EditPage from "./pages/EditPage"; // <-- STEP 2.1: IMPORT ADDED
+import EditPage from "./pages/EditPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import MySubmissionsPage from "./pages/MySubmissionsPage";
 import AdminIndexPage from "./pages/AdminIndexPage";
+import AdminEditPage from "./pages/AdminEditPage";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -77,6 +78,7 @@ const App = () => (
             <Route element={<AdminRoute />}>
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
               <Route path="/admin/content-index" element={<AdminIndexPage />} />
+              <Route path="/admin/edit/:pageId" element={<AdminEditPage />} />
             </Route>
 
             {/* Not Found Route */}

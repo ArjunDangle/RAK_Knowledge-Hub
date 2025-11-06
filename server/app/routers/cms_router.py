@@ -91,6 +91,24 @@ async def create_page(
         )
     return created_page
 
+@router.get(
+    "/admin/edit-details/{page_id}",
+    response_model=cms_schemas.PageDetailResponse,
+    dependencies=[Depends(get_current_admin_user)]
+)
+async def get_page_details_for_edit_endpoint(page_id: str):
+    """
+    Fetches the combined data for a page from both the DB and Confluence,
+    for populating the admin edit form.
+    """
+    page_details = await confluence_service.get_page_details_for_edit(page_id)
+    if not page_details:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Details for page with ID '{page_id}' could not be found."
+        )
+    return page_details
+
 @router.put(
     "/pages/update/{page_id}",
     status_code=status.HTTP_204_NO_CONTENT
@@ -117,7 +135,7 @@ async def update_page_endpoint(
         )
 
     # Call the service to perform the update
-    success = await confluence_service.update_page(page_id, page_data)
+    success = await confluence_service.update_page(page_id, page_data, current_user.name)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

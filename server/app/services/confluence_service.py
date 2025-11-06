@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 
 from app.config import Settings
 from app.schemas.content_schemas import Article, Tag, Subsection, GroupInfo, PageContentItem, Ancestor, PageTreeNode
-from app.schemas.cms_schemas import PageCreate, PageUpdate, ContentNode
+from app.schemas.cms_schemas import PageCreate, PageUpdate, ContentNode, PageDetailResponse
 from app.schemas.cms_schemas import ArticleSubmissionStatus
 from app.utils.html_translator import html_to_storage_format
 from prisma.enums import PageType
@@ -381,18 +381,41 @@ class ConfluenceService:
                     print(f"Failed to clean up draft page {page_id}: {cleanup_e}")
             if isinstance(e, HTTPException): raise e
             raise HTTPException(status_code=503, detail="Failed to create page.")
-
-    async def update_page(self, page_id: str, page_data: PageUpdate) -> bool:
+    
+    async def get_page_details_for_edit(self, page_id: str) -> Optional[PageDetailResponse]:
         """
-        Orchestrates updating a page.
-        1. Update in Confluence -> 2. Sync metadata to local DB
+        Gathers all necessary data for the admin edit page.
+        - Fetches live content from Confluence.
+        - Fetches metadata (tags, parent) from the local database.
+        """
+        # 1. Fetch live content from Confluence for accuracy
+        # Note: We fetch 'storage' format because that's what Tiptap works with best.
+        page_from_confluence = self.confluence_repo.get_page_by_id(page_id, expand="body.storage")
+        if not page_from_confluence:
+            return None
+        
+        # 2. Fetch metadata from our fast local DB
+        page_from_db = await self.page_repo.get_page_by_id(page_id)
+        if not page_from_db:
+            return None
+
+        return PageDetailResponse(
+            title=page_from_db.title,
+            description=page_from_db.description,
+            content=page_from_confluence.get("body", {}).get("storage", {}).get("value", ""),
+            parent_id=page_from_db.parentConfluenceId,
+            tags=[tag.name for tag in page_from_db.tags]
+        )
+
+    async def update_page(self, page_id: str, page_data: PageUpdate, author_name: str) -> bool:
+        """
+        Orchestrates updating a page with expanded capabilities for admins.
         """
         try:
             # 1. Convert HTML and update in Confluence
             translated_content = html_to_storage_format(page_data.content)
             
-            # Get current version number
-            current_page_data = self.confluence_repo.get_page_by_id(page_id, expand="version")
+            current_page_data = self.confluence_repo.get_page_by_id(page_id, expand="version,metadata.labels")
             if not current_page_data:
                  raise HTTPException(status_code=404, detail="Page to update not found in Confluence.")
             current_version = current_page_data["version"]["number"]
@@ -400,25 +423,40 @@ class ConfluenceService:
             updated_page_data = self.confluence_repo.update_page(
                 page_id=page_id,
                 title=page_data.title,
-                content_storage_format=translated_content,
-                current_version_number=current_version + 1,
-                version_comment="Content updated via Knowledge Hub portal"
+                body=translated_content, # Pass content as 'body'
+                parent_id=page_data.parent_id,
+                current_version_number=current_page_data["version"]["number"] + 1,
+                version_comment=f"Content updated by {author_name} via Knowledge Hub portal"
             )
             if not updated_page_data:
                 raise HTTPException(status_code=500, detail="Failed to update page in Confluence.")
             
             updated_at_str = updated_page_data["version"]["when"]
 
-            # 2. Update the local Page record
+            # 2. Update the local Page record with all new metadata
             await self.page_repo.update_page_metadata(
                 confluence_id=page_id,
                 title=page_data.title,
-                slug=await self._slugify(page_data.title),
+                slug=self._slugify(page_data.title),
                 description=page_data.description,
-                updated_at_str=updated_at_str
+                updated_at_str=updated_at_str,
+                parent_id=page_data.parent_id,
+                tag_names=page_data.tags
             )
 
-            # 3. Also update the submission record's title
+            # 3. Sync labels/tags in Confluence
+            existing_labels = {l['name'] for l in current_page_data.get("metadata", {}).get("labels", {}).get("results", []) if not l['name'].startswith('status-')}
+            new_tags = set(page_data.tags)
+            
+            tags_to_add = new_tags - existing_labels
+            tags_to_remove = existing_labels - new_tags
+
+            for tag in tags_to_add:
+                self.confluence_repo.add_label(page_id, tag)
+            for tag in tags_to_remove:
+                self.confluence_repo.remove_label(page_id, tag)
+
+            # 4. Also update the submission record's title
             await self.submission_repo.update_title(page_id, page_data.title)
             return True
         except Exception as e:

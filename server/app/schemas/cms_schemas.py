@@ -60,3 +60,17 @@ ContentNode.model_rebuild()
 class AttachmentResponse(BaseModel):
     temp_id: str
     file_name: str
+
+class PageDetailResponse(BaseModel):
+    title: str
+    description: str
+    content: str
+    parent_id: Optional[str] = None
+    tags: List[str] = []
+
+class PageUpdate(BaseModel):
+    title: str
+    description: str
+    content: str
+    parent_id: Optional[str] = None
+    tags: List[str] = []
