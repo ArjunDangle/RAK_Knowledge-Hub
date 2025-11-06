@@ -12,6 +12,13 @@ class SubmissionRepository:
     
     def __init__(self):
         self.db = db
+    
+    async def get_by_confluence_id_with_author(self, confluence_id: str) -> Optional[ArticleSubmission]:
+        """Fetches a submission by its Confluence ID and includes the author's details."""
+        return await self.db.articlesubmission.find_unique(
+            where={'confluencePageId': confluence_id},
+            include={'author': True}
+        )
 
     async def get_by_confluence_id(self, confluence_id: str) -> Optional[ArticleSubmission]:
         """Fetches a submission by its associated Confluence Page ID."""

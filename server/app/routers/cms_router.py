@@ -246,3 +246,15 @@ async def delete_page_permanently_endpoint(page_id: str):
             detail="Failed to delete the page from Confluence or the local database."
         )
     return
+
+@router.get(
+    "/admin/content-index/search",
+    response_model=List[ContentNode],
+    dependencies=[Depends(get_current_admin_user)]
+)
+async def search_content_index_endpoint(query: str = Query(..., min_length=2)):
+    """
+    Searches the content index for pages matching the query and returns a flat list.
+    """
+    return await confluence_service.search_content_index(query)
+

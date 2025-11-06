@@ -1,14 +1,15 @@
 // client/src/pages/AdminIndexPage.tsx
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { KnowledgeLayout } from "./KnowledgeLayout";
-import { getContentIndex, ContentNode, ArticleSubmissionStatus } from "@/lib/api/api-client";
+import { getContentIndex, ContentNode, ArticleSubmissionStatus, searchContentIndex } from "@/lib/api/api-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ServerCrash } from "lucide-react";
 import { ContentIndexNode } from "@/components/cms/ContentIndexNode";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useDebounce } from "@/hooks/useDebounce";
 
 const TableHeader = () => (
     <div className="flex items-center border-b font-semibold text-sm text-muted-foreground px-2 py-2 bg-muted/50 rounded-t-md">
@@ -28,32 +29,30 @@ export default function AdminIndexPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [statusFilter, setStatusFilter] = useState<ArticleSubmissionStatus | "ALL">("ALL");
 
-    // --- FIX: ONLY FETCH THE ROOT NODES INITIALLY ---
-    const { data: contentTree, isLoading, isError, error } = useQuery<ContentNode[]>({
+    // Debounce search term to prevent API calls on every keystroke
+    const debouncedSearchTerm = useDebounce(searchTerm, 300);
+
+    // Query for the hierarchical tree (only runs when search is empty)
+    const { data: contentTree, isLoading: isTreeLoading, isError, error } = useQuery<ContentNode[]>({
         queryKey: ['contentIndex', 'root'],
-        queryFn: () => getContentIndex(), // Fetch without a parentId to get the top level
+        queryFn: () => getContentIndex(),
+        enabled: debouncedSearchTerm.length === 0,
+    });
+    
+    // Query for the flattened search results (only runs when user is searching)
+    const { data: searchResults, isLoading: isSearchLoading } = useQuery<ContentNode[]>({
+        queryKey: ['contentIndexSearch', debouncedSearchTerm],
+        queryFn: () => searchContentIndex(debouncedSearchTerm),
+        enabled: debouncedSearchTerm.length > 1,
     });
 
-    // This filter now only applies to the nodes currently loaded in the UI
-    const filteredTree = useMemo(() => {
-        if (!contentTree) return [];
+    const isLoading = isTreeLoading || isSearchLoading;
+    const isSearching = debouncedSearchTerm.length > 1;
 
-        const filterNodes = (nodes: ContentNode[]): ContentNode[] => {
-            return nodes.map(node => {
-                const filteredChildren = node.children ? filterNodes(node.children) : [];
-                const titleMatch = node.title.toLowerCase().includes(searchTerm.toLowerCase());
-                const statusMatch = statusFilter === "ALL" || node.status === statusFilter;
-                if ((titleMatch && statusMatch) || filteredChildren.length > 0) {
-                    return { ...node, children: filteredChildren };
-                }
-                return null;
-            }).filter((node): node is ContentNode => node !== null);
-        };
-        // Note: For a pure lazy-loaded approach, filtering would be done on the server.
-        // This client-side approach will only filter the nodes that have been expanded.
-        return filterNodes(contentTree);
-    }, [contentTree, searchTerm, statusFilter]);
-
+    // Filter results on the client-side *after* fetching
+    const displayData = (isSearching ? searchResults : contentTree)?.filter(node => 
+        statusFilter === 'ALL' || node.status === statusFilter
+    );
 
     return (
         <KnowledgeLayout breadcrumbs={breadcrumbs}>
@@ -92,20 +91,26 @@ export default function AdminIndexPage() {
                             {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
                         </div>
                     )}
-                    {isError && (
+                    {isError && !isSearching && (
                         <div className="p-4">
                             <Alert variant="destructive">
                                 <ServerCrash className="h-4 w-4" />
                                 <AlertTitle>Failed to load content index</AlertTitle>
-                                <AlertDescription>{error.message}</AlertDescription>
+                                <AlertDescription>{error?.message}</AlertDescription>
                             </Alert>
                         </div>
                     )}
-                    {filteredTree && (
+                    {displayData && displayData.length > 0 ? (
                         <div className="p-2">
-                            {filteredTree.map(rootNode => (
-                                <ContentIndexNode key={rootNode.id} node={rootNode} level={0} />
+                            {displayData.map(node => (
+                                // When searching, we render a flat list. The `ContentIndexNode` still works,
+                                // but its expand functionality won't be used since children are not loaded.
+                                <ContentIndexNode key={node.id} node={node} level={0} />
                             ))}
+                        </div>
+                    ) : !isLoading && (
+                         <div className="p-8 text-center text-muted-foreground">
+                            No content found matching your criteria.
                         </div>
                     )}
                 </div>

@@ -594,23 +594,30 @@ class ConfluenceService:
     
     async def delete_page_permanently(self, page_id: str) -> bool:
         """
-        Orchestrates deleting a page.
-        1. Delete from Confluence -> 2. Delete submission from local DB
+        Orchestrates deleting a page completely.
+        1. Delete from Confluence.
+        2. Delete submission record from local DB.
+        3. Delete page record from local DB.
         """
         try:
-            # 1. Delete from Confluence
+            # Step 1: Delete the page from Confluence
             self.confluence_repo.delete_page(page_id)
             
-            # 2. Delete submission from local DB
-            # The Page record itself is deleted via cascading delete in the DB
+            # Step 2: Delete the associated submission record from our database.
+            # This must happen before deleting the Page record due to foreign key constraints.
             await self.submission_repo.delete_by_confluence_id(page_id)
+
+            # Step 3: Delete the main Page record from our database.
+            await self.page_repo.delete_by_confluence_id(page_id)
+            
             return True
         except Exception as e:
             print(f"Error during permanent deletion of page {page_id}: {e}")
-            # If deletion failed, the data is now out of sync.
-            # A more robust system might re-try or flag for admin attention.
-            if isinstance(e, HTTPException): raise e
-            raise HTTPException(status_code=503, detail="Failed to delete the page.")
+            # This exception will now correctly report the original Confluence error
+            # on the second attempt, but will also catch any DB errors.
+            if isinstance(e, HTTPException):
+                raise e
+            raise HTTPException(status_code=503, detail=str(e))
 
     def get_page_tree(self, parent_id: Optional[str] = None) -> List[Dict]:
         """
@@ -657,52 +664,76 @@ class ConfluenceService:
 
     async def get_content_index_nodes(self, parent_id: Optional[str] = None) -> List[ContentNode]:
         """
-        Fetches nodes for the admin content index page.
-        This is a hybrid query: gets hierarchy from Confluence,
-        but submission status/author from the local DB.
+        Fetches nodes for the admin content index page entirely from the local database.
         """
         nodes = []
-        page_ids_to_fetch = []
-        try:
-            if parent_id is None:
-                page_ids_to_fetch = list(self.root_page_ids.values())
-            else:
-                child_pages = self.confluence_repo.get_child_pages(parent_id, limit=200)
-                page_ids_to_fetch = [child['id'] for child in child_pages]
-        except Exception as e:
-            print(f"Error fetching page hierarchy for parent {parent_id}: {e}")
-            raise HTTPException(status_code=503, detail="Could not fetch page hierarchy.")
+        
+        # 1. Get the relevant pages from our database
+        child_pages_from_db = await self.page_repo.get_child_pages_for_index(parent_id)
 
-        for page_id in page_ids_to_fetch:
+        for page in child_pages_from_db:
             try:
-                page_details = self.confluence_repo.get_page_by_id(page_id, expand="version")
-                if not page_details: 
-                    continue
-
-                grand_children = self.confluence_repo.get_child_pages(page_id, limit=1)
-                has_children = len(grand_children) > 0
+                # 2. Check if this page has children in our database
+                has_children = await self.page_repo.has_children(page.confluenceId)
                 
-                # Get submission status and author from our local DB
-                submission = await self.submission_repo.get_by_confluence_id_with_author(page_id)
+                # 3. Get submission status and author from our database
+                submission = await self.submission_repo.get_by_confluence_id_with_author(page.confluenceId)
                 
-                author_name, status = "System", ArticleSubmissionStatus.PUBLISHED
+                # Default to 'Published' if no submission record exists (for imported pages)
+                author_name, status = page.authorName or "System", ArticleSubmissionStatus.PUBLISHED
                 if submission:
                     if submission.author:
                         author_name = submission.author.name
                     status = submission.status
                 
+                # 4. Construct the response node
                 nodes.append(ContentNode(
-                    id=page_id, 
-                    title=page_details['title'], 
+                    id=page.confluenceId, 
+                    title=page.title, 
                     author=author_name, 
                     status=status, 
-                    updatedAt=page_details['version']['when'], 
-                    confluenceUrl=f"{self.settings.confluence_url}/spaces/{self.settings.confluence_space_key}/pages/{page_id}", 
+                    updatedAt=page.updatedAt, 
+                    confluenceUrl=f"{self.settings.confluence_url}/spaces/{self.settings.confluence_space_key}/pages/{page.confluenceId}", 
                     children=[], 
                     hasChildren=has_children
                 ))
             except Exception as e:
-                print(f"Error processing node for page {page_id}: {e}")
+                print(f"Error processing DB node for page {page.confluenceId}: {e}")
                 
-        return sorted(nodes, key=lambda x: x.title)
+        return nodes
+    
+    async def search_content_index(self, search_term: str) -> List[ContentNode]:
+        """
+        Searches for content index nodes by title from the local database
+        and returns a flattened list.
+        """
+        if not search_term or len(search_term) < 2:
+            return []
 
+        nodes = []
+        searched_pages = await self.page_repo.search_pages_for_index(search_term)
+
+        for page in searched_pages:
+            try:
+                has_children = await self.page_repo.has_children(page.confluenceId)
+                submission = await self.submission_repo.get_by_confluence_id_with_author(page.confluenceId)
+                
+                author_name, status = page.authorName or "System", ArticleSubmissionStatus.PUBLISHED
+                if submission:
+                    author_name = submission.author.name if submission.author else "Unknown"
+                    status = submission.status
+                
+                nodes.append(ContentNode(
+                    id=page.confluenceId, 
+                    title=page.title, 
+                    author=author_name, 
+                    status=status, 
+                    updatedAt=page.updatedAt, 
+                    confluenceUrl=f"{self.settings.confluence_url}/spaces/{self.settings.confluence_space_key}/pages/{page.confluenceId}", 
+                    children=[], 
+                    hasChildren=has_children
+                ))
+            except Exception as e:
+                print(f"Error processing searched DB node for page {page.confluenceId}: {e}")
+                
+        return nodes

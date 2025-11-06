@@ -269,3 +269,9 @@ import { SearchFilters, Article, Subsection, UpdateEntry,
  export async function deletePage(pageId: string): Promise<void> {
    return apiFetch(`/cms/admin/pages/${pageId}`, { method: 'DELETE' });
   }
+
+  // Add this function within the 'CMS & ADMIN FUNCTIONS' section
+export async function searchContentIndex(query: string): Promise<ContentNode[]> {
+  if (query.length < 2) return [];
+  return apiFetch<ContentNode[]>(`/cms/admin/content-index/search?query=${encodeURIComponent(query)}`);
+}

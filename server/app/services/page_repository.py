@@ -342,3 +342,38 @@ class PageRepository:
             )
             
         return nodes_to_return
+    
+    async def get_child_pages_for_index(self, parent_id: Optional[str]) -> List[PageModel]:
+        """Fetches child pages from the local DB for building the content index."""
+        return await self.db.page.find_many(
+            where={'parentConfluenceId': parent_id},
+            order={'title': 'asc'}
+        )
+
+    async def has_children(self, page_id: str) -> bool:
+        """Checks if a page has any children in the local DB."""
+        count = await self.db.page.count(
+            where={'parentConfluenceId': page_id}
+        )
+        return count > 0
+    
+    async def delete_by_confluence_id(self, confluence_id: str) -> Optional[PageModel]:
+        """Deletes a Page record by its Confluence Page ID."""
+        # Use find_unique first to handle cases where it might already be deleted
+        existing_page = await self.db.page.find_unique(where={'confluenceId': confluence_id})
+        if existing_page:
+            return await self.db.page.delete(where={'confluenceId': confluence_id})
+        return None
+    
+    async def search_pages_for_index(self, search_term: str) -> List[PageModel]:
+        """Searches for pages by title for the content index."""
+        return await self.db.page.find_many(
+            where={
+                'title': {
+                    'contains': search_term,
+                    'mode': 'insensitive' # This makes the search case-insensitive
+                }
+            },
+            include=self._page_include,
+            order={'title': 'asc'}
+        )

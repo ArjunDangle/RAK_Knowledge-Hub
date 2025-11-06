@@ -92,17 +92,27 @@ class ConfluenceRepository:
             print(f"Error fetching content for page {page_id}: {e}")
             raise HTTPException(status_code=503, detail=f"Could not fetch content for page {page_id}.")
 
-    def get_child_pages(self, page_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    def get_child_pages(self, page_id: str) -> List[Dict[str, Any]]:
         """Fetches the immediate children of a page."""
         try:
-            return list(self.confluence.get_child_pages(page_id, limit=limit))
+            # The atlassian-python-api's get_child_pages method does not take a limit argument.
+            # It returns a generator that we convert to a list.
+            return list(self.confluence.get_child_pages(page_id))
         except Exception as e:
             print(f"Error fetching children for page {page_id}: {e}")
             return []
 
     def check_has_children(self, page_id: str) -> bool:
         """Checks if a page has any children."""
-        return len(self.get_child_pages(page_id, limit=1)) > 0
+        try:
+            # Get the generator for child pages.
+            child_pages_generator = self.confluence.get_child_pages(page_id)
+            # Try to get the first item from the generator. If it exists, the page has children.
+            first_child = next(child_pages_generator, None)
+            return first_child is not None
+        except Exception as e:
+            print(f"Error checking children for page {page_id}: {e}")
+            return False
 
     def create_page(self, title: str, parent_id: str, content_storage_format: str, author_name: str) -> Dict[str, Any]:
         """Creates a new page in Confluence."""
