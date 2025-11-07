@@ -1,4 +1,5 @@
-import { useState } from "react";
+// client/src/components/layout/SiteSidebar.tsx
+import { useState, useEffect } from "react"; // <-- FIX: Import useEffect
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Tag, Clock, TrendingUp, PanelLeftClose } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { getSubsectionsByGroup } from "@/lib/api/api-client";
 import { SidebarNode } from "./SidebarNode";
+import { useLayout } from "@/pages/KnowledgeLayout"; // <-- FIX: Import useLayout
 import {
   Tooltip,
   TooltipContent,
@@ -49,15 +51,9 @@ const SidebarSection = ({ group }: { group: 'departments' | 'resource-centre' | 
 };
 
 export function SiteSidebar({ isCollapsed, onToggle }: SidebarProps) {
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    Departments: true,
-    'Resource Centre': true,
-    Tools: true,
-  });
-
-  const toggleSection = (sectionTitle: string) => {
-    setExpandedSections(prev => ({ ...prev, [sectionTitle]: !prev[sectionTitle] }));
-  };
+  // --- THIS IS THE FIX ---
+  const { activeGroup } = useLayout();
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
 
   const navSections = [
     { title: 'Departments', group: 'departments' as const },
@@ -65,9 +61,22 @@ export function SiteSidebar({ isCollapsed, onToggle }: SidebarProps) {
     { title: 'Tools', group: 'tools' as const },
   ];
 
-  if (isCollapsed) {
-    return null;
-  }
+  // This effect runs when the page changes, setting the active section to be expanded.
+  useEffect(() => {
+    const newExpandedState: Record<string, boolean> = {};
+    if (activeGroup) {
+      const activeSection = navSections.find(s => s.group === activeGroup);
+      if (activeSection) {
+        newExpandedState[activeSection.title] = true;
+      }
+    }
+    setExpandedSections(newExpandedState);
+  }, [activeGroup]); // Dependency array ensures this runs when activeGroup changes
+
+  const toggleSection = (sectionTitle: string) => {
+    setExpandedSections(prev => ({ ...prev, [sectionTitle]: !prev[sectionTitle] }));
+  };
+  // --- END OF FIX ---
 
   return (
     <TooltipProvider delayDuration={0}>
