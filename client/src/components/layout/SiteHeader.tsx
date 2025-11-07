@@ -1,7 +1,5 @@
 // client/src/components/layout/SiteHeader.tsx
-
-// --- 1. ADD "NotificationBell" TO THE IMPORTS ---
-import { Search, Menu, PlusCircle, LayoutDashboard, LogOut, User as UserIcon, FileText, ListTree } from "lucide-react";
+import { Search, Menu, PlusCircle, LayoutDashboard, LogOut, User as UserIcon, FileText, ListTree, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link, useNavigate } from "react-router-dom";
@@ -11,7 +9,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Separator } from "@/components/ui/separator";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { NotificationBell } from "@/components/layout/NotificationBell"; // <-- ADD THIS LINE
+import { NotificationBell } from "@/components/layout/NotificationBell";
 
 interface SiteHeaderProps {
   showSidebarToggle?: boolean;
@@ -99,7 +97,6 @@ export function SiteHeader({
                   </Link>
               </Button>
 
-              {/* --- 2. ADD THE COMPONENT HERE --- */}
               <NotificationBell />
 
               <DropdownMenu>
@@ -115,7 +112,6 @@ export function SiteHeader({
                 <DropdownMenuContent className="w-56" align="end" forceMount>
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
-                      {/* --- UPDATE: Use user.name for display --- */}
                       <p className="text-sm font-medium leading-none">{user?.name}</p>
                       <p className="text-xs leading-none text-muted-foreground">
                         {user?.role}
@@ -123,7 +119,6 @@ export function SiteHeader({
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  {/* --- ADD THIS NEW MENU ITEM --- */}
                   <DropdownMenuItem asChild>
                     <Link to="/my-submissions">
                       <FileText className="mr-2 h-4 w-4" />
@@ -138,11 +133,17 @@ export function SiteHeader({
                           <span>Review Dashboard</span>
                         </Link>
                       </DropdownMenuItem>
-                      {/* --- ADD THIS NEW MENU ITEM --- */}
                       <DropdownMenuItem asChild>
                         <Link to="/admin/content-index">
                           <ListTree className="mr-2 h-4 w-4" />
                           <span>Content Index</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      {/* --- THIS IS THE NEW LINK THAT WAS MISSING --- */}
+                      <DropdownMenuItem asChild>
+                        <Link to="/admin/groups">
+                          <Users className="mr-2 h-4 w-4" />
+                          <span>Group Permissions</span>
                         </Link>
                       </DropdownMenuItem>
                     </>

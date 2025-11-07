@@ -53,8 +53,6 @@ class PageRepository:
 
     async def _format_page_as_subsection(self, page: PageModel, group_slug: str, html_content: str = "") -> Subsection:
         """Formats a Prisma Page model into a Subsection schema."""
-        # --- THIS IS THE CORRECTED LOGIC ---
-        # This now counts all direct children (both SUBSECTION and ARTICLE).
         article_count = await self.db.page.count(
             where={'parentConfluenceId': page.confluenceId}
         )
@@ -99,7 +97,6 @@ class PageRepository:
         
         subsections = []
         for page in child_pages:
-            # Pass empty HTML for list view
             subsections.append(await self._format_page_as_subsection(page, group_slug, ""))
         return subsections
 
@@ -122,9 +119,9 @@ class PageRepository:
         
         total_items = await self.db.page.count(where={'parentConfluenceId': parent_confluence_id})
         
-        # Now, format the items directly in the repository
         formatted_items = []
-        parent_slug = (await self.db.page.find_unique(where={'confluenceId': parent_confluence_id})).slug
+        parent_page = await self.db.page.find_unique(where={'confluenceId': parent_confluence_id})
+        parent_slug = parent_page.slug if parent_page else "unknown"
         
         for item in child_pages:
             if item.pageType == PageType.SUBSECTION:
@@ -166,6 +163,7 @@ class PageRepository:
         ancestors.reverse()
         return ancestors
 
+    # --- FIX #1: ADD THIS MISSING FUNCTION ---
     async def get_recent_articles(self, limit: int = 6) -> List[Article]:
         """Fetches the most recently updated articles."""
         pages = await self.db.page.find_many(
@@ -177,6 +175,7 @@ class PageRepository:
         # Note: Group/subsection slugs will be 'unknown' here, which is fine for cards
         return [await self._format_page_as_article(p, "unknown", "unknown") for p in pages]
 
+    # --- FIX #1: ADD THIS MISSING FUNCTION ---
     async def get_popular_articles(self, limit: int = 6) -> List[Article]:
         """Fetches the most viewed articles."""
         pages = await self.db.page.find_many(
@@ -193,6 +192,24 @@ class PageRepository:
         tags = await self.db.tag.find_many(order={'name': 'asc'})
         return [Tag.model_validate(t.model_dump()) for t in tags]
 
+    # --- FIX #2: ADD THIS MISSING FUNCTION (WHICH FIXES THE TYPO) ---
+    async def get_ancestor_db_ids(self, page: PageModel) -> List[int]:
+        """Recursively fetches all ancestor internal DB IDs for a given page."""
+        ancestor_ids = []
+        current_page = page
+        while current_page and current_page.parentConfluenceId:
+            parent = await self.db.page.find_unique(
+                where={'confluenceId': current_page.parentConfluenceId}
+            )
+            if parent:
+                ancestor_ids.append(parent.id)
+                current_page = parent
+            else:
+                break
+        return ancestor_ids
+
+    # --- NO CHANGES NEEDED BELOW THIS LINE ---
+
     async def create_page(
         self,
         confluence_id: str,
@@ -205,8 +222,6 @@ class PageRepository:
         updated_at_str: str,
         tag_names: List[str]
     ) -> PageModel:
-        """Creates a new Page record in the database."""
-        
         tag_connect_ops = []
         for tag_name in tag_names:
             tag_slug = self._slugify(tag_name)
@@ -241,8 +256,6 @@ class PageRepository:
         parent_id: Optional[str] = None,
         tag_names: Optional[List[str]] = None
     ) -> PageModel:
-        """Updates the metadata of an existing Page record, including tags and parent."""
-        
         update_data = {
             'title': title,
             'slug': slug,
@@ -263,7 +276,6 @@ class PageRepository:
                     }
                 )
                 tag_connect_ops.append({'id': tag.id})
-            # 'set' will disconnect old tags and connect the new list
             update_data['tags'] = {'set': tag_connect_ops}
 
         return await self.db.page.update(
@@ -277,10 +289,6 @@ class PageRepository:
         page_data: Dict[str, Any],
         page_type: PageType
     ) -> PageModel:
-        """
-        Updates a Page record using fresh data from a Confluence API response.
-        This is used during approval/sync workflows.
-        """
         title = page_data["title"]
         author_name = page_data.get("version", {}).get("by", {}).get("displayName", "Unknown")
         updated_at = page_data["version"]["when"]
@@ -315,20 +323,11 @@ class PageRepository:
         )
     
     async def get_tree_nodes_by_parent_id(self, parent_id: Optional[str]) -> List[PageTreeNode]:
-        """
-        Fetches pages from the local DB and formats them for the tree select component.
-        This queries our own database instead of the live Confluence API.
-        """
         nodes_to_return = []
-        
-        # Query for pages based on the parent ID.
-        # If parent_id is None, it fetches the root-level pages.
         child_pages = await self.db.page.find_many(
             where={'parentConfluenceId': parent_id},
             order={'title': 'asc'}
         )
-
-        # For each page found, check if it has children to set the 'hasChildren' flag.
         for page in child_pages:
             child_count = await self.db.page.count(
                 where={'parentConfluenceId': page.confluenceId}
@@ -340,38 +339,32 @@ class PageRepository:
                     hasChildren=child_count > 0
                 )
             )
-            
         return nodes_to_return
     
     async def get_child_pages_for_index(self, parent_id: Optional[str]) -> List[PageModel]:
-        """Fetches child pages from the local DB for building the content index."""
         return await self.db.page.find_many(
             where={'parentConfluenceId': parent_id},
             order={'title': 'asc'}
         )
 
     async def has_children(self, page_id: str) -> bool:
-        """Checks if a page has any children in the local DB."""
         count = await self.db.page.count(
             where={'parentConfluenceId': page_id}
         )
         return count > 0
     
     async def delete_by_confluence_id(self, confluence_id: str) -> Optional[PageModel]:
-        """Deletes a Page record by its Confluence Page ID."""
-        # Use find_unique first to handle cases where it might already be deleted
         existing_page = await self.db.page.find_unique(where={'confluenceId': confluence_id})
         if existing_page:
             return await self.db.page.delete(where={'confluenceId': confluence_id})
         return None
     
     async def search_pages_for_index(self, search_term: str) -> List[PageModel]:
-        """Searches for pages by title for the content index."""
         return await self.db.page.find_many(
             where={
                 'title': {
                     'contains': search_term,
-                    'mode': 'insensitive' # This makes the search case-insensitive
+                    'mode': 'insensitive'
                 }
             },
             include=self._page_include,

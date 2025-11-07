@@ -3,13 +3,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from datetime import timedelta
 from jose import JWTError, jwt
-
+from typing import Optional
 from app import security
 from app.db import db
 from app.schemas import auth_schemas
 from app.config import settings
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token", auto_error=False)
 router = APIRouter(tags=["Authentication"])
 
 # ... (get_current_user and get_current_admin_user functions are unchanged) ...
@@ -41,6 +41,21 @@ async def get_current_admin_user(current_user: auth_schemas.UserResponse = Depen
         )
     return current_user
 
+async def get_current_user_optional(token: Optional[str] = Depends(oauth2_scheme)):
+    if token is None:
+        return None
+        
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        username: str = payload.get("sub")
+        if username is None:
+            return None
+        token_data = auth_schemas.TokenData(username=username)
+    except JWTError:
+        return None
+    
+    user = await db.user.find_unique(where={'username': token_data.username})
+    return user
 
 @router.post("/register", response_model=auth_schemas.UserResponse)
 async def register_user(user_data: auth_schemas.UserCreate):

@@ -3,11 +3,14 @@ from fastapi import APIRouter, HTTPException, Query, Response, Depends
 from typing import List, Optional, Dict, Any
 
 from app.services.confluence_service import ConfluenceService
-from app.schemas import content_schemas
+from app.schemas import content_schemas, auth_schemas 
 from app.config import settings
+from app.routers.auth_router import get_current_user_optional
+from app.services.permission_service import PermissionService
 
 router = APIRouter()
 confluence_service = ConfluenceService(settings)
+permission_service = PermissionService()
 
 @router.get("/groups", response_model=List[content_schemas.GroupInfo], tags=["Knowledge Hub"])
 def get_groups():
@@ -48,14 +51,18 @@ async def get_page_contents(
         raise HTTPException(status_code=500, detail="Failed to fetch page contents.")
 
 @router.get("/article/{page_id}", response_model=content_schemas.Article, tags=["Knowledge Hub"])
-async def get_article(page_id: str):
+async def get_article(page_id: str, current_user: Optional[auth_schemas.UserResponse] = Depends(get_current_user_optional)):
     """
-    HYBRID FETCH: Fetches article metadata from the local DB and its
-    live content from Confluence.
+    HYBRID FETCH: Fetches article metadata, live content, and checks edit permissions.
     """
     article_data = await confluence_service.get_article_by_id_hybrid(page_id)
     if not article_data:
         raise HTTPException(status_code=404, detail=f"Article with ID '{page_id}' not found.")
+    
+    # Check for permissions if a user is logged in
+    if current_user:
+        article_data.canEdit = await permission_service.user_has_edit_permission(page_id, current_user)
+        
     return article_data
 
 @router.get("/page/{page_id}", response_model=content_schemas.Subsection, tags=["Knowledge Hub"])

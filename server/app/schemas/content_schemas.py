@@ -40,6 +40,7 @@ class Article(BaseModel):
     views: int
     readMinutes: int
     author: Optional[str] = None
+    canEdit: bool = False
 
     class Config:
         from_attributes = True

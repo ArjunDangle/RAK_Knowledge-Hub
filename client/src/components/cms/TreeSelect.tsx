@@ -48,7 +48,7 @@ export const TreeSelect = ({ value, onChange, placeholder = 'Select a category..
   };
   
   return (
-    <Popover open={isOpen} onOpenChange={setIsOpen}>
+    <Popover open={isOpen} onOpenChange={setIsOpen} modal={true}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"

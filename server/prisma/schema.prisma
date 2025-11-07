@@ -15,47 +15,42 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Enum to clearly define the type of a page.
-// This helps in querying for only categories (SUBSECTION) or only articles (ARTICLE).
 enum PageType {
   SUBSECTION
   ARTICLE
 }
 
-// The core model for our local metadata library.
-// Every page in Confluence that is part of our knowledge hub will have a corresponding record here.
 model Page {
   id                 Int      @id @default(autoincrement())
-  confluenceId       String   @unique // The ID from Confluence, our source of truth link.
-  title              String   // The title of the page.
-  slug               String   @unique // A URL-friendly version of the title.
-  description        String   // The new, manually written description for UI cards.
-  pageType           PageType // Defines if this page is a category or a final article.
-  parentConfluenceId String?  // The Confluence ID of the parent page. This is the sole field used to build the hierarchy.
-  authorName         String?  // The name of the original author.
-  views              Int      @default(0) // We can now track views locally.
-  updatedAt          DateTime // The last modified date from Confluence.
+  confluenceId       String   @unique
+  title              String
+  slug               String   @unique
+  description        String
+  pageType           PageType
+  parentConfluenceId String?
+  authorName         String?
+  views              Int      @default(0)
+  updatedAt          DateTime
 
   // --- Relationships ---
-  // Establishes a many-to-many relationship with the Tag model.
   tags       Tag[]
-  // Establishes a one-to-one relationship with the ArticleSubmission model.
   submission ArticleSubmission?
 
-  // --- Index for faster parent-child lookups ---
+  // NEW: Back-relation to the Group that manages this page branch.
+  // This will be null for most pages.
+  managingGroup Group?
+
   @@index([parentConfluenceId])
 }
 
-// Central table for all unique tags (labels) in our system.
 model Tag {
   id    Int    @id @default(autoincrement())
-  name  String @unique // The name of the tag, e.g., "getting-started".
-  slug  String @unique // The URL-friendly version of the name.
-
-  // Establishes the other side of the many-to-many relationship with Page.
+  name  String @unique
+  slug  String @unique
   pages Page[]
 }
 
+// MODIFIED: User model to add a many-to-many relationship with Group
 model User {
   id              Int      @id @default(autoincrement())
   username        String   @unique
@@ -64,12 +59,26 @@ model User {
   role            String   // 'MEMBER' or 'ADMIN'
   createdAt       DateTime @default(now())
 
-  // Relation to the new ArticleSubmission table
   submissions ArticleSubmission[]
   notifications Notification[]
+
+  // NEW: Many-to-many relationship with Group
+  groups Group[]
 }
 
-// MODIFIED: This table tracks the review workflow for a page.
+// NEW: Model for permission groups
+model Group {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+
+  // Many-to-many relationship with User
+  members User[]
+
+  // One-to-one: A group manages one specific page and its children
+  managedPage   Page? @relation(fields: [managedPageId], references: [id])
+  managedPageId Int?  @unique // A group can only manage one page root
+}
+
 model ArticleSubmission {
   id               Int      @id @default(autoincrement())
   confluencePageId String   @unique
@@ -77,24 +86,17 @@ model ArticleSubmission {
   status           String   // e.g., "PENDING_REVIEW", "REJECTED", "PUBLISHED"
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
-
-  // Establishes a many-to-one relationship with User
   author   User @relation(fields: [authorId], references: [id])
   authorId Int
-
-  // This now creates a one-to-one link to the Page model.
   page Page @relation(fields: [confluencePageId], references: [confluenceId])
 }
 
-// This model remains unchanged for this step.
 model Notification {
   id          Int      @id @default(autoincrement())
   message     String
   link        String?
   isRead      Boolean  @default(false)
   createdAt   DateTime @default(now())
-
-  // Relation to the User who receives it
   recipient   User     @relation(fields: [recipientId], references: [id])
   recipientId Int
 }

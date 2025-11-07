@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from typing import List, Optional
 
 from app.services.confluence_service import ConfluenceService
-# from app.db import db  <-- REMOVED: Routers no longer access the DB directly
+from app.services.permission_service import PermissionService
 from app.services.submission_repository import SubmissionRepository # <-- ADDED
 from app.schemas import cms_schemas, content_schemas, auth_schemas
 from app.schemas.content_schemas import PageTreeNode
@@ -20,7 +20,8 @@ router = APIRouter(
 
 # Instantiate the service and new repository
 confluence_service = ConfluenceService(settings)
-submission_repo = SubmissionRepository() # <-- ADDED
+submission_repo = SubmissionRepository()
+permission_service = PermissionService()
 
 @router.get(
     "/admin/content-index",
@@ -120,21 +121,18 @@ async def update_page_endpoint(
 ):
     """
     Updates an existing page.
-    Authorization is checked within the service layer.
+    Authorization is now handled by the PermissionService.
     """
-    # Authorization Check: User must be the author or an admin.
-    submission = await submission_repo.get_by_confluence_id(page_id)
+    # Authorization Check
+    has_permission = await permission_service.user_has_edit_permission(page_id, current_user)
     
-    is_author = submission and submission.authorId == current_user.id
-    is_admin = current_user.role == "ADMIN"
-    
-    if not is_author and not is_admin:
+    if not has_permission:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not authorized to edit this article."
         )
 
-    # Call the service to perform the update
+    # If check passes, proceed with the update
     success = await confluence_service.update_page(page_id, page_data, current_user.name)
     if not success:
         raise HTTPException(

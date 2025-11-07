@@ -1,7 +1,7 @@
 // client/src/pages/ArticlePage.tsx
-import { useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Clock, Eye, Calendar, Share, Printer, Info } from "lucide-react";
+import { Clock, Eye, Calendar, Share, Printer, Info, Edit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -55,7 +55,7 @@ export default function ArticlePage({ pageId: propPageId, isPreviewMode = false 
     enabled: !!pageId,
     retry: false,
   });
-
+  
   const contentBlocks = useMemo(() => {
     if (!article || !pageId) return [];
 
@@ -161,6 +161,20 @@ export default function ArticlePage({ pageId: propPageId, isPreviewMode = false 
               <h1 className="text-4xl font-bold text-foreground leading-tight flex-1 pr-8">{article.title}</h1>
               {!isPreviewMode && (
                   <div className="flex gap-2 flex-shrink-0">
+                      {/* --- THIS IS THE NEW CONDITIONAL EDIT BUTTON --- */}
+                      {article.canEdit && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button asChild variant="outline" size="icon">
+                              <Link to={`/edit/${article.id}`}>
+                                <Edit className="h-4 w-4" />
+                                <span className="sr-only">Edit Page</span>
+                              </Link>
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Edit page</p></TooltipContent>
+                        </Tooltip>
+                      )}
                       <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={handleShare}><Share className="h-4 w-4" /><span className="sr-only">Share</span></Button></TooltipTrigger><TooltipContent><p>Share article</p></TooltipContent></Tooltip>
                       <Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" onClick={handlePrint}><Printer className="h-4 w-4" /><span className="sr-only">Print</span></Button></TooltipTrigger><TooltipContent><p>Print article</p></TooltipContent></Tooltip>
                   </div>
