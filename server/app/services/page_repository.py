@@ -412,3 +412,17 @@ class PageRepository:
             include=self._page_include,
             order={'title': 'asc'}
         )
+    
+    async def ensure_parent_is_subsection(self, parent_confluence_id: str):
+        """
+        Finds the parent page and updates its type to SUBSECTION if it's currently an ARTICLE.
+        This is crucial when a new child is added to a page that was previously a leaf node.
+        """
+        parent_page = await self.db.page.find_unique(where={'confluenceId': parent_confluence_id})
+        
+        if parent_page and parent_page.pageType == PageType.ARTICLE:
+            print(f"Updating parent page '{parent_page.title}' ({parent_confluence_id}) from ARTICLE to SUBSECTION.")
+            await self.db.page.update(
+                where={'confluenceId': parent_confluence_id},
+                data={'pageType': PageType.SUBSECTION}
+            )

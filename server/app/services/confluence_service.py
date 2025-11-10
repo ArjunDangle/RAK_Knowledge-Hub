@@ -6,7 +6,7 @@ from fastapi import HTTPException, status
 from fastapi.responses import StreamingResponse
 
 from app.config import Settings
-from app.schemas.content_schemas import Article, Tag, Subsection, GroupInfo, PageContentItem, Ancestor, PageTreeNode
+from app.schemas.content_schemas import Article, Tag, Subsection, GroupInfo, PageContentItem, Ancestor, PageTreeNode, PageTreeNodeWithPermission
 from app.schemas.cms_schemas import PageCreate, PageUpdate, ContentNode, PageDetailResponse
 from app.schemas.cms_schemas import ArticleSubmissionStatus
 from app.schemas.auth_schemas import UserResponse
@@ -501,10 +501,12 @@ class ConfluenceService:
             }) for sub in pending_submissions
         ]
 
+    # In server/app/services/confluence_service.py
+
     async def approve_page(self, page_id: str) -> bool:
         """
         Orchestrates approving a page.
-        1. Update labels in Confluence -> 2. Sync latest data to local DB -> 3. Notify author
+        1. Update labels -> 2. Get data -> 3. Sync to DB -> 4. Update Parent's Type -> 5. Notify author
         """
         try:
             # 1. Update labels in Confluence
@@ -512,18 +514,26 @@ class ConfluenceService:
             self.confluence_repo.remove_label(page_id, "status-rejected") # Clean up just in case
 
             # 2. Get latest data from Confluence for sync
-            page_data = self.confluence_repo.get_page_by_id(page_id, expand="body.view,version,metadata.labels")
+            page_data = self.confluence_repo.get_page_by_id(page_id, expand="body.view,version,metadata.labels,ancestors")
             if not page_data:
                 raise HTTPException(status_code=404, detail="Page not found in Confluence after approval.")
 
-            # 3. Determine Page Type
+            # 3. Determine Page Type for the approved page itself
             has_children = self.confluence_repo.check_has_children(page_id)
             page_type = PageType.SUBSECTION if has_children else PageType.ARTICLE
             
             # 4. Sync all metadata (including tags) to our local DB
             await self.page_repo.sync_page_from_confluence_data(page_id, page_data, page_type)
 
-            # 5. Update the submission status and notify the author
+            # --- THIS IS THE FIX ---
+            # 5. Now that the child is approved, ensure its parent is a SUBSECTION
+            ancestors = page_data.get('ancestors', [])
+            if ancestors:
+                parent_id = ancestors[-1]['id']
+                await self.page_repo.ensure_parent_is_subsection(parent_id)
+            # --- END OF FIX ---
+
+            # 6. Update the submission status and notify the author
             submission = await self.submission_repo.update_status(page_id, ArticleSubmissionStatus.PUBLISHED)
             
             if submission:
@@ -534,8 +544,8 @@ class ConfluenceService:
                 )
             return True
         except Exception as e:
+            # ... (error handling remains the same)
             print(f"Error approving page {page_id}: {e}")
-            # Attempt to roll back by re-adding the unpublished label
             try:
                 self.confluence_repo.add_label(page_id, "status-unpublished")
             except Exception as rollback_e:
@@ -663,7 +673,7 @@ class ConfluenceService:
             print(f"Error fetching page tree for parent {parent_id}: {e}")
             raise HTTPException(status_code=503, detail="Could not fetch page hierarchy.")
         
-    async def get_page_tree_with_permissions(self, user: UserResponse, parent_id: Optional[str] = None) -> List[PageTreeNode]:
+    async def get_page_tree_with_permissions(self, user: UserResponse, parent_id: Optional[str] = None) -> List[PageTreeNodeWithPermission]:
         """
         Fetches the page hierarchy, augmenting each node with an 'isAllowed' flag
         based on the user's group permissions.
@@ -682,7 +692,7 @@ class ConfluenceService:
             is_node_allowed = is_admin or page.id in allowed_page_ids
 
             nodes_to_return.append(
-                PageTreeNode(
+                PageTreeNodeWithPermission(
                     id=page.confluenceId,
                     title=page.title,
                     hasChildren=has_children,

@@ -57,7 +57,19 @@ export const TreeSelect = ({ value, onChange, placeholder = 'Select a category..
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen} modal={true}>
       <PopoverTrigger asChild>
-        {/* ... (rest of the component is unchanged) ... */}
+        {/* --- THIS IS THE FIX --- */}
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={isOpen}
+          className="w-full justify-between"
+        >
+          <span className="truncate">
+            {selectedNodeTitle || placeholder}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+        {/* --- END OF FIX --- */}
       </PopoverTrigger>
       <PopoverContent
         className="w-[--radix-popover-trigger-width] p-0"

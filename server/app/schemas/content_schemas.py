@@ -68,3 +68,5 @@ class PageTreeNode(BaseModel):
     title: str
     hasChildren: bool
 
+class PageTreeNodeWithPermission(PageTreeNode):
+    isAllowed: bool

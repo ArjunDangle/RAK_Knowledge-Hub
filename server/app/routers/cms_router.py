@@ -6,9 +6,9 @@ from typing import List, Optional
 
 from app.services.confluence_service import ConfluenceService
 from app.services.permission_service import PermissionService
-from app.services.submission_repository import SubmissionRepository # <-- ADDED
+from app.services.submission_repository import SubmissionRepository
 from app.schemas import cms_schemas, content_schemas, auth_schemas
-from app.schemas.content_schemas import PageTreeNode
+from app.schemas.content_schemas import PageTreeNodeWithPermission, PageTreeNode
 from app.schemas.cms_schemas import ContentNode
 from app.config import settings
 from .auth_router import get_current_user, get_current_admin_user
@@ -76,7 +76,7 @@ async def get_page_tree_structure(parent_id: Optional[str] = Query(None)):
 
 @router.get(
     "/pages/tree-with-permissions",
-    response_model=List[PageTreeNode],
+    response_model=List[PageTreeNodeWithPermission],
     dependencies=[Depends(get_current_user)]
 )
 async def get_page_tree_with_permissions_endpoint(
