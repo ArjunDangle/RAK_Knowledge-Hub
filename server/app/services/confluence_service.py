@@ -9,6 +9,7 @@ from app.config import Settings
 from app.schemas.content_schemas import Article, Tag, Subsection, GroupInfo, PageContentItem, Ancestor, PageTreeNode
 from app.schemas.cms_schemas import PageCreate, PageUpdate, ContentNode, PageDetailResponse
 from app.schemas.cms_schemas import ArticleSubmissionStatus
+from app.schemas.auth_schemas import UserResponse
 from app.utils.html_translator import html_to_storage_format
 from prisma.enums import PageType
 
@@ -661,7 +662,36 @@ class ConfluenceService:
         except Exception as e:
             print(f"Error fetching page tree for parent {parent_id}: {e}")
             raise HTTPException(status_code=503, detail="Could not fetch page hierarchy.")
-    
+        
+    async def get_page_tree_with_permissions(self, user: UserResponse, parent_id: Optional[str] = None) -> List[PageTreeNode]:
+        """
+        Fetches the page hierarchy, augmenting each node with an 'isAllowed' flag
+        based on the user's group permissions.
+        """
+        allowed_page_ids = await self.page_repo.get_all_managed_and_descendant_ids(user)
+        is_admin = user.role == 'ADMIN'
+
+        # This single call correctly handles both root-level (parent_id=None)
+        # and nested-level fetches from the database.
+        child_pages = await self.page_repo.get_child_pages_for_index(parent_id)
+        
+        nodes_to_return = []
+        for page in child_pages:
+            has_children = await self.page_repo.has_children(page.confluenceId)
+            
+            is_node_allowed = is_admin or page.id in allowed_page_ids
+
+            nodes_to_return.append(
+                PageTreeNode(
+                    id=page.confluenceId,
+                    title=page.title,
+                    hasChildren=has_children,
+                    isAllowed=is_node_allowed
+                )
+            )
+        
+        return sorted(nodes_to_return, key=lambda x: x.title)
+
     async def get_page_tree(self, parent_id: Optional[str] = None) -> List[PageTreeNode]:
         """
         Orchestrates fetching the page hierarchy for the CMS tree select

@@ -14,12 +14,12 @@ class GroupCreate(BaseModel):
 
 class GroupUpdate(BaseModel):
     name: str
-    managedPageConfluenceId: str | None = None # Accept the string ID from the frontend
+    managedPageConfluenceId: str | None = None
 
 class GroupResponse(BaseModel):
     id: int
     name: str
-    managedPageConfluenceId: str | None = None # Return the string ID to the frontend
+    managedPageConfluenceId: str | None = None
     
     class Config:
         from_attributes = True
@@ -29,7 +29,6 @@ class GroupWithMembersResponse(GroupResponse):
 
 
 router = APIRouter(
-    prefix="/groups",
     tags=["Groups"],
     dependencies=[Depends(get_current_admin_user)]
 )
@@ -44,9 +43,20 @@ async def create_group(group_data: GroupCreate):
 
 @router.get("", response_model=List[GroupWithMembersResponse])
 async def get_all_groups():
-    groups = await db.group.find_many(include={'members': True, 'managedPage': True})
+    # --- THIS IS THE FIX (1 of 3) ---
+    # We need a nested include to fetch the groups for each member.
+    groups = await db.group.find_many(
+        include={
+            'members': {
+                'include': {
+                    'groups': True
+                }
+            },
+            'managedPage': True
+        }
+    )
+    # --- END OF FIX ---
     
-    # Manually construct response to include the managedPage's confluenceId
     response = []
     for group in groups:
         group_dict = group.model_dump()
@@ -74,30 +84,36 @@ async def update_group(group_id: int, group_data: GroupUpdate):
 
 @router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_group(group_id: int):
-    # First, disconnect all members to avoid constraint issues
     await db.group.update(where={'id': group_id}, data={'members': {'set': []}})
     await db.group.delete(where={'id': group_id})
     return
 
 @router.post("/{group_id}/members/{user_id}", response_model=GroupWithMembersResponse)
 async def add_member_to_group(group_id: int, user_id: int):
+    # --- THIS IS THE FIX (2 of 3) ---
     updated_group = await db.group.update(
         where={'id': group_id},
         data={'members': {'connect': [{'id': user_id}]}},
-        include={'members': True}
+        include={'members': {'include': {'groups': True}}} # <-- NESTED INCLUDE
     )
+    # --- END OF FIX ---
     return updated_group
 
 @router.delete("/{group_id}/members/{user_id}", response_model=GroupWithMembersResponse)
 async def remove_member_from_group(group_id: int, user_id: int):
+    # --- THIS IS THE FIX (3 of 3) ---
     updated_group = await db.group.update(
         where={'id': group_id},
         data={'members': {'disconnect': [{'id': user_id}]}},
-        include={'members': True}
+        include={'members': {'include': {'groups': True}}} # <-- NESTED INCLUDE
     )
+    # --- END OF FIX ---
     return updated_group
 
 @router.get("/users/all", response_model=List[auth_schemas.UserResponse])
 async def get_all_users():
-    users = await db.user.find_many(order={'name': 'asc'})
+    users = await db.user.find_many(
+        order={'name': 'asc'},
+        include={'groups': True}
+    )
     return users

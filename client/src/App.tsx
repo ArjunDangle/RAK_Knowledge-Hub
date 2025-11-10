@@ -20,6 +20,7 @@ import MySubmissionsPage from "./pages/MySubmissionsPage";
 import AdminIndexPage from "./pages/AdminIndexPage";
 import AdminEditPage from "./pages/AdminEditPage";
 import AdminGroupsPage from "./pages/AdminGroupsPage";
+import MyGroupsPage from "./pages/MyGroupsPage";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -72,6 +73,7 @@ const App = () => (
             <Route element={<ProtectedRoute />}>
               <Route path="/create" element={<CreatePage />} />
               <Route path="/my-submissions" element={<MySubmissionsPage />} />
+              <Route path="/my-groups" element={<MyGroupsPage />} /> 
               <Route path="/edit/:pageId" element={<EditPage />} /> {/* <-- STEP 2.1: ROUTE ADDED */}
             </Route>
 

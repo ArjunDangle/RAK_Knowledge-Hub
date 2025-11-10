@@ -28,7 +28,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     except JWTError:
         raise credentials_exception
     
-    user = await db.user.find_unique(where={'username': token_data.username})
+    user = await db.user.find_unique(
+        where={'username': token_data.username},
+        include={'groups': {'include': {'managedPage': True}}} # <-- NESTED INCLUDE
+    )
     if user is None:
         raise credentials_exception
     return user
@@ -54,7 +57,10 @@ async def get_current_user_optional(token: Optional[str] = Depends(oauth2_scheme
     except JWTError:
         return None
     
-    user = await db.user.find_unique(where={'username': token_data.username})
+    user = await db.user.find_unique(
+        where={'username': token_data.username},
+        include={'groups': {'include': {'managedPage': True}}} # <-- NESTED INCLUDE
+    )
     return user
 
 @router.post("/register", response_model=auth_schemas.UserResponse)
@@ -80,7 +86,10 @@ async def register_user(user_data: auth_schemas.UserCreate):
 
 @router.post("/token") 
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = await db.user.find_unique(where={'username': form_data.username})
+    user = await db.user.find_unique(
+        where={'username': form_data.username},
+        include={'groups': {'include': {'managedPage': True}}} # <-- NESTED INCLUDE
+    )
     
     if not user or not security.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -99,8 +108,9 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         "token_type": "bearer",
         "user": {
             "username": user.username,
-            "name": user.name, # <-- INCLUDE THE NAME IN RESPONSE
-            "role": user.role
+            "name": user.name,
+            "role": user.role,
+            "groups": user.groups 
         }
     }
 

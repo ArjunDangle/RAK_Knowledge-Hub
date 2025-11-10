@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 from app.db import db
 from app.schemas.content_schemas import Tag, Article, Subsection, Ancestor, PageTreeNode
 from prisma.enums import PageType
-from prisma.models import Page as PageModel
+from prisma.models import Page as PageModel, User # <-- IMPORT USER MODEL
 from prisma.types import PageInclude
 
 class PageRepository:
@@ -31,6 +31,52 @@ class PageRepository:
         if not html: return ""
         soup = BeautifulSoup(html, 'html.parser')
         return soup.get_text(" ", strip=True)
+
+    # --- THIS IS THE MISSING FUNCTION ---
+    async def get_all_managed_and_descendant_ids(self, user: User) -> set[int]:
+        """
+        For a given user, finds all pages managed by their groups and all
+        descendant pages of those managed pages, returning a set of their DB IDs.
+        """
+        if user.role == 'ADMIN':
+            # Admins can edit everything, so we don't need to run a complex query.
+            # Returning an empty set and checking for the admin role in the service is cleaner.
+            return set()
+
+        user_with_groups = await self.db.user.find_unique(
+            where={'id': user.id},
+            include={'groups': {'include': {'managedPage': True}}}
+        )
+
+        if not user_with_groups or not user_with_groups.groups:
+            return set()
+
+        # Get the initial DB IDs of the root pages managed by the user's groups
+        root_managed_page_ids = [
+            group.managedPage.id 
+            for group in user_with_groups.groups 
+            if group.managedPage
+        ]
+
+        if not root_managed_page_ids:
+            return set()
+
+        # Use a recursive raw SQL query (Common Table Expression) to find all descendants.
+        # This is far more efficient than looping in Python.
+        query = f"""
+        WITH RECURSIVE descendants AS (
+            SELECT id, "confluenceId" FROM "Page" WHERE id IN ({','.join(map(str, root_managed_page_ids))})
+            UNION ALL
+            SELECT p.id, p."confluenceId" FROM "Page" p
+            INNER JOIN descendants d ON p."parentConfluenceId" = d."confluenceId"
+        )
+        SELECT id FROM descendants;
+        """
+        
+        results = await self.db.query_raw(query)
+        
+        return {item['id'] for item in results}
+    # --- END OF THE MISSING FUNCTION ---
 
     async def _format_page_as_article(self, page: PageModel, group_slug: str, subsection_slug: str) -> Article:
         """Formats a Prisma Page model into an Article schema."""
@@ -163,7 +209,6 @@ class PageRepository:
         ancestors.reverse()
         return ancestors
 
-    # --- FIX #1: ADD THIS MISSING FUNCTION ---
     async def get_recent_articles(self, limit: int = 6) -> List[Article]:
         """Fetches the most recently updated articles."""
         pages = await self.db.page.find_many(
@@ -175,7 +220,6 @@ class PageRepository:
         # Note: Group/subsection slugs will be 'unknown' here, which is fine for cards
         return [await self._format_page_as_article(p, "unknown", "unknown") for p in pages]
 
-    # --- FIX #1: ADD THIS MISSING FUNCTION ---
     async def get_popular_articles(self, limit: int = 6) -> List[Article]:
         """Fetches the most viewed articles."""
         pages = await self.db.page.find_many(
@@ -192,7 +236,6 @@ class PageRepository:
         tags = await self.db.tag.find_many(order={'name': 'asc'})
         return [Tag.model_validate(t.model_dump()) for t in tags]
 
-    # --- FIX #2: ADD THIS MISSING FUNCTION (WHICH FIXES THE TYPO) ---
     async def get_ancestor_db_ids(self, page: PageModel) -> List[int]:
         """Recursively fetches all ancestor internal DB IDs for a given page."""
         ancestor_ids = []
@@ -207,8 +250,6 @@ class PageRepository:
             else:
                 break
         return ancestor_ids
-
-    # --- NO CHANGES NEEDED BELOW THIS LINE ---
 
     async def create_page(
         self,
@@ -336,7 +377,8 @@ class PageRepository:
                 PageTreeNode(
                     id=page.confluenceId,
                     title=page.title,
-                    hasChildren=child_count > 0
+                    hasChildren=child_count > 0,
+                    isAllowed=False # Default value, will be overridden by service
                 )
             )
         return nodes_to_return

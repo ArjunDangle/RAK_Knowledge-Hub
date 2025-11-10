@@ -106,7 +106,10 @@ export interface GroupUpdatePayload {
   name: string;
   managedPageConfluenceId: string | null; // <-- Changed from managedPageId
 }
-// --- END MODIFIED TYPES ---
+
+export interface PageTreeNodeWithPermission extends PageTreeNode {
+  isAllowed: boolean;
+}
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
@@ -283,6 +286,10 @@ export async function getPageTree(parentId?: string): Promise<PageTreeNode[]> {
     ? `/cms/pages/tree?parent_id=${parentId}`
     : "/cms/pages/tree";
   return apiFetch<PageTreeNode[]>(endpoint);
+}
+export async function getPageTreeWithPermissions(parentId?: string): Promise<PageTreeNodeWithPermission[]> {
+  const endpoint = parentId ? `/cms/pages/tree-with-permissions?parent_id=${parentId}` : "/cms/pages/tree-with-permissions";
+  return apiFetch<PageTreeNodeWithPermission[]>(endpoint);
 }
 export async function uploadAttachment(
   file: File

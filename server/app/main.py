@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import db
-from app.routers import knowledge_router, auth_router, cms_router, notification_router, group_router # <-- ADD group_router
+from app.routers import knowledge_router, auth_router, cms_router, notification_router, group_router
 
 app = FastAPI(
     title="Knowledge Hub API",
@@ -71,8 +71,8 @@ app.include_router(knowledge_router.router)
 app.include_router(auth_router.router, prefix="/auth")
 app.include_router(cms_router.router)
 app.include_router(notification_router.router)
-# --- ADD THIS LINE TO REGISTER THE NEW ROUTER ---
-app.include_router(group_router.router, prefix="/api")
+# --- THIS LINE IS UPDATED ---
+app.include_router(group_router.router, prefix="/api/groups")
 
 
 @app.get("/", tags=["Health Check"])

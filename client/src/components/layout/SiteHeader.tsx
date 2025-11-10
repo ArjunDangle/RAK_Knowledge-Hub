@@ -125,6 +125,14 @@ export function SiteHeader({
                       <span>My Submissions</span>
                     </Link>
                   </DropdownMenuItem>
+                  {!isAdmin && (
+                    <DropdownMenuItem asChild>
+                      <Link to="/my-groups">
+                        <Users className="mr-2 h-4 w-4" />
+                        <span>My Groups</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   {isAdmin && (
                     <>
                       <DropdownMenuItem asChild>
@@ -139,7 +147,6 @@ export function SiteHeader({
                           <span>Content Index</span>
                         </Link>
                       </DropdownMenuItem>
-                      {/* --- THIS IS THE NEW LINK THAT WAS MISSING --- */}
                       <DropdownMenuItem asChild>
                         <Link to="/admin/groups">
                           <Users className="mr-2 h-4 w-4" />

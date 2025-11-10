@@ -5,8 +5,17 @@ import { LoginResponse } from '@/lib/api/api-client';
 // --- THIS IS THE FIX ---
 interface User {
   username: string;
-  name: string; // <-- ADD THIS PROPERTY
+  name: string;
   role: 'MEMBER' | 'ADMIN';
+  groups: Array<{ 
+    id: number; 
+    name: string;
+    managedPage: {
+      id: number;
+      confluenceId: string;
+      title: string;
+    } | null;
+  }>;
 }
 
 interface AuthState {
