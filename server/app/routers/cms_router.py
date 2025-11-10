@@ -79,15 +79,22 @@ async def get_page_tree_structure(parent_id: Optional[str] = Query(None)):
     response_model=List[PageTreeNodeWithPermission],
     dependencies=[Depends(get_current_user)]
 )
+@router.get(
+    "/pages/tree-with-permissions",
+    response_model=List[PageTreeNodeWithPermission],
+    dependencies=[Depends(get_current_user)]
+)
 async def get_page_tree_with_permissions_endpoint(
     parent_id: Optional[str] = Query(None),
+    allowed_only: bool = Query(False),
     current_user: auth_schemas.UserResponse = Depends(get_current_user)
 ):
     """
     Fetches the page hierarchy for the create page, including a permission flag
     for each node indicating if the current user can create children under it.
+    Can optionally filter to show only allowed nodes and their ancestors.
     """
-    return await confluence_service.get_page_tree_with_permissions(current_user, parent_id)
+    return await confluence_service.get_page_tree_with_permissions(current_user, parent_id, allowed_only)
 
 @router.post(
     "/pages/create", 

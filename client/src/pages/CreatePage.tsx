@@ -6,24 +6,55 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Loader2, Upload, Paperclip, X } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 
 import { KnowledgeLayout } from "./KnowledgeLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { toast } from "@/components/ui/sonner";
-import { RichTextEditor, useConfiguredEditor } from "@/components/editor/RichTextEditor";
+import {
+  RichTextEditor,
+  useConfiguredEditor,
+} from "@/components/editor/RichTextEditor";
 import { TreeSelect } from "@/components/cms/TreeSelect";
 import { MultiSelect, MultiSelectOption } from "@/components/ui/multi-select";
-import { getAllTags, createPage, PageCreatePayload, uploadAttachment, AttachmentInfo } from "@/lib/api/api-client";
+import {
+  getAllTags,
+  createPage,
+  PageCreatePayload,
+  uploadAttachment,
+  AttachmentInfo,
+} from "@/lib/api/api-client";
 
 // Validation schema
 const createPageSchema = z.object({
-  title: z.string().min(5, { message: "Title must be at least 5 characters long." }),
-  description: z.string().min(10, "Description must be at least 10-15 words.").max(150, "Description must be 10-15 words (max 150 chars)."),
-  parent_id: z.string().min(1, { message: "You must select a parent category." }),
+  title: z
+    .string()
+    .min(5, { message: "Title must be at least 5 characters long." }),
+  description: z
+    .string()
+    .min(10, "Description must be at least 10-15 words.")
+    .max(150, "Description must be 10-15 words (max 150 chars)."),
+  parent_id: z
+    .string()
+    .min(1, { message: "You must select a parent category." }),
   tags: z.array(z.string()).min(1, { message: "Select at least one tag." }),
 });
 
@@ -32,7 +63,7 @@ type CreatePageFormData = z.infer<typeof createPageSchema>;
 interface UploadedFile {
   file: File;
   tempId: string;
-  type: 'image' | 'video' | 'pdf' | 'file';
+  type: "image" | "video" | "pdf" | "file";
 }
 
 export default function CreatePage() {
@@ -40,24 +71,31 @@ export default function CreatePage() {
   const [attachments, setAttachments] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showAllowedOnly, setShowAllowedOnly] = useState(false);
 
   const { data: allTags, isLoading: isLoadingTags } = useQuery({
-    queryKey: ['allTags'],
+    queryKey: ["allTags"],
     queryFn: getAllTags,
   });
 
-  const tagOptions: MultiSelectOption[] = allTags ? allTags.map(tag => ({ value: tag.name, label: tag.name })) : [];
-  
+  const tagOptions: MultiSelectOption[] = allTags
+    ? allTags.map((tag) => ({ value: tag.name, label: tag.name }))
+    : [];
+
   // --- Editor and Attachment Setup ---
   const handleFileUpload = async (file: File) => {
     setIsUploading(true);
     try {
       // Step 1: Immediately start the upload to the server in the background
       const response = await uploadAttachment(file);
-      
-      const fileType = file.type.startsWith('image/') ? 'image' :
-                       file.type.startsWith('video/') ? 'video' :
-                       file.type === 'application/pdf' ? 'pdf' : 'file';
+
+      const fileType = file.type.startsWith("image/")
+        ? "image"
+        : file.type.startsWith("video/")
+        ? "video"
+        : file.type === "application/pdf"
+        ? "pdf"
+        : "file";
 
       // Step 2: Add the file to our state for the final submission payload
       const newAttachment: UploadedFile = {
@@ -65,12 +103,12 @@ export default function CreatePage() {
         tempId: response.temp_id,
         type: fileType,
       };
-      setAttachments(prev => [...prev, newAttachment]);
+      setAttachments((prev) => [...prev, newAttachment]);
 
       // --- THIS IS THE FIX ---
       // Step 3: Decide how to display the attachment in the editor
       if (editor) {
-        if (fileType === 'image') {
+        if (fileType === "image") {
           // For images, create a local preview and insert it as a visible image
           const reader = new FileReader();
           reader.onload = (e) => {
@@ -82,16 +120,19 @@ export default function CreatePage() {
           reader.readAsDataURL(file);
         } else {
           // For all other file types (PDF, video), insert the generic placeholder
-          editor.chain().focus().setAttachment({
-            'data-file-name': file.name,
-            'data-attachment-type': fileType,
-          }).run();
+          editor
+            .chain()
+            .focus()
+            .setAttachment({
+              "data-file-name": file.name,
+              "data-attachment-type": fileType,
+            })
+            .run();
         }
       }
       // --- END OF FIX ---
 
       toast.success("Attachment uploaded successfully.");
-
     } catch (error) {
       toast.error("Upload failed", { description: (error as Error).message });
     } finally {
@@ -137,17 +178,19 @@ export default function CreatePage() {
 
   // Handle form submission
   const onSubmit = (data: CreatePageFormData) => {
-    const content = editor?.getHTML() || '';
+    const content = editor?.getHTML() || "";
     if (content.length < 50) {
-        toast.error("Content is too short", { description: "Content must be at least 50 characters." });
-        return;
+      toast.error("Content is too short", {
+        description: "Content must be at least 50 characters.",
+      });
+      return;
     }
 
-    const attachmentPayload: AttachmentInfo[] = attachments.map(a => ({
-        temp_id: a.tempId,
-        file_name: a.file.name,
+    const attachmentPayload: AttachmentInfo[] = attachments.map((a) => ({
+      temp_id: a.tempId,
+      file_name: a.file.name,
     }));
-    
+
     const payload: PageCreatePayload = {
       title: data.title,
       description: data.description,
@@ -156,7 +199,7 @@ export default function CreatePage() {
       tags: data.tags,
       attachments: attachmentPayload,
     };
-    
+
     mutation.mutate(payload);
   };
 
@@ -174,8 +217,10 @@ export default function CreatePage() {
           </CardHeader>
           <CardContent>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                
+              <form
+                onSubmit={form.handleSubmit(onSubmit)}
+                className="space-y-6"
+              >
                 <FormField
                   control={form.control}
                   name="title"
@@ -207,18 +252,34 @@ export default function CreatePage() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="parent_id"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Category</FormLabel>
+                      <div className="flex items-center space-x-2 mb-2">
+                        <Checkbox
+                          id="show-allowed-only"
+                          checked={showAllowedOnly}
+                          onCheckedChange={(checked) =>
+                            setShowAllowedOnly(checked as boolean)
+                          }
+                        />
+                        <Label
+                          htmlFor="show-allowed-only"
+                          className="text-sm font-normal"
+                        >
+                          Show only sections I can edit
+                        </Label>
+                      </div>
                       <FormControl>
                         <TreeSelect
                           placeholder="Select a parent category..."
                           value={field.value}
                           onChange={field.onChange}
+                          allowedOnly={showAllowedOnly} // Pass the state as a prop
                         />
                       </FormControl>
                       <FormMessage />
@@ -234,7 +295,9 @@ export default function CreatePage() {
                       <FormLabel>Tags</FormLabel>
                       <FormControl>
                         <MultiSelect
-                          placeholder={isLoadingTags ? "Loading tags..." : "Select tags..."}
+                          placeholder={
+                            isLoadingTags ? "Loading tags..." : "Select tags..."
+                          }
                           options={tagOptions}
                           selected={field.value}
                           onChange={field.onChange}
@@ -248,7 +311,8 @@ export default function CreatePage() {
                 <div>
                   <FormLabel>Content</FormLabel>
                   <p className="text-sm text-muted-foreground mb-2">
-                    Write your article below. You can paste images directly into the editor to upload them.
+                    Write your article below. You can paste images directly into
+                    the editor to upload them.
                   </p>
                   <RichTextEditor editor={editor} />
                 </div>
@@ -257,8 +321,11 @@ export default function CreatePage() {
                   <FormLabel>Attachments</FormLabel>
                   {attachments.length > 0 && (
                     <div className="rounded-md border p-4 space-y-2">
-                      {attachments.map(att => (
-                        <div key={att.tempId} className="flex justify-between items-center text-sm">
+                      {attachments.map((att) => (
+                        <div
+                          key={att.tempId}
+                          className="flex justify-between items-center text-sm"
+                        >
                           <span className="flex items-center gap-2 truncate text-muted-foreground">
                             <Paperclip className="h-4 w-4 flex-shrink-0" />
                             <span className="truncate">{att.file.name}</span>
@@ -268,8 +335,12 @@ export default function CreatePage() {
                             size="icon"
                             className="h-6 w-6 flex-shrink-0"
                             onClick={() => {
-                              setAttachments(prev => prev.filter(a => a.tempId !== att.tempId));
-                              toast.info(`Removed attachment: ${att.file.name}`);
+                              setAttachments((prev) =>
+                                prev.filter((a) => a.tempId !== att.tempId)
+                              );
+                              toast.info(
+                                `Removed attachment: ${att.file.name}`
+                              );
                             }}
                           >
                             <X className="h-4 w-4" />
@@ -279,11 +350,16 @@ export default function CreatePage() {
                     </div>
                   )}
                   <div>
-                    <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                    >
                       {isUploading ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       ) : (
-                          <Upload className="mr-2 h-4 w-4" />
+                        <Upload className="mr-2 h-4 w-4" />
                       )}
                       Add Attachment
                     </Button>
@@ -295,9 +371,14 @@ export default function CreatePage() {
                     />
                   </div>
                 </div>
-                
-                <Button type="submit" disabled={mutation.isPending || isUploading}>
-                  {(mutation.isPending || isUploading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+
+                <Button
+                  type="submit"
+                  disabled={mutation.isPending || isUploading}
+                >
+                  {(mutation.isPending || isUploading) && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
                   Submit for Review
                 </Button>
               </form>

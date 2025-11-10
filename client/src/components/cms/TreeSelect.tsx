@@ -14,16 +14,17 @@ interface TreeSelectProps {
   value?: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  allowedOnly?: boolean;
 }
 
-export const TreeSelect = ({ value, onChange, placeholder = 'Select a category...' }: TreeSelectProps) => {
+export const TreeSelect = ({ value, onChange, placeholder = 'Select a category...', allowedOnly = false }: TreeSelectProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedNodeTitle, setSelectedNodeTitle] = useState<string | null>(null);
 
   // --- MODIFY THIS QUERY ---
   const { data: topLevelNodes, isLoading: isTreeLoading } = useQuery({
-    queryKey: ['pageTreeWithPermissions', 'root'],
-    queryFn: () => getPageTreeWithPermissions(),
+    queryKey: ['pageTreeWithPermissions', 'root', allowedOnly], // Add to query key
+    queryFn: () => getPageTreeWithPermissions(undefined, allowedOnly), // Pass to API function
     staleTime: 5 * 60 * 1000,
   });
   // --- END MODIFICATION ---
@@ -89,6 +90,7 @@ export const TreeSelect = ({ value, onChange, placeholder = 'Select a category..
                 level={0}
                 onSelect={handleSelect}
                 selectedId={value}
+                allowedOnly={allowedOnly}
               />
             ))}
           </div>

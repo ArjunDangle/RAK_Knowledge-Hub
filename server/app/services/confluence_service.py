@@ -673,22 +673,23 @@ class ConfluenceService:
             print(f"Error fetching page tree for parent {parent_id}: {e}")
             raise HTTPException(status_code=503, detail="Could not fetch page hierarchy.")
         
-    async def get_page_tree_with_permissions(self, user: UserResponse, parent_id: Optional[str] = None) -> List[PageTreeNodeWithPermission]:
+    async def get_page_tree_with_permissions(self, user: UserResponse, parent_id: Optional[str] = None, allowed_only: bool = False) -> List[PageTreeNodeWithPermission]:
         """
         Fetches the page hierarchy, augmenting each node with an 'isAllowed' flag
-        based on the user's group permissions.
+        based on the user's group permissions. Can be filtered.
         """
+        if allowed_only and user.role != 'ADMIN':
+            # If filtering is requested for a non-admin, use the new repository method
+            return await self.page_repo.get_filtered_tree_nodes_for_user(user, parent_id)
+        
         allowed_page_ids = await self.page_repo.get_all_managed_and_descendant_ids(user)
         is_admin = user.role == 'ADMIN'
 
-        # This single call correctly handles both root-level (parent_id=None)
-        # and nested-level fetches from the database.
         child_pages = await self.page_repo.get_child_pages_for_index(parent_id)
         
         nodes_to_return = []
         for page in child_pages:
             has_children = await self.page_repo.has_children(page.confluenceId)
-            
             is_node_allowed = is_admin or page.id in allowed_page_ids
 
             nodes_to_return.append(

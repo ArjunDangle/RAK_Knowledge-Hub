@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Optional
 from bs4 import BeautifulSoup 
 
 from app.db import db
-from app.schemas.content_schemas import Tag, Article, Subsection, Ancestor, PageTreeNode
+from app.schemas.content_schemas import Tag, Article, Subsection, Ancestor, PageTreeNode, PageTreeNodeWithPermission
 from prisma.enums import PageType
 from prisma.models import Page as PageModel, User # <-- IMPORT USER MODEL
 from prisma.types import PageInclude
@@ -426,3 +426,69 @@ class PageRepository:
                 where={'confluenceId': parent_confluence_id},
                 data={'pageType': PageType.SUBSECTION}
             )
+
+    async def get_filtered_tree_nodes_for_user(self, user: User, parent_id: Optional[str]) -> List[PageTreeNodeWithPermission]:
+        """
+        Fetches a pruned page tree. It returns only nodes the user is allowed to edit
+        and their direct ancestors. The 'isAllowed' flag is set to True only for the
+        nodes that are actually editable.
+        """
+        # --- THIS IS THE FIX ---
+
+        # 1. First, get the set of all database IDs for pages the user is TRULY allowed to edit.
+        truly_allowed_db_ids = await self.get_all_managed_and_descendant_ids(user)
+        if not truly_allowed_db_ids:
+            return []
+
+        # 2. This powerful query finds the set of all VISIBLE nodes:
+        #    - All pages the user can edit.
+        #    - All ancestors of those pages, so the user can see the path.
+        query = f"""
+        WITH RECURSIVE allowed_and_ancestors AS (
+            SELECT id, "confluenceId", "parentConfluenceId" FROM "Page" WHERE id IN ({','.join(map(str, truly_allowed_db_ids))})
+            UNION
+            SELECT p.id, p."confluenceId", p."parentConfluenceId"
+            FROM "Page" p
+            INNER JOIN allowed_and_ancestors aa ON p."confluenceId" = aa."parentConfluenceId"
+        )
+        SELECT DISTINCT "confluenceId" FROM allowed_and_ancestors;
+        """
+        results = await self.db.query_raw(query)
+        visible_confluence_ids = {item['confluenceId'] for item in results}
+
+        if not visible_confluence_ids:
+            return []
+        
+        # 3. Fetch the specific child pages for the current level of the tree that are in our visible set.
+        child_pages = await self.db.page.find_many(
+            where={
+                'parentConfluenceId': parent_id,
+                'confluenceId': {'in': list(visible_confluence_ids)}
+            },
+            order={'title': 'asc'}
+        )
+        
+        # 4. Efficiently check which of these children have children themselves
+        child_confluence_ids = [p.confluenceId for p in child_pages]
+        parents_with_children_query = await self.db.page.find_many(
+            where={'parentConfluenceId': {'in': child_confluence_ids}},
+            distinct=['parentConfluenceId']
+        )
+        parent_ids_with_children_set = {p.parentConfluenceId for p in parents_with_children_query}
+
+        # 5. Build the final response, now with correct permissions.
+        nodes_to_return = []
+        for page in child_pages:
+            # The 'isAllowed' flag is now correctly determined by checking against our ground-truth set.
+            is_node_allowed = page.id in truly_allowed_db_ids
+            has_children = page.confluenceId in parent_ids_with_children_set
+            
+            nodes_to_return.append(
+                PageTreeNodeWithPermission(
+                    id=page.confluenceId,
+                    title=page.title,
+                    hasChildren=has_children,
+                    isAllowed=is_node_allowed 
+                )
+            )
+        return nodes_to_return

@@ -92,3 +92,7 @@ export type PageTreeNode = {
   title: string;
   hasChildren: boolean;
 };
+
+export interface PageTreeNodeWithPermission extends PageTreeNode {
+  isAllowed: boolean;
+}

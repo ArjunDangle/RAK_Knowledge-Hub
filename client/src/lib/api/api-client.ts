@@ -10,6 +10,7 @@ import {
   ContentItem,
   PageTreeNode,
   PaginatedResponse,
+  PageTreeNodeWithPermission, // Keep this import
 } from "../types/content";
 
 export interface User {
@@ -40,6 +41,12 @@ export interface PageCreatePayload {
   parent_id: string;
   tags: string[];
   attachments: AttachmentInfo[];
+}
+
+export interface PageCreateResponse {
+  id: string;
+  title: string;
+  status: string;
 }
 
 export interface PageDetailResponse {
@@ -94,22 +101,22 @@ export interface Notification {
   createdAt: string;
 }
 
-// --- MODIFIED TYPES FOR GROUP MANAGEMENT ---
 export interface PermissionGroup {
   id: number;
   name: string;
-  managedPageConfluenceId: string | null; // <-- Changed from managedPageId
+  managedPageConfluenceId: string | null;
   members: User[];
 }
 
 export interface GroupUpdatePayload {
   name: string;
-  managedPageConfluenceId: string | null; // <-- Changed from managedPageId
+  managedPageConfluenceId: string | null;
 }
 
-export interface PageTreeNodeWithPermission extends PageTreeNode {
-  isAllowed: boolean;
-}
+// --- THIS IS THE FIX ---
+// The local declaration of PageTreeNodeWithPermission that was here has been REMOVED.
+// We are now only using the version imported from ../types/content.
+// --- END OF FIX ---
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
@@ -287,8 +294,15 @@ export async function getPageTree(parentId?: string): Promise<PageTreeNode[]> {
     : "/cms/pages/tree";
   return apiFetch<PageTreeNode[]>(endpoint);
 }
-export async function getPageTreeWithPermissions(parentId?: string): Promise<PageTreeNodeWithPermission[]> {
-  const endpoint = parentId ? `/cms/pages/tree-with-permissions?parent_id=${parentId}` : "/cms/pages/tree-with-permissions";
+export async function getPageTreeWithPermissions(parentId?: string, allowedOnly: boolean = false): Promise<PageTreeNodeWithPermission[]> {
+  const params = new URLSearchParams();
+  if (parentId) {
+    params.append('parent_id', parentId);
+  }
+  if (allowedOnly) {
+    params.append('allowed_only', 'true');
+  }
+  const endpoint = `/cms/pages/tree-with-permissions?${params.toString()}`;
   return apiFetch<PageTreeNodeWithPermission[]>(endpoint);
 }
 export async function uploadAttachment(
@@ -308,8 +322,8 @@ export async function uploadAttachment(
   });
   return handleResponse<AttachmentUploadResponse>(response);
 }
-export async function createPage(payload: PageCreatePayload) {
-  return apiFetch("/cms/pages/create", {
+export async function createPage(payload: PageCreatePayload): Promise<PageCreateResponse> {
+  return apiFetch<PageCreateResponse>("/cms/pages/create", {
     method: "POST",
     body: JSON.stringify(payload),
   });

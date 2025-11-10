@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, Loader2 } from 'lucide-react';
-import { getPageTreeWithPermissions, PageTreeNodeWithPermission } from '@/lib/api/api-client'; // <-- MODIFIED IMPORT
+import { getPageTreeWithPermissions, PageTreeNodeWithPermission } from '@/lib/api/api-client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner'; // <-- IMPORT TOAST
 
@@ -11,14 +11,15 @@ interface TreeNodeProps {
   level: number;
   onSelect: (node: PageTreeNodeWithPermission) => void;
   selectedId?: string;
+  allowedOnly?: boolean;
 }
 
-export const TreeNode = ({ node, level, onSelect, selectedId }: TreeNodeProps) => {
+export const TreeNode = ({ node, level, onSelect, selectedId, allowedOnly = false }: TreeNodeProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const { data: children, isLoading } = useQuery({
-    queryKey: ['pageTreeWithPermissions', node.id], // <-- CHANGE QUERY KEY
-    queryFn: () => getPageTreeWithPermissions(node.id), // <-- USE NEW FETCHER
+    queryKey: ['pageTreeWithPermissions', node.id, allowedOnly],
+    queryFn: () => getPageTreeWithPermissions(node.id, allowedOnly), 
     enabled: isExpanded && node.hasChildren,
     staleTime: 5 * 60 * 1000,
   });
@@ -79,7 +80,7 @@ export const TreeNode = ({ node, level, onSelect, selectedId }: TreeNodeProps) =
       {isExpanded && children && (
         <div>
           {children.map(childNode => (
-            <TreeNode key={childNode.id} node={childNode} level={level + 1} onSelect={onSelect} selectedId={selectedId} />
+            <TreeNode key={childNode.id} node={childNode} level={level + 1} onSelect={onSelect} selectedId={selectedId} allowedOnly={allowedOnly}/>
           ))}
         </div>
       )}
