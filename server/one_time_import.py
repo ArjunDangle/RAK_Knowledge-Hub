@@ -52,7 +52,11 @@ async def process_page_and_children(page_id: str, parent_confluence_id: Optional
             updated_at = page_data["version"]["when"]
             html_content = page_data.get("body", {}).get("view", {}).get("value", "")
             plain_text = BeautifulSoup(html_content, 'html.parser').get_text(" ", strip=True)
-            description = (plain_text[:250] + '...') if len(plain_text) > 250 else "No description available."
+            description = (plain_text[:250] + '...') 
+            if plain_text:
+                description = (plain_text[:250] + '...') if len(plain_text) > 250 else plain_text
+            else:
+                description = "No description available."
 
             await confluence_service.page_repo.create_page(
                 confluence_id=page_id, title=title, slug=confluence_service._slugify(title),

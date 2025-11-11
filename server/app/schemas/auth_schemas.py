@@ -36,7 +36,7 @@ class UserResponse(BaseModel):
     username: str
     name: str
     role: str
-    groups: List[GroupSummary] = []
+    groups: Optional[List[GroupSummary]] = []
 
     class Config:
         from_attributes = True
