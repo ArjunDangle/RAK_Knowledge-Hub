@@ -12,12 +12,11 @@ if [[ "$RUN_DB_RESET_ONCE" == "true" ]]; then
   # --- ONE-TIME SEEDING PATH ---
   echo "--- ONE-TIME DATABASE RESET & SEED INITIATED ---"
   
-  # 1. Wipe the database and apply schema from migrations. This creates the empty tables.
+  # 1. Wipe the database and apply schema from migrations.
   echo "Resetting the database to apply the latest schema..."
   npx prisma migrate reset --force
   
   # 2. Execute the seed.sql file to populate the database.
-  # psql can directly use the DATABASE_URL environment variable provided by Render.
   echo "Seeding the database from server/prisma/seed.sql..."
   psql $DATABASE_URL -f prisma/seed.sql
   
@@ -32,5 +31,10 @@ else
   
   echo "--- STANDARD DEPLOYMENT COMPLETE ---"
 fi
+
+# Step 3: Explicitly generate the Prisma Client for Python.
+# THIS IS THE FIX. It ensures the client code is always available.
+echo "Generating Prisma Client for Python..."
+npx prisma generate
 
 echo "✅ Build finished successfully!"
