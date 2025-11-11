@@ -41,6 +41,7 @@ class Article(BaseModel):
     readMinutes: int
     author: Optional[str] = None
     canEdit: bool = False
+    parentId: Optional[str] = None
 
     class Config:
         from_attributes = True

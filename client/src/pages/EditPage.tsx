@@ -92,6 +92,8 @@ export default function EditPage() {
       title: data.title,
       description: data.description,
       content: data.content,
+      tags: article?.tags.map(tag => tag.name),
+      parent_id: article?.parentId || undefined,
     };
     mutation.mutate(payload);
   };

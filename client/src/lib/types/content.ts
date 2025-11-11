@@ -43,6 +43,7 @@ export type Article = {
   views: number;
   readMinutes: number;
   author?: string;
+  parentId: string | null;
 };
 
 // NEW: This type allows us to handle a mixed list of articles and subsections

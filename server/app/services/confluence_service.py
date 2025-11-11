@@ -214,7 +214,8 @@ class ConfluenceService:
             updatedAt=page_metadata.updatedAt.isoformat(),
             views=page_metadata.views,
             readMinutes=read_minutes,
-            author=page_metadata.authorName
+            author=page_metadata.authorName,
+            parentId=page_metadata.parentConfluenceId
         )
 
     async def get_subsection_by_id_hybrid(self, page_id: str) -> Optional[Subsection]:
