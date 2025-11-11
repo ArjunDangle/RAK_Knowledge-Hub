@@ -16,13 +16,8 @@ class PermissionService:
         1. The user is an ADMIN.
         2. The user is a member of a group that manages this page or one of its ancestors.
         """
-        print("\n--- Running Permission Check ---")
-        print(f"User: {user.name} (ID: {user.id}, Role: {user.role})")
-        print(f"Checking permission for Page (Confluence ID): {page_confluence_id}")
-
         # 1. Admins can edit anything
         if user.role == "ADMIN":
-            print("-> User is ADMIN. Permission GRANTED.")
             return True
 
         # 2. Fetch the user's group memberships
@@ -31,27 +26,20 @@ class PermissionService:
             include={'groups': True}
         )
         if not user_with_groups or not user_with_groups.groups:
-            print("-> User is not a member of any groups. Permission DENIED.")
             return False
 
         user_group_ids = {group.id for group in user_with_groups.groups}
-        print(f"User is in Group IDs: {user_group_ids}")
 
         # 3. Get the page being edited
         page_to_edit = await self.page_repo.get_page_by_id(page_confluence_id)
         if not page_to_edit:
-            print(f"-> Could not find Page with Confluence ID {page_confluence_id} in DB. Permission DENIED.")
             return False
-        
-        print(f"Page to Edit found in DB: '{page_to_edit.title}' (DB ID: {page_to_edit.id})")
             
         # 4. Get the page's ancestor chain
         ancestor_db_ids = await self.page_repo.get_ancestor_db_ids(page_to_edit)
         page_and_ancestor_db_ids = ancestor_db_ids + [page_to_edit.id]
-        print(f"Page hierarchy (DB IDs) being checked: {page_and_ancestor_db_ids}")
 
         # 5. Check if any page in this hierarchy is managed by one of the user's groups
-        print("-> Performing final query against Group table...")
         managing_group = await self.db.group.find_first(
             where={
                 'managedPageId': {'in': page_and_ancestor_db_ids},
@@ -60,8 +48,6 @@ class PermissionService:
         )
         
         if managing_group:
-            print(f"-> MATCH FOUND! Group '{managing_group.name}' (ID: {managing_group.id}) manages a page in the hierarchy. Permission GRANTED.")
             return True
         else:
-            print("-> No matching group found that manages this page or its ancestors. Permission DENIED.")
             return False

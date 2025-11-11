@@ -1,11 +1,10 @@
-// client/src/pages/KnowledgeLayout.tsx
 import { useState, ReactNode, createContext, useContext, useRef } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteSidebar } from "@/components/layout/SiteSidebar";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
-import { getAncestors, getPageById } from "@/lib/api/api-client"; // <-- FIX: Import getPageById
+import { getAncestors, getPageById, getArticleById } from "@/lib/api/api-client";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
@@ -15,9 +14,9 @@ import { cn } from "@/lib/utils";
 interface LayoutContextType {
   activePath: string[];
   isSidebarCollapsed: boolean;
-  activeGroup?: string; // <-- FIX: Add activeGroup to context
+  activeGroup?: string;
 }
-const LayoutContext = createContext<LayoutContextType>({ 
+const LayoutContext = createContext<LayoutContextType>({
   activePath: [],
   isSidebarCollapsed: false,
   activeGroup: undefined,
@@ -31,10 +30,11 @@ interface KnowledgeLayoutProps {
 
 export function KnowledgeLayout({ breadcrumbs, children }: KnowledgeLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const { pageId, articleId, group } = useParams<{ pageId?: string; articleId?: string, group?: string }>(); // <-- FIX: Add group
+  const { pageId, group } = useParams<{ pageId?: string; group?: string }>();
+  const location = useLocation();
   const isMobile = useIsMobile();
   
-  const idToFetch = pageId || articleId;
+  const idToFetch = pageId;
 
   const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
 
@@ -44,19 +44,21 @@ export function KnowledgeLayout({ breadcrumbs, children }: KnowledgeLayoutProps)
     enabled: !!idToFetch,
   });
 
-  // --- THIS IS THE FIX ---
-  // Fetch minimal page details ONLY when we don't have a group in the URL.
-  // This helps us identify the parent group for any nested page.
   const { data: pageDetails } = useQuery({
       queryKey: ['pageGroup', idToFetch],
-      queryFn: () => getPageById(idToFetch!),
-      enabled: !!idToFetch && !group, // Only run if we have an ID but no group param
-      staleTime: 5 * 60 * 1000, // Cache for 5 mins
+      queryFn: () => {
+        if (!idToFetch) return Promise.resolve(null);
+        
+        if (location.pathname.startsWith('/article/')) {
+          return getArticleById(idToFetch);
+        }
+        return getPageById(idToFetch);
+      },
+      enabled: !!idToFetch && !group,
+      staleTime: 5 * 60 * 1000,
   });
   
-  // Determine the active group from URL params or the fetched page data
   const activeGroup = group || pageDetails?.group;
-  // --- END OF FIX ---
 
   const activePath = [...(ancestors?.map(a => a.id) || []), idToFetch].filter(Boolean) as string[];
 
@@ -73,7 +75,6 @@ export function KnowledgeLayout({ breadcrumbs, children }: KnowledgeLayoutProps)
   
   if (isMobile) {
     return (
-        // Pass the activeGroup down through the context
         <LayoutContext.Provider value={{ activePath, isSidebarCollapsed: sidebarCollapsed, activeGroup }}>
             <div className="min-h-screen bg-background">
                 <SiteHeader
@@ -100,7 +101,6 @@ export function KnowledgeLayout({ breadcrumbs, children }: KnowledgeLayoutProps)
   }
 
   return (
-    // Pass the activeGroup down through the context for desktop view
     <LayoutContext.Provider value={{ activePath, isSidebarCollapsed: sidebarCollapsed, activeGroup }}>
       <div className="min-h-screen bg-background flex flex-col">
         <SiteHeader
