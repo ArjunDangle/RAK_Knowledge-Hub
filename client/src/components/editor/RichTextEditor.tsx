@@ -451,35 +451,26 @@ const PasteHandler = Extension.create<{ onFileUpload: (file: File) => void }>({
       new Plugin({
         key: new PluginKey("paste-handler"),
         props: {
-          // --- THIS IS THE FIX ---
-          // This logic now correctly differentiates between images and other files.
           handlePaste: (view, event) => {
             const files = event.clipboardData?.files;
             if (!files || files.length === 0) {
-              return false; // No files, do nothing and let other handlers run.
+              return false; 
             }
 
-            // Filter out any images from the pasted files.
             const nonImageFiles = Array.from(files).filter(
               (file) => !file.type.startsWith("image/")
             );
 
-            // If there are no non-image files, it means only images were pasted.
-            // We return `false` to let Tiptap's native image extension handle it.
             if (nonImageFiles.length === 0) {
               return false;
             }
 
-            // If we have non-image files (PDFs, videos, etc.), handle them with our custom upload logic.
             nonImageFiles.forEach((file) => {
               this.options.onFileUpload(file);
             });
 
-            // Return `true` to signify that we have handled the paste event,
-            // preventing Tiptap's default behavior for these non-image files.
             return true;
           },
-          // --- END OF FIX ---
         },
       }),
     ];
@@ -488,7 +479,8 @@ const PasteHandler = Extension.create<{ onFileUpload: (file: File) => void }>({
 
 export const useConfiguredEditor = (
   initialContent: string = "",
-  onFileUpload: (file: File) => void
+  onFileUpload: (file: File) => void,
+  onUpdate?: (editor: Editor) => void
 ) => {
   const editor = useEditor({
     extensions: [
@@ -496,12 +488,12 @@ export const useConfiguredEditor = (
         link: false,
         underline: false,
       }),
-      TiptapUnderline, // Our custom underline
+      TiptapUnderline,
       TextStyle,
       FontFamily,
       Color,
       Highlight.configure({ multicolor: true }),
-      Link.configure({ openOnClick: false, autolink: true }), // Our custom link
+      Link.configure({ openOnClick: false, autolink: true }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       TaskList,
       TaskItem.configure({ nested: true }),
@@ -516,6 +508,9 @@ export const useConfiguredEditor = (
     content: initialContent,
     editorProps: {
       attributes: { class: "focus:outline-none" },
+    },
+    onUpdate: ({ editor }) => {
+      onUpdate?.(editor);
     },
   });
 

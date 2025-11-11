@@ -15,18 +15,18 @@ UPLOAD_DIR = "/tmp/uploads"
 
 ROOT_PAGE_CONFIG = [
     {
-        "confluence_title": "Department",
-        "slug": "departments",
-        "display_title": "Departments",
-        "description": "Resources organized by team functions",
-        "icon": "Building2"
-    },
-    {
         "confluence_title": "Resource Centre",
         "slug": "resource-centre",
         "display_title": "Resource Centre",
         "description": "Comprehensive knowledge base and documentation",
         "icon": "BookOpen"
+    },
+    {
+        "confluence_title": "Department",
+        "slug": "departments",
+        "display_title": "Departments",
+        "description": "Resources organized by team functions",
+        "icon": "Building2"
     },
     {
         "confluence_title": "Tools",

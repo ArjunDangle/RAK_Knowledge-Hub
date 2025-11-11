@@ -22,6 +22,7 @@ import { ArticleCardSkeleton } from "@/components/ui/loading-skeleton";
 const editPageSchema = z.object({
   title: z.string().min(5, { message: "Title must be at least 5 characters long." }),
   description: z.string().min(10, "Description must be at least 10 characters.").max(150, "Description must be 10-15 words (max 150 chars)."),
+  content: z.string().min(50, { message: "Content must be at least 50 characters." }),
 });
 
 type EditPageFormData = z.infer<typeof editPageSchema>;
@@ -44,26 +45,34 @@ export default function EditPage() {
     defaultValues: {
       title: "",
       description: "",
+      content: "",
     },
   });
 
   // 3. Setup the Tiptap editor
-  // We pass a simple () => {} for onFileUpload, as attachments are not editable in this phase.
-  const editor = useConfiguredEditor(article?.html || "", () => {});
+  const editor = useConfiguredEditor(
+    article?.html || "",
+    () => {},
+    (editor) => {
+      form.setValue("content", editor.getHTML(), { shouldDirty: true });
+    }
+  );
 
   // 4. Populate the form once data is loaded
   useEffect(() => {
     if (article) {
       form.reset({
         title: article.title,
-        description: (article as any).description || article.excerpt, // Use new description if available, fallback to excerpt
+        description: article.description || article.excerpt,
+        content: article.html,
       });
       // Also reset the editor content if it's different
       if (editor && !editor.isDestroyed && editor.getHTML() !== article.html) {
         editor.commands.setContent(article.html);
       }
     }
-  }, [article, form, editor]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [article]);
 
   // 5. Setup the mutation for saving changes
   const mutation = useMutation({
@@ -79,16 +88,10 @@ export default function EditPage() {
 
   // 6. Handle form submission
   const onSubmit = (data: EditPageFormData) => {
-    const content = editor?.getHTML() || '';
-    if (content.length < 50) {
-      toast.error("Content is too short", { description: "Content must be at least 50 characters." });
-      return;
-    }
-
     const payload: PageUpdatePayload = {
       title: data.title,
       description: data.description,
-      content: content,
+      content: data.content,
     };
     mutation.mutate(payload);
   };
@@ -167,10 +170,19 @@ export default function EditPage() {
                   )}
                 />
 
-                <div>
-                  <FormLabel>Content</FormLabel>
-                  <RichTextEditor editor={editor} />
-                </div>
+                <FormField
+                  control={form.control}
+                  name="content"
+                  render={() => (
+                    <FormItem>
+                      <FormLabel>Content</FormLabel>
+                      <FormControl>
+                        <RichTextEditor editor={editor} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 
                 <div className="flex items-center gap-4">
                   <Button type="submit" disabled={mutation.isPending || !form.formState.isDirty}>
