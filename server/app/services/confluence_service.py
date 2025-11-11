@@ -66,23 +66,23 @@ class ConfluenceService:
 
     async def _transform_raw_page_to_article(self, page_data: dict, is_admin_view: bool = False) -> Optional[Article]:
         """
-        Transforms a raw Confluence page dictionary (from ConfluenceRepository)
-        into a validated Article schema.
-        
-        This is used for older endpoints that rely purely on Confluence data.
+        Transforms a raw Confluence page dictionary into an Article schema.
         """
         raw_labels = page_data.get("metadata", {}).get("labels", {}).get("results", [])
         label_names = {label.get("name") for label in raw_labels}
         
-        # Don't show non-public articles unless it's an admin preview
         if not is_admin_view:
             if "status-unpublished" in label_names or "status-rejected" in label_names:
                 return None
 
         ancestors = page_data.get('ancestors', [])
-        if not ancestors: return None # Must have ancestors to determine group
+        if not ancestors:
+            return None
 
         group_slug = self._get_group_from_ancestors(ancestors)
+        if not group_slug:
+            return None
+        
         subsection_slug = self._slugify(ancestors[-1]['title']) if ancestors else ""
         
         html_content = page_data.get("body", {}).get("view", {}).get("value", "")
@@ -93,9 +93,9 @@ class ConfluenceService:
         
         status_labels = {"status-unpublished", "status-rejected"}
         tags = [
-            Tag.model_validate(t.model_dump()) # Use model_dump() for Prisma -> Pydantic
+            Tag.model_validate(t.model_dump())
             for label in raw_labels if label.get("name") not in status_labels
-            for t in [self.confluence_repo.get_tag_by_name(label["name"])] if t # Helper to get Tag model
+            for t in [self.confluence_repo.get_tag_by_name(label["name"])] if t
         ]
        
         author_info = page_data.get("version", {}).get("by", {})
@@ -112,9 +112,10 @@ class ConfluenceService:
             "group": group_slug,
             "subsection": subsection_slug,
             "updatedAt": page_data["version"]["when"],
-            "views": 0, # Views are not available from Confluence
+            "views": 0,
             "readMinutes": read_minutes,
-            "author": author_name
+            "author": author_name,
+            "parentId": ancestors[-1]['id'] if ancestors else None
         }
         return Article.model_validate(article_data)
 
@@ -255,50 +256,63 @@ class ConfluenceService:
             return []
         return await self.page_repo.get_ancestors_from_db(page)
 
-    async def search_content_hybrid(self, query: str, page: int, page_size: int) -> dict:
+    async def search_content_hybrid(self, query: str, mode: str, sort: str, page: int, page_size: int) -> dict:
         """
-        HYBRID SEARCH: Searches Confluence for relevant IDs, then enriches
-        that list of IDs with metadata from our fast local DB.
+        DIRECT CONFLUENCE SEARCH: Searches Confluence and fetches full page details
+        directly from the API, respecting the specified search mode and sort order.
         """
-        # 1. Search Confluence for IDs
-        cql = f'space = "{self.settings.confluence_space_key}" and text ~ "{query}" and label != "status-unpublished" and label != "status-rejected"'
+        import asyncio
+
+        # 1. Build the Confluence Query Language (CQL) string based on the mode
+        base_cql = f'space = "{self.settings.confluence_space_key}" and type = page and label != "status-unpublished" and label != "status-rejected"'
+        
+        sanitized_query = query.replace('"', '\\"')
+
+        if mode == "title":
+            specific_cql = f'title ~ "{sanitized_query}"'
+        elif mode == "tags":
+            tags = sanitized_query.strip().split()
+            if not tags:
+                return {"items": [], "total": 0, "page": 1, "pageSize": page_size, "hasNext": False}
+            label_clauses = [f'label = "{tag}"' for tag in tags]
+            specific_cql = ' and '.join(label_clauses)
+        else:  # Default to 'all' or 'content'
+            specific_cql = f'text ~ "{sanitized_query}"'
+
+        # 2. Add sorting clause
+        order_by_clause = ""
+        if sort == "date":
+            order_by_clause = " order by lastModified desc"
+        
+        full_cql = f"{base_cql} and {specific_cql}{order_by_clause}"
+        
+        # 3. Search Confluence using the constructed CQL
         limit = page_size + 1
         start = (page - 1) * page_size
         
-        search_results = self.confluence_repo.search_cql(cql, start=start, limit=limit, expand="title")
+        search_result_data = self.confluence_repo.search_cql(full_cql, start=start, limit=limit, expand="body.view,version,metadata.labels,ancestors")
         
-        raw_pages = search_results.get('results', [])
-        has_next_page = len(raw_pages) > page_size
+        # 4. Process the results and handle pagination
+        raw_results = search_result_data.get('results', [])
+        has_next_page = len(raw_results) > page_size
+        
         if has_next_page:
-            raw_pages = raw_pages[:-1] # Remove the extra item
+            raw_results = raw_results[:-1]
 
-        confluence_ids = [
-            result['content']['id'] 
-            for result in search_results 
-            if isinstance(result, dict) and result.get('content') and result['content'].get('type') == 'page'
-]
-        if not confluence_ids:
-            return {"items": [], "hasNext": False, "total": 0}
-
-        # 2. Enrich these IDs with a single query to our local DB
-        enriched_pages = await self.page_repo.get_pages_by_ids(confluence_ids)
-
-        # 3. Re-order the DB results to match Confluence's relevance order
-        enriched_map = {page.confluenceId: page for page in enriched_pages}
-        ordered_enriched_pages = [enriched_map[cid] for cid in confluence_ids if cid in enriched_map]
+        # 5. Asynchronously transform the raw results into the Article schema
+        article_promises = [self._transform_raw_page_to_article(result) for result in raw_results]
         
-        # 4. Format as Articles (search results are always Articles)
-        formatted_articles = []
-        for page in ordered_enriched_pages:
-            # We don't know group/subsection slugs here without N+1 queries, so set to unknown
-            formatted_articles.append(
-                await self.page_repo._format_page_as_article(page, "unknown", "unknown")
-            )
+        articles_or_none = await asyncio.gather(*article_promises)
+        valid_articles = [article for article in articles_or_none if article is not None]
+
+        total_results = start + len(valid_articles) + (1 if has_next_page else 0)
 
         return {
-            "items": formatted_articles,
-            "hasNext": has_next_page,
-            "total": -1 # Total is not easily available from CQL
+            "items": valid_articles,
+            "total": total_results,
+            "page": page,
+            "pageSize": page_size,
+            "hasNext": has_next_page
         }
 
     def get_attachment_data(self, page_id: str, file_name: str) -> Optional[StreamingResponse]:

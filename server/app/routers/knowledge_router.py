@@ -86,15 +86,17 @@ async def get_ancestors(page_id: str):
 @router.get("/search", response_model=Dict[str, Any], tags=["Knowledge Hub"])
 async def search_knowledge_hub(
     q: str = Query(..., min_length=2, description="Search query string"),
+    mode: str = Query("all", description="Search mode: all, title, content, tags"),
+    sort: str = Query("relevance", description="Sort order: relevance, date, views"),
     page: int = Query(1, ge=1),
     pageSize: int = Query(10, ge=1, le=50)
 ):
     """
-    HYBRID SEARCH: Searches Confluence for relevant page IDs, then enriches
-    those IDs with metadata from the local DB.
+    Directly searches Confluence, builds results from the API, and supports sorting.
     """
     try:
-        return await confluence_service.search_content_hybrid(query=q, page=page, page_size=pageSize)
+        # This now passes all parameters correctly to the service layer
+        return await confluence_service.search_content_hybrid(query=q, mode=mode, sort=sort, page=page, page_size=pageSize)
     except HTTPException as e:
         raise e
     except Exception as e:
