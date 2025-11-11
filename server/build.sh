@@ -19,7 +19,7 @@ if [[ "$RUN_DB_RESET_ONCE" == "true" ]]; then
   # 2. Execute the seed.sql file to populate the database.
   # psql can directly use the DATABASE_URL environment variable provided by Render.
   echo "Seeding the database from server/prisma/seed.sql..."
-  psql $DATABASE_URL -f server/prisma/seed.sql
+  psql $DATABASE_URL -f prisma/seed.sql
   
   echo "--- ONE-TIME SEEDING PROCESS COMPLETE. REMEMBER TO UNSET THE ENV VARIABLE. ---"
 else
