@@ -1,13 +1,15 @@
 // client/src/pages/CreatePage.tsx
-import { useState, useRef, ChangeEvent } from "react";
+import { useState, useRef, ChangeEvent, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import * as z from "zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Loader2, Upload, Paperclip, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import { KnowledgeLayout } from "./KnowledgeLayout";
 import { Button } from "@/components/ui/button";
@@ -36,15 +38,16 @@ import {
 import { TreeSelect } from "@/components/cms/TreeSelect";
 import { MultiSelect, MultiSelectOption } from "@/components/ui/multi-select";
 import {
-  getAllTags,
+  getAllTagsGrouped, // Changed from getAllTags
   createPage,
   PageCreatePayload,
   uploadAttachment,
   AttachmentInfo,
 } from "@/lib/api/api-client";
+import { GroupedTag } from "@/lib/types/content"; // Add this new type import
 
-// Validation schema
-const createPageSchema = z.object({
+// Define base schema that is always required
+const baseSchema = z.object({
   title: z
     .string()
     .min(5, { message: "Title must be at least 5 characters long." }),
@@ -55,15 +58,11 @@ const createPageSchema = z.object({
   parent_id: z
     .string()
     .min(1, { message: "You must select a parent category." }),
-  tags: z.array(z.string()).min(1, { message: "Select at least one tag." }),
 });
-
-type CreatePageFormData = z.infer<typeof createPageSchema>;
 
 interface UploadedFile {
   file: File;
   tempId: string;
-  type: "image" | "video" | "pdf" | "file";
 }
 
 export default function CreatePage() {
@@ -73,22 +72,41 @@ export default function CreatePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showAllowedOnly, setShowAllowedOnly] = useState(false);
 
-  const { data: allTags, isLoading: isLoadingTags } = useQuery({
-    queryKey: ["allTags"],
-    queryFn: getAllTags,
+  // 1. Fetch the structured tag groups
+  const { data: tagGroups, isLoading: isLoadingTags } = useQuery<GroupedTag[]>({
+    queryKey: ["allTagsGrouped"],
+    queryFn: getAllTagsGrouped,
   });
 
-  const tagOptions: MultiSelectOption[] = allTags
-    ? allTags.map((tag) => ({ value: tag.name, label: tag.name }))
-    : [];
+  // 2. Dynamically build the validation schema based on fetched groups
+  const dynamicSchema = useMemo(() => {
+    if (!tagGroups) return baseSchema;
+    const groupSchemas = tagGroups.reduce((acc, group) => {
+      return {
+        ...acc,
+        // Use a valid key for the schema object
+        [group.name.replace(/\s+/g, "_")]: z
+          .array(z.string())
+          .min(1, { message: `You must select at least one ${group.name}.` }),
+      };
+    }, {});
+    return baseSchema.extend(groupSchemas);
+  }, [tagGroups]);
 
-  // --- Editor and Attachment Setup ---
+  // 3. Initialize the form with the dynamic schema
+  const form = useForm<z.infer<typeof dynamicSchema>>({
+    resolver: zodResolver(dynamicSchema),
+    defaultValues: {
+      title: "",
+      description: "",
+      parent_id: "",
+    },
+  });
+
   const handleFileUpload = async (file: File) => {
     setIsUploading(true);
     try {
-      // Step 1: Immediately start the upload to the server in the background
       const response = await uploadAttachment(file);
-
       const fileType = file.type.startsWith("image/")
         ? "image"
         : file.type.startsWith("video/")
@@ -97,29 +115,25 @@ export default function CreatePage() {
         ? "pdf"
         : "file";
 
-      // Step 2: Add the file to our state for the final submission payload
-      const newAttachment: UploadedFile = {
-        file: file,
-        tempId: response.temp_id,
-        type: fileType,
-      };
-      setAttachments((prev) => [...prev, newAttachment]);
+      setAttachments((prev) => [
+        ...prev,
+        { file: file, tempId: response.temp_id },
+      ]);
 
-      // --- THIS IS THE FIX ---
-      // Step 3: Decide how to display the attachment in the editor
       if (editor) {
         if (fileType === "image") {
-          // For images, create a local preview and insert it as a visible image
           const reader = new FileReader();
           reader.onload = (e) => {
-            const src = e.target?.result as string;
-            if (src) {
-              editor.chain().focus().setImage({ src }).run();
+            if (e.target?.result) {
+              editor
+                .chain()
+                .focus()
+                .setImage({ src: e.target.result as string })
+                .run();
             }
           };
           reader.readAsDataURL(file);
         } else {
-          // For all other file types (PDF, video), insert the generic placeholder
           editor
             .chain()
             .focus()
@@ -130,8 +144,6 @@ export default function CreatePage() {
             .run();
         }
       }
-      // --- END OF FIX ---
-
       toast.success("Attachment uploaded successfully.");
     } catch (error) {
       toast.error("Upload failed", { description: (error as Error).message });
@@ -146,23 +158,11 @@ export default function CreatePage() {
       handleFileUpload(file);
     }
     if (event.target) {
-      event.target.value = "";
+      event.target.value = ""; // Reset file input
     }
   };
 
   const editor = useConfiguredEditor("", handleFileUpload);
-  // --- End Setup ---
-
-  // Form setup
-  const form = useForm<CreatePageFormData>({
-    resolver: zodResolver(createPageSchema),
-    defaultValues: {
-      title: "",
-      description: "",
-      parent_id: "",
-      tags: [],
-    },
-  });
 
   // Mutation for creating the page
   const mutation = useMutation({
@@ -177,7 +177,7 @@ export default function CreatePage() {
   });
 
   // Handle form submission
-  const onSubmit = (data: CreatePageFormData) => {
+  const onSubmit = (data: z.infer<typeof dynamicSchema>) => {
     const content = editor?.getHTML() || "";
     if (content.length < 50) {
       toast.error("Content is too short", {
@@ -191,12 +191,24 @@ export default function CreatePage() {
       file_name: a.file.name,
     }));
 
+    // Flatten all selected tags from the dynamic fields into a single array
+    const allSelectedTags: string[] = [];
+    if (tagGroups) {
+      tagGroups.forEach((group) => {
+        const groupKey = group.name.replace(/\s+/g, "_") as keyof typeof data;
+        const selected = data[groupKey];
+        if (Array.isArray(selected)) {
+          allSelectedTags.push(...selected);
+        }
+      });
+    }
+
     const payload: PageCreatePayload = {
       title: data.title,
       description: data.description,
       content: content,
       parent_id: data.parent_id,
-      tags: data.tags,
+      tags: allSelectedTags, // Use the flattened array
       attachments: attachmentPayload,
     };
 
@@ -287,26 +299,75 @@ export default function CreatePage() {
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="tags"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Tags</FormLabel>
-                      <FormControl>
-                        <MultiSelect
-                          placeholder={
-                            isLoadingTags ? "Loading tags..." : "Select tags..."
-                          }
-                          options={tagOptions}
-                          selected={field.value}
-                          onChange={field.onChange}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
+                {/* Tags Section */}
+                <div className="space-y-4">
+                  <div>
+                    <FormLabel className="text-sm font-medium text-foreground">
+                      Tags
+                    </FormLabel>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Select at least one tag from each of the following
+                      mandatory categories to help users find your content.
+                    </p>
+                  </div>
+
+                  {isLoadingTags ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {[...Array(2)].map((_, i) => (
+                        <div key={i} className="space-y-2">
+                          <Skeleton className="h-5 w-1/3" />
+                          <Skeleton className="h-10 w-full" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {tagGroups?.map((group) => {
+                        const options: MultiSelectOption[] = group.tags.map(
+                          (tag) => ({
+                            value: tag.name,
+                            label: tag.name,
+                          })
+                        );
+
+                        const formFieldName = group.name.replace(
+                          /\s+/g,
+                          "_"
+                        ) as keyof z.infer<typeof dynamicSchema>;
+
+                        return (
+                          <FormField
+                            key={group.id}
+                            control={form.control}
+                            name={formFieldName}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-sm font-medium text-foreground">
+                                  {group.name}
+                                </FormLabel>
+                                <FormControl>
+                                  <MultiSelect
+                                    options={options}
+                                    selected={
+                                      Array.isArray(field.value)
+                                        ? field.value
+                                        : []
+                                    }
+                                    onChange={field.onChange}
+                                    placeholder={`Select tag(s) for ${group.name}...`}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        );
+                      })}
+                    </div>
                   )}
-                />
+                </div>
+
+                <Separator className="my-8" />
 
                 <div>
                   <FormLabel>Content</FormLabel>

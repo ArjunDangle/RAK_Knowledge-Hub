@@ -450,12 +450,11 @@ class ConfluenceService:
             current_page_data = self.confluence_repo.get_page_by_id(page_id, expand="version,metadata.labels")
             if not current_page_data:
                  raise HTTPException(status_code=404, detail="Page to update not found in Confluence.")
-            current_version = current_page_data["version"]["number"]
-
+            
             updated_page_data = self.confluence_repo.update_page(
                 page_id=page_id,
                 title=page_data.title,
-                body=translated_content, # Pass content as 'body'
+                body=translated_content,
                 parent_id=page_data.parent_id,
                 current_version_number=current_page_data["version"]["number"] + 1,
                 version_comment=f"Content updated by {author_name} via Knowledge Hub portal"
@@ -465,7 +464,8 @@ class ConfluenceService:
             
             updated_at_str = updated_page_data["version"]["when"]
 
-            # 2. Update the local Page record with all new metadata
+            # --- MODIFIED SECTION ---
+            # 2. Update the local Page record and sync tags only if they are provided
             await self.page_repo.update_page_metadata(
                 confluence_id=page_id,
                 title=page_data.title,
@@ -473,20 +473,22 @@ class ConfluenceService:
                 description=page_data.description,
                 updated_at_str=updated_at_str,
                 parent_id=page_data.parent_id,
-                tag_names=page_data.tags
+                tag_names=page_data.tags # Pass the tags to the repo method
             )
 
-            # 3. Sync labels/tags in Confluence
-            existing_labels = {l['name'] for l in current_page_data.get("metadata", {}).get("labels", {}).get("results", []) if not l['name'].startswith('status-')}
-            new_tags = set(page_data.tags)
-            
-            tags_to_add = new_tags - existing_labels
-            tags_to_remove = existing_labels - new_tags
+            # 3. Sync labels/tags in Confluence only if a tag list was sent
+            if page_data.tags is not None:
+                existing_labels = {l['name'] for l in current_page_data.get("metadata", {}).get("labels", {}).get("results", []) if not l['name'].startswith('status-')}
+                new_tags = set(page_data.tags)
+                
+                tags_to_add = new_tags - existing_labels
+                tags_to_remove = existing_labels - new_tags
 
-            for tag in tags_to_add:
-                self.confluence_repo.add_label(page_id, tag)
-            for tag in tags_to_remove:
-                self.confluence_repo.remove_label(page_id, tag)
+                for tag in tags_to_add:
+                    self.confluence_repo.add_label(page_id, tag)
+                for tag in tags_to_remove:
+                    self.confluence_repo.remove_label(page_id, tag)
+            # --- END MODIFIED SECTION ---
 
             # 4. Also update the submission record's title
             await self.submission_repo.update_title(page_id, page_data.title)
@@ -495,6 +497,7 @@ class ConfluenceService:
             print(f"Error updating page {page_id}: {e}")
             if isinstance(e, HTTPException): raise e
             raise HTTPException(status_code=503, detail=f"Failed to update page {page_id}.")
+
 
     async def get_article_for_preview(self, page_id: str) -> Optional[Article]:
         """

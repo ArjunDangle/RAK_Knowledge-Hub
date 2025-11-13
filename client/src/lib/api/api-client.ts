@@ -5,12 +5,14 @@ import {
   Subsection,
   UpdateEntry,
   Group,
-  Tag,
+  Tag, // Now correctly imported from the central file
+  TagGroup, // New
+  GroupedTag, // New
   GroupInfo,
   ContentItem,
   PageTreeNode,
   PaginatedResponse,
-  PageTreeNodeWithPermission, // Keep this import
+  PageTreeNodeWithPermission,
 } from "../types/content";
 
 export interface User {
@@ -111,6 +113,16 @@ export interface PermissionGroup {
 export interface GroupUpdatePayload {
   name: string;
   managedPageConfluenceId: string | null;
+}
+
+export interface TagGroupCreatePayload {
+  name: string;
+  description?: string;
+}
+
+export interface TagCreatePayload {
+  name: string;
+  tagGroupId: number;
 }
 
 // --- THIS IS THE FIX ---
@@ -294,13 +306,16 @@ export async function getPageTree(parentId?: string): Promise<PageTreeNode[]> {
     : "/cms/pages/tree";
   return apiFetch<PageTreeNode[]>(endpoint);
 }
-export async function getPageTreeWithPermissions(parentId?: string, allowedOnly: boolean = false): Promise<PageTreeNodeWithPermission[]> {
+export async function getPageTreeWithPermissions(
+  parentId?: string,
+  allowedOnly: boolean = false
+): Promise<PageTreeNodeWithPermission[]> {
   const params = new URLSearchParams();
   if (parentId) {
-    params.append('parent_id', parentId);
+    params.append("parent_id", parentId);
   }
   if (allowedOnly) {
-    params.append('allowed_only', 'true');
+    params.append("allowed_only", "true");
   }
   const endpoint = `/cms/pages/tree-with-permissions?${params.toString()}`;
   return apiFetch<PageTreeNodeWithPermission[]>(endpoint);
@@ -322,7 +337,9 @@ export async function uploadAttachment(
   });
   return handleResponse<AttachmentUploadResponse>(response);
 }
-export async function createPage(payload: PageCreatePayload): Promise<PageCreateResponse> {
+export async function createPage(
+  payload: PageCreatePayload
+): Promise<PageCreateResponse> {
   return apiFetch<PageCreateResponse>("/cms/pages/create", {
     method: "POST",
     body: JSON.stringify(payload),
@@ -404,4 +421,35 @@ export async function removeMemberFromGroup(
 }
 export async function getAllUsers(): Promise<User[]> {
   return apiFetch("/api/groups/users/all");
+}
+export async function getAllTagGroupsWithTagsAdmin(): Promise<GroupedTag[]> {
+  return apiFetch("/api/tags/groups/with-tags");
+}
+
+export async function getAllTagsGrouped(): Promise<GroupedTag[]> {
+  return apiFetch("/api/tags/grouped");
+}
+
+export async function createTagGroup(
+  payload: TagGroupCreatePayload
+): Promise<TagGroup> {
+  return apiFetch("/api/tags/groups", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteTagGroup(groupId: number): Promise<void> {
+  return apiFetch(`/api/tags/groups/${groupId}`, { method: "DELETE" });
+}
+
+export async function createTag(payload: TagCreatePayload): Promise<Tag> {
+  return apiFetch("/api/tags", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteTag(tagId: number): Promise<void> {
+  return apiFetch(`/api/tags/${tagId}`, { method: "DELETE" });
 }

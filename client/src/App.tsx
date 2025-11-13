@@ -21,6 +21,7 @@ import AdminIndexPage from "./pages/AdminIndexPage";
 import AdminEditPage from "./pages/AdminEditPage";
 import AdminGroupsPage from "./pages/AdminGroupsPage";
 import MyGroupsPage from "./pages/MyGroupsPage";
+import AdminTagsPage from "./pages/AdminTagsPage";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -83,6 +84,7 @@ const App = () => (
               <Route path="/admin/content-index" element={<AdminIndexPage />} />
               <Route path="/admin/edit/:pageId" element={<AdminEditPage />} />
               <Route path="/admin/groups" element={<AdminGroupsPage />} />
+              <Route path="/admin/tags" element={<AdminTagsPage />} />
             </Route>
 
             {/* Not Found Route */}

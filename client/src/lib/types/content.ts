@@ -1,10 +1,22 @@
 // client/src/lib/types/content.ts
 
-export type Tag = {
-  id: string;
+export interface TagGroup {
+  id: number;
+  name: string;
+  description: string | null;
+  order: number;
+}
+
+export interface Tag {
+  id: number;
   name: string;
   slug: string;
-};
+  tagGroupId: number;
+}
+
+export interface GroupedTag extends TagGroup {
+  tags: Tag[];
+}
 
 export type Group = string;
 
@@ -23,7 +35,7 @@ export type Subsection = {
   description: string;
   html: string;
   group: Group;
-  tags: Tag[];
+  tags: Tag[]; // This will now use the new Tag type
   articleCount: number;
   updatedAt: string;
 };
@@ -33,10 +45,10 @@ export type Article = {
   id: string;
   slug: string;
   title: string;
-  description: string; // <-- STEP 3: Field added
-  excerpt: string; // Kept for compatibility, but description is preferred
+  description: string;
+  excerpt: string;
   html: string;
-  tags: Tag[];
+  tags: Tag[]; // This will now use the new Tag type
   group: Group;
   subsection: string;
   updatedAt: string;
@@ -44,12 +56,11 @@ export type Article = {
   readMinutes: number;
   author?: string;
   parentId: string | null;
+  canEdit?: boolean;
 };
 
-// NEW: This type allows us to handle a mixed list of articles and subsections
 export type ContentItem = Subsection | Article;
 
-// --- STEP 4.1: PAGINATION TYPE ADDED ---
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;
@@ -57,7 +68,6 @@ export interface PaginatedResponse<T> {
   pageSize: number;
   hasNext: boolean;
 }
-// --- END OF ADDED TYPE ---
 
 export type SearchMode = 'all' | 'title' | 'tags' | 'content';
 
@@ -75,7 +85,6 @@ export type SearchFilters = {
   tags: string[];
   groups: Group[];
   sort: 'relevance' | 'date' | 'views';
-  // Pagination will be handled by the query function
 };
 
 export type UpdateEntry = {

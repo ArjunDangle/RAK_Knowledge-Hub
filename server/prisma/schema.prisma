@@ -3,7 +3,6 @@
 // This is your Prisma schema file.
 // Learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-
 generator client {
   provider                  = "prisma-client-py"
   enable_experimental_decimal = true
@@ -32,63 +31,68 @@ model Page {
   views              Int      @default(0)
   updatedAt          DateTime
 
-  // --- Relationships ---
-  tags       Tag[]
-  submission ArticleSubmission?
-
-  // NEW: Back-relation to the Group that manages this page branch.
-  // This will be null for most pages.
+  tags          Tag[]
+  submission    ArticleSubmission?
   managingGroup Group?
 
   @@index([parentConfluenceId])
 }
 
+// --- NEW MODEL: TagGroup ---
+model TagGroup {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique
+  description String?
+  order       Int     @default(0) // For ordering on the frontend form
+
+  // One-to-many relationship with Tag
+  tags Tag[]
+}
+
+// --- MODIFIED MODEL: Tag ---
 model Tag {
   id    Int    @id @default(autoincrement())
   name  String @unique
   slug  String @unique
   pages Page[]
+
+  // Every Tag now MUST belong to a TagGroup
+  tagGroup   TagGroup @relation(fields: [tagGroupId], references: [id])
+  tagGroupId Int
 }
 
-// MODIFIED: User model to add a many-to-many relationship with Group
 model User {
   id              Int      @id @default(autoincrement())
   username        String   @unique
   name            String
   hashed_password String
-  role            String   // 'MEMBER' or 'ADMIN'
+  role            String
   createdAt       DateTime @default(now())
 
-  submissions ArticleSubmission[]
+  submissions   ArticleSubmission[]
   notifications Notification[]
-
-  // NEW: Many-to-many relationship with Group
-  groups Group[]
+  groups        Group[]
 }
 
-// NEW: Model for permission groups
 model Group {
   id   Int    @id @default(autoincrement())
   name String @unique
 
-  // Many-to-many relationship with User
-  members User[]
-
-  // One-to-one: A group manages one specific page and its children
+  members       User[]
   managedPage   Page? @relation(fields: [managedPageId], references: [id])
-  managedPageId Int?  @unique // A group can only manage one page root
+  managedPageId Int?  @unique
 }
 
 model ArticleSubmission {
   id               Int      @id @default(autoincrement())
   confluencePageId String   @unique
   title            String
-  status           String   // e.g., "PENDING_REVIEW", "REJECTED", "PUBLISHED"
+  status           String
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
-  author   User @relation(fields: [authorId], references: [id])
-  authorId Int
-  page Page @relation(fields: [confluencePageId], references: [confluenceId])
+  author           User     @relation(fields: [authorId], references: [id])
+  authorId         Int
+  page             Page     @relation(fields: [confluencePageId], references: [confluenceId])
 }
 
 model Notification {

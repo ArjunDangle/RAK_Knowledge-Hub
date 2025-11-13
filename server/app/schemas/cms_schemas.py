@@ -73,4 +73,4 @@ class PageUpdate(BaseModel):
     description: str
     content: str
     parent_id: Optional[str] = None
-    tags: List[str] = []
+    tags: Optional[List[str]] = None
