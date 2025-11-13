@@ -55,7 +55,7 @@ async def get_article(page_id: str, current_user: Optional[auth_schemas.UserResp
     """
     HYBRID FETCH: Fetches article metadata, live content, and checks edit permissions.
     """
-    article_data = await confluence_service.get_article_by_id_hybrid(page_id)
+    article_data = await confluence_service.get_article_by_id_hybrid(page_id, current_user)
     if not article_data:
         raise HTTPException(status_code=404, detail=f"Article with ID '{page_id}' not found.")
     

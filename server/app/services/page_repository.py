@@ -5,8 +5,9 @@ from bs4 import BeautifulSoup
 
 from app.db import db
 from app.schemas.content_schemas import Tag, Article, Subsection, Ancestor, PageTreeNode, PageTreeNodeWithPermission
+from app.schemas.cms_schemas import ArticleSubmissionStatus
 from prisma.enums import PageType
-from prisma.models import Page as PageModel, User # <-- IMPORT USER MODEL
+from prisma.models import Page as PageModel, User
 from prisma.types import PageInclude
 
 class PageRepository:
@@ -17,6 +18,22 @@ class PageRepository:
     def __init__(self):
         self.db = db
         self._page_include: PageInclude = {'tags': True}
+        self._public_facing_filter = {
+            'OR': [
+                {
+                    'submission': {
+                        'is': {
+                            'status': ArticleSubmissionStatus.PUBLISHED
+                        }
+                    }
+                },
+                {
+                    'submission': {
+                        'is': None
+                    }
+                }
+            ]
+        }
 
     def _slugify(self, text: str) -> str:
         """Internal slugify, as this repo doesn't import from Confluence service."""
@@ -115,11 +132,27 @@ class PageRepository:
             articleCount=article_count,
             updatedAt=page.updatedAt.isoformat()
         )
-
+        
+    
     async def get_page_by_id(self, confluence_id: str) -> Optional[PageModel]:
-        """Fetches a single Page by its Confluence ID."""
+        """
+        INTERNAL USE: Fetches a single Page by its Confluence ID without any
+        visibility filters.
+        """
         return await self.db.page.find_unique(
             where={'confluenceId': confluence_id},
+            include=self._page_include
+        )
+
+    async def get_public_page_by_id(self, confluence_id: str) -> Optional[PageModel]:
+        """Fetches a single Page by its Confluence ID, ensuring it is public."""
+        return await self.db.page.find_first( # Use find_first to apply multiple filters
+            where={
+                'AND': [
+                    {'confluenceId': confluence_id},
+                    self._public_facing_filter
+                ]
+            },
             include=self._page_include
         )
 
@@ -149,11 +182,18 @@ class PageRepository:
     async def get_paginated_children(
         self, parent_confluence_id: str, page: int, page_size: int, group_slug: str
     ) -> dict:
-        """Fetches paginated children and formats them within the same method."""
         skip = (page - 1) * page_size
         
+        # Combine the existing filter with our new public-facing filter
+        where_clause = {
+            'AND': [
+                {'parentConfluenceId': parent_confluence_id},
+                self._public_facing_filter
+            ]
+        }
+
         child_pages = await self.db.page.find_many(
-            where={'parentConfluenceId': parent_confluence_id},
+            where=where_clause, # Use the combined clause
             include=self._page_include,
             skip=skip,
             take=page_size,
@@ -163,7 +203,7 @@ class PageRepository:
             ]
         )
         
-        total_items = await self.db.page.count(where={'parentConfluenceId': parent_confluence_id})
+        total_items = await self.db.page.count(where=where_clause)
         
         formatted_items = []
         parent_page = await self.db.page.find_unique(where={'confluenceId': parent_confluence_id})
@@ -212,7 +252,12 @@ class PageRepository:
     async def get_recent_articles(self, limit: int = 6) -> List[Article]:
         """Fetches the most recently updated articles."""
         pages = await self.db.page.find_many(
-            where={'pageType': PageType.ARTICLE},
+            where={
+                'AND': [
+                    {'pageType': PageType.ARTICLE},
+                    self._public_facing_filter
+                ]
+            },
             include=self._page_include,
             order={'updatedAt': 'desc'},
             take=limit
@@ -223,7 +268,12 @@ class PageRepository:
     async def get_popular_articles(self, limit: int = 6) -> List[Article]:
         """Fetches the most viewed articles."""
         pages = await self.db.page.find_many(
-            where={'pageType': PageType.ARTICLE},
+            where={
+                'AND': [
+                    {'pageType': PageType.ARTICLE},
+                    self._public_facing_filter
+                ]
+            },
             include=self._page_include,
             order={'views': 'desc'},
             take=limit

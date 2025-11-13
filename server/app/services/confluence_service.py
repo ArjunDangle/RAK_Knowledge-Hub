@@ -172,14 +172,23 @@ class ConfluenceService:
             print(f"Error in get_page_contents router: {e}")
             raise HTTPException(status_code=500, detail="Failed to fetch page contents.")
 
-    async def get_article_by_id_hybrid(self, page_id: str) -> Optional[Article]:
+    async def get_article_by_id_hybrid(self, page_id: str, user: Optional[UserResponse] = None) -> Optional[Article]:
         """
-        HYBRID FETCH: Fetches metadata from local DB (fast) and content
-        from Confluence (slow) and merges them for an ARTICLE.
+        HYBRID FETCH: Fetches metadata from local DB and content from Confluence.
+        - If the user is an ADMIN, it fetches the page regardless of status.
+        - Otherwise, it only fetches publicly visible pages.
         """
         
-        # Step 1: Fetch metadata from DB
-        page_metadata = await self.page_repo.get_page_by_id(confluence_id=page_id)
+        # Step 1: Decide which function to call based on user role
+        is_admin_preview = user and user.role == 'ADMIN'
+        
+        if is_admin_preview:
+            # Admins use the unfiltered internal method to see everything
+            page_metadata = await self.page_repo.get_page_by_id(confluence_id=page_id)
+        else:
+            # Everyone else uses the public, filtered method
+            page_metadata = await self.page_repo.get_public_page_by_id(confluence_id=page_id)
+
         if not page_metadata or page_metadata.pageType != PageType.ARTICLE:
             return None # Not found or not an article
 
@@ -226,7 +235,7 @@ class ConfluenceService:
         """
         
         # Step 1: Fetch metadata from DB
-        page_metadata = await self.page_repo.get_page_by_id(confluence_id=page_id)
+        page_metadata = await self.page_repo.get_public_page_by_id(confluence_id=page_id)
         if not page_metadata or page_metadata.pageType != PageType.SUBSECTION:
             return None # Not found or not a subsection
 
