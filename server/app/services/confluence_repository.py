@@ -21,20 +21,20 @@ ROOT_PAGE_CONFIG = [
         "description": "Comprehensive knowledge base and documentation",
         "icon": "BookOpen"
     },
-    {
-        "confluence_title": "Department",
-        "slug": "departments",
-        "display_title": "Departments",
-        "description": "Resources organized by team functions",
-        "icon": "Building2"
-    },
-    {
-        "confluence_title": "Tools",
-        "slug": "tools",
-        "display_title": "Tools",
-        "description": "Development tools, utilities, and platform guides",
-        "icon": "Wrench"
-    }
+    # {
+    #     "confluence_title": "Department",
+    #     "slug": "departments",
+    #     "display_title": "Departments",
+    #     "description": "Resources organized by team functions",
+    #     "icon": "Building2"
+    # },
+    # {
+    #     "confluence_title": "Tools",
+    #     "slug": "tools",
+    #     "display_title": "Tools",
+    #     "description": "Development tools, utilities, and platform guides",
+    #     "icon": "Wrench"
+    # }
 ]
 
 class ConfluenceRepository:

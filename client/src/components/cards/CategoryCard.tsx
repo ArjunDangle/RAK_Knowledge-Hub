@@ -25,6 +25,7 @@ interface CategoryCardProps {
   updatedAt?: string;
   href: string;
   className?: string;
+  index?: number;
 }
 
 function CategoryPreviewContent({ subsectionId }: { subsectionId: string }) {
@@ -88,6 +89,7 @@ export function CategoryCard({
   updatedAt,
   href,
   className,
+  index,
 }: CategoryCardProps) {
   const formatDate = (dateString?: string) =>
     dateString
@@ -99,7 +101,7 @@ export function CategoryCard({
 
   const id = subsection?.id || title;
   const headerImage = getCardHeaderImage(id);
-  const Icon = getCardIcon(id);
+  const Icon = getCardIcon(id, index);
 
   return (
     <Card

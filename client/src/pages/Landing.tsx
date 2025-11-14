@@ -33,9 +33,10 @@ const LandingCategorySection = ({ group }: { group: GroupInfo }) => {
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          subsections?.slice(0, 4).map((subsection) => (
+          subsections?.slice(0, 4).map((subsection, index) => (
             <CategoryCard
               key={subsection.id}
+              index={index}
               title={subsection.title}
               description={subsection.description}
               subsection={subsection}

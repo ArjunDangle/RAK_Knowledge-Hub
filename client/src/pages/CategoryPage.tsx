@@ -79,11 +79,13 @@ export default function CategoryPage() {
   const breadcrumbs = isNestedPage 
     ? (ancestors || []).map((ancestor, index) => {
         if (index === 0) {
+          // The first ancestor links to the main category page
           return { label: ancestor.title, href: `/category/${currentGroup}` };
         }
+        // Subsequent ancestors link to their respective pages
         return { label: ancestor.title, href: `/page/${ancestor.id}` };
-      }).concat(currentPageData ? [{ label: currentPageData.title }] : [])
-    : [{ label: info.title }];
+      }).concat(currentPageData ? [{ label: currentPageData.title, href: `/page/${pageId}` }] : []) // Add href to the current page
+    : [{ label: info.title, href: `/category/${group}` }];
   
   if (isNestedPage) {
     return (
@@ -128,8 +130,8 @@ export default function CategoryPage() {
               <div className={`${responsiveGridClass} mt-12`}>
                 {data.pages.map((page, i) => (
                   <Fragment key={i}>
-                    {page.items.map((item) => item.type === 'subsection' ? (
-                      <CategoryCard key={item.id} title={item.title} description={item.description} subsection={item} articleCount={item.articleCount} updatedAt={item.updatedAt} href={`/page/${item.id}`} />
+                    {page.items.map((item, index) => item.type === 'subsection' ? (
+                      <CategoryCard key={item.id} title={item.title} description={item.description} subsection={item} articleCount={item.articleCount} updatedAt={item.updatedAt} href={`/page/${item.id}`} index={index} />
                     ) : (
                       <ArticleCard key={item.id} article={item} pastelColor={getColorFromId(item.id)} />
                     ))}
@@ -182,7 +184,7 @@ export default function CategoryPage() {
           <div className={responsiveGridClass}>{Array.from({ length: 6 }).map((_, i) => <CategoryCardSkeleton key={i} />)}</div>
         ) : topLevelSubsections && topLevelSubsections.length > 0 ? (
           <div className={responsiveGridClass}>
-            {topLevelSubsections.map((subsection) => (
+            {topLevelSubsections.map((subsection, index) => (
               <CategoryCard 
                 key={subsection.id} 
                 title={subsection.title} 
