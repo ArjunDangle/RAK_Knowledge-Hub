@@ -81,6 +81,7 @@ export interface ArticleSubmission {
   confluencePageId: string;
   title: string;
   status: ArticleSubmissionStatus;
+  rejectionComment?: string | null;
   updatedAt: string;
 }
 

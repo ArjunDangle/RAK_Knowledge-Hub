@@ -155,7 +155,7 @@ async def update_page_endpoint(
         )
 
     # If check passes, proceed with the update
-    success = await confluence_service.update_page(page_id, page_data, current_user.name)
+    success = await confluence_service.update_page(page_id, page_data, current_user)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

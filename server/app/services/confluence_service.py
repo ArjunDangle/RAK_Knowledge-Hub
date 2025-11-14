@@ -177,36 +177,17 @@ class ConfluenceService:
     # server/app/services/confluence_service.py
 
     async def get_article_by_id_hybrid(self, page_id: str, user: Optional[UserResponse] = None) -> Optional[Article]:
-        """
-        HYBRID FETCH: Fetches article metadata, live content, and checks permissions.
-        - Publicly visible to everyone if PUBLISHED.
-        - Visible to Admins regardless of status.
-        - Visible to the original Author if PENDING_REVIEW or REJECTED.
-        """
-        # 1. Fetch the page and its submission status unconditionally first.
-        page_metadata = await self.db.page.find_unique(
-            where={'confluenceId': page_id},
-            include={'tags': True, 'submission': True}  # Include submission status
-        )
+        page_metadata = await self.db.page.find_unique(where={'confluenceId': page_id}, include={'tags': True, 'submission': True})
+        if not page_metadata or page_metadata.pageType != PageType.ARTICLE: return None
 
-        # 2. If the page doesn't exist or isn't an article, it's a hard 404.
-        if not page_metadata or page_metadata.pageType != PageType.ARTICLE:
-            return None
-
-        # 3. Perform visibility checks.
         is_published = not page_metadata.submission or page_metadata.submission.status == ArticleSubmissionStatus.PUBLISHED
         is_admin = user and user.role == 'ADMIN'
         is_author = user and page_metadata.submission and user.id == page_metadata.submission.authorId
 
-        # 4. If the page isn't public and the user is neither an admin nor the author, deny access.
-        if not is_published and not is_admin and not is_author:
-            return None  # From their perspective, it's "Not Found"
+        if not is_published and not is_admin and not is_author: return None
 
-        # If the checks pass, proceed with fetching live content and formatting the response.
-        
-        # Step 5: Fetch live content from Confluence
         html_content = ""
-        read_minutes = 1  # Default
+        read_minutes = 1
         try:
             html_content = self.confluence_repo.get_page_content(page_id)
             plain_text = self._get_plain_text(html_content)
@@ -216,17 +197,17 @@ class ConfluenceService:
             print(f"CRITICAL: Could not fetch content for page {page_id} from Confluence. Error: {e}")
             html_content = "<p>Error: Could not load document content from the source.</p>"
         
-        # Step 6: Get ancestors to determine group/subsection slugs
         ancestors = await self.page_repo.get_ancestors_from_db(page_metadata)
         group_slug = self._get_group_from_ancestors(ancestors)
         subsection_slug = ancestors[-1].title if ancestors else "unknown"
 
-        # Step 7: Merge and format into Article schema
         return Article(
             type='article',
             id=page_metadata.confluenceId,
             slug=page_metadata.slug,
             title=page_metadata.title,
+            # Use the DB description as the primary value for BOTH fields.
+            # The card will prioritize `description`, and `excerpt` is a good fallback.
             excerpt=page_metadata.description,
             description=page_metadata.description,
             html=html_content,
@@ -451,11 +432,14 @@ class ConfluenceService:
             tags=[tag.name for tag in page_from_db.tags]
         )
 
-    async def update_page(self, page_id: str, page_data: PageUpdate, author_name: str) -> bool:
+    async def update_page(self, page_id: str, page_data: PageUpdate, current_user: UserResponse) -> bool:
         """
-        Orchestrates updating a page with expanded capabilities for admins.
+        Orchestrates updating a page. If the user is the author of a rejected article,
+        this action will automatically resubmit it for review.
         """
         try:
+            author_name = current_user.name # Get author name from the user object
+
             # 1. Convert HTML and update in Confluence
             translated_content = html_to_storage_format(page_data.content)
             
@@ -476,8 +460,33 @@ class ConfluenceService:
             
             updated_at_str = updated_page_data["version"]["when"]
 
-            # --- MODIFIED SECTION ---
-            # 2. Update the local Page record and sync tags only if they are provided
+            # --- THIS IS THE NEW, CORRECTED LOGIC ---
+            # 2. Check if this update should trigger a resubmission
+            submission = await self.submission_repo.get_by_confluence_id(page_id)
+
+            # Resubmit ONLY IF the submission was rejected AND the person editing is the original author.
+            if (
+                submission and
+                submission.status == ArticleSubmissionStatus.REJECTED and
+                submission.authorId == current_user.id
+            ):
+                print(f"Author {current_user.name} is resubmitting page {page_id}. Changing status to PENDING_REVIEW.")
+                
+                # Update labels in Confluence for resubmission
+                self.confluence_repo.remove_label(page_id, "status-rejected")
+                self.confluence_repo.add_label(page_id, "status-unpublished")
+
+                # Update the submission status in our DB (comment is not cleared)
+                await self.submission_repo.update_status(page_id, ArticleSubmissionStatus.PENDING_REVIEW)
+                
+                # Notify admins of the resubmission
+                await self.notification_service.notify_admins_of_resubmission(
+                    title=page_data.title,
+                    author_name=author_name
+                )
+            # --- END OF NEW LOGIC ---
+
+            # 3. Update the local Page record metadata
             await self.page_repo.update_page_metadata(
                 confluence_id=page_id,
                 title=page_data.title,
@@ -485,10 +494,10 @@ class ConfluenceService:
                 description=page_data.description,
                 updated_at_str=updated_at_str,
                 parent_id=page_data.parent_id,
-                tag_names=page_data.tags # Pass the tags to the repo method
+                tag_names=page_data.tags
             )
 
-            # 3. Sync labels/tags in Confluence only if a tag list was sent
+            # 4. Sync labels/tags in Confluence if a tag list was sent
             if page_data.tags is not None:
                 existing_labels = {l['name'] for l in current_page_data.get("metadata", {}).get("labels", {}).get("results", []) if not l['name'].startswith('status-')}
                 new_tags = set(page_data.tags)
@@ -500,10 +509,10 @@ class ConfluenceService:
                     self.confluence_repo.add_label(page_id, tag)
                 for tag in tags_to_remove:
                     self.confluence_repo.remove_label(page_id, tag)
-            # --- END MODIFIED SECTION ---
 
-            # 4. Also update the submission record's title
+            # 5. Also update the submission record's title to keep it in sync
             await self.submission_repo.update_title(page_id, page_data.title)
+            
             return True
         except Exception as e:
             print(f"Error updating page {page_id}: {e}")
@@ -522,10 +531,8 @@ class ConfluenceService:
         return await self._transform_raw_page_to_article(page_data, is_admin_view=True)
 
     async def get_pending_submissions(self) -> List[Article]:
-        """Fetches pending submissions from the DB and formats them as Articles."""
         pending_submissions = await self.submission_repo.get_pending_submissions()
         
-        # Format as Article model for the frontend
         return [
             Article.model_validate({
                 "id": sub.confluencePageId,
@@ -533,8 +540,10 @@ class ConfluenceService:
                 "author": sub.author.name if sub.author else "Unknown",
                 "updatedAt": sub.updatedAt.isoformat(),
                 "slug": self._slugify(sub.title),
-                "excerpt": "Content available for preview.",
-                "description": "Content available for preview.",
+                # Use the real description from the associated page record
+                "excerpt": sub.page.description if sub.page else "Description not available.",
+                "description": sub.page.description if sub.page else "Description not available.",
+                # These fields are placeholders as they aren't needed for the list view
                 "html": "", "tags": [], "group": "unknown", "subsection": "unknown",
                 "views": 0, "readMinutes": 1
             }) for sub in pending_submissions
@@ -573,7 +582,11 @@ class ConfluenceService:
             # --- END OF FIX ---
 
             # 6. Update the submission status and notify the author
-            submission = await self.submission_repo.update_status(page_id, ArticleSubmissionStatus.PUBLISHED)
+            submission = await self.submission_repo.update_status(
+                page_id, 
+                ArticleSubmissionStatus.PUBLISHED,
+                comment=None
+            )
             
             if submission:
                 await self.notification_service.notify_author_of_approval(
@@ -605,7 +618,11 @@ class ConfluenceService:
             self.confluence_repo.add_label(page_id, "status-rejected")
             
             # 2. Update the local submission status
-            submission = await self.submission_repo.update_status(page_id, ArticleSubmissionStatus.REJECTED)
+            submission = await self.submission_repo.update_status(
+                page_id, 
+                ArticleSubmissionStatus.REJECTED,
+                comment=comment # Pass the comment here
+            )
             
             # 3. Notify the author
             if submission:

@@ -57,7 +57,6 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        {/* --- THIS IS THE FIX --- */}
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <ScrollToTop />
           <Routes>
@@ -73,9 +72,10 @@ const App = () => (
             {/* Protected Routes for Logged-in Users */}
             <Route element={<ProtectedRoute />}>
               <Route path="/create" element={<CreatePage />} />
+              <Route path="/edit-submission/:pageId" element={<CreatePage />} /> 
               <Route path="/my-submissions" element={<MySubmissionsPage />} />
               <Route path="/my-groups" element={<MyGroupsPage />} /> 
-              <Route path="/edit/:pageId" element={<EditPage />} /> {/* <-- STEP 2.1: ROUTE ADDED */}
+              <Route path="/edit/:pageId" element={<EditPage />} />
             </Route>
 
             {/* Protected Routes for Admins */}

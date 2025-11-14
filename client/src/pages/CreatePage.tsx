@@ -1,15 +1,16 @@
 // client/src/pages/CreatePage.tsx
-import { useState, useRef, ChangeEvent, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useRef, ChangeEvent, useMemo, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Loader2, Upload, Paperclip, X } from "lucide-react";
+import { Loader2, Upload, Paperclip, X, MessageSquareWarning } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 import { KnowledgeLayout } from "./KnowledgeLayout";
 import { Button } from "@/components/ui/button";
@@ -38,15 +39,18 @@ import {
 import { TreeSelect } from "@/components/cms/TreeSelect";
 import { MultiSelect, MultiSelectOption } from "@/components/ui/multi-select";
 import {
-  getAllTagsGrouped, // Changed from getAllTags
+  getAllTagsGrouped,
   createPage,
+  updatePage,
+  getArticleById,
   PageCreatePayload,
+  PageUpdatePayload,
   uploadAttachment,
   AttachmentInfo,
+  getMySubmissions,
 } from "@/lib/api/api-client";
-import { GroupedTag } from "@/lib/types/content"; // Add this new type import
+import { GroupedTag } from "@/lib/types/content";
 
-// Define base schema that is always required
 const baseSchema = z.object({
   title: z
     .string()
@@ -68,12 +72,28 @@ interface UploadedFile {
 
 export default function CreatePage() {
   const navigate = useNavigate();
+  const { pageId } = useParams<{ pageId?: string }>();
+  const isEditMode = !!pageId;
+
+  const { data: existingArticle, isLoading: isLoadingArticle } = useQuery({
+    queryKey: ['articleForEdit', pageId],
+    queryFn: () => getArticleById(pageId!),
+    enabled: isEditMode,
+    retry: false,
+  });
+
+  const { data: submissionDetails } = useQuery({
+      queryKey: ['mySubmissions'],
+      queryFn: getMySubmissions,
+      enabled: isEditMode,
+      select: (data) => data.find(sub => sub.confluencePageId === pageId),
+  });
+
   const [attachments, setAttachments] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showAllowedOnly, setShowAllowedOnly] = useState(false);
 
-  // 1. Fetch the structured tag groups
   const { data: tagGroups, isLoading: isLoadingTags } = useQuery<GroupedTag[]>({
     queryKey: ["allTagsGrouped"],
     queryFn: getAllTagsGrouped,
@@ -82,7 +102,7 @@ export default function CreatePage() {
   const tagGridClass = useMemo(() => {
     const base = "grid grid-cols-1 gap-6";
     if (!tagGroups) {
-      return `${base} md:grid-cols-2`; // A sensible default while loading
+      return `${base} md:grid-cols-2`;
     }
     const count = tagGroups.length;
     switch (count) {
@@ -91,24 +111,19 @@ export default function CreatePage() {
       case 2:
         return `${base} md:grid-cols-2`;
       case 3:
-        // Use 3 columns on medium screens and up if there are exactly 3 groups
         return `${base} md:grid-cols-3`;
       case 4:
-        // Use a 2x2 grid if there are exactly 4 groups
         return `${base} md:grid-cols-2`;
       default:
-        // A responsive fallback for 5 or more items
         return `${base} md:grid-cols-2 lg:grid-cols-3`;
     }
   }, [tagGroups]);
 
-  // 2. Dynamically build the validation schema based on fetched groups
   const dynamicSchema = useMemo(() => {
     if (!tagGroups) return baseSchema;
     const groupSchemas = tagGroups.reduce((acc, group) => {
       return {
         ...acc,
-        // Use a valid key for the schema object
         [group.name.replace(/\s+/g, "_")]: z
           .array(z.string())
           .min(1, { message: `You must select at least one ${group.name}.` }),
@@ -117,7 +132,6 @@ export default function CreatePage() {
     return baseSchema.extend(groupSchemas);
   }, [tagGroups]);
 
-  // 3. Initialize the form with the dynamic schema
   const form = useForm<z.infer<typeof dynamicSchema>>({
     resolver: zodResolver(dynamicSchema),
     defaultValues: {
@@ -131,43 +145,21 @@ export default function CreatePage() {
     setIsUploading(true);
     try {
       const response = await uploadAttachment(file);
-      const fileType = file.type.startsWith("image/")
-        ? "image"
-        : file.type.startsWith("video/")
-        ? "video"
-        : file.type === "application/pdf"
-        ? "pdf"
-        : "file";
-
-        const newAttachment: UploadedFile = {
-          file: file,
-          tempId: response.temp_id,
-          type: fileType,
-        };
-        setAttachments((prev) => [...prev, newAttachment]);
+      const fileType = file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : file.type === "application/pdf" ? "pdf" : "file";
+      const newAttachment: UploadedFile = { file: file, tempId: response.temp_id, type: fileType };
+      setAttachments((prev) => [...prev, newAttachment]);
 
       if (editor) {
         if (fileType === "image") {
           const reader = new FileReader();
           reader.onload = (e) => {
             if (e.target?.result) {
-              editor
-                .chain()
-                .focus()
-                .setImage({ src: e.target.result as string })
-                .run();
+              editor.chain().focus().setImage({ src: e.target.result as string }).run();
             }
           };
           reader.readAsDataURL(file);
         } else {
-          editor
-            .chain()
-            .focus()
-            .setAttachment({
-              "data-file-name": file.name,
-              "data-attachment-type": fileType,
-            })
-            .run();
+          editor.chain().focus().setAttachment({ "data-file-name": file.name, "data-attachment-type": fileType }).run();
         }
       }
       toast.success("Attachment uploaded successfully.");
@@ -184,81 +176,131 @@ export default function CreatePage() {
       handleFileUpload(file);
     }
     if (event.target) {
-      event.target.value = ""; // Reset file input
+      event.target.value = "";
     }
   };
 
-  const editor = useConfiguredEditor("", handleFileUpload);
+  const editor = useConfiguredEditor(existingArticle?.html || "", handleFileUpload);
+  
+  useEffect(() => {
+    if (isEditMode && existingArticle && tagGroups && editor) {
+      const defaultTagValues = tagGroups.reduce((acc, group) => {
+        const groupKey = group.name.replace(/\s+/g, "_");
+        const groupTagNames = new Set(group.tags.map(t => t.name));
+        const selectedTags = existingArticle.tags.map(t => t.name).filter(tagName => groupTagNames.has(tagName));
+        return { ...acc, [groupKey]: selectedTags };
+      }, {});
+      
+      form.reset({
+        title: existingArticle.title,
+        description: existingArticle.description || existingArticle.excerpt,
+        parent_id: existingArticle.parentId || "",
+        ...defaultTagValues,
+      });
 
-  // Mutation for creating the page
-  const mutation = useMutation({
+      if (!editor.isDestroyed && editor.getHTML() !== existingArticle.html) {
+          editor.commands.setContent(existingArticle.html);
+      }
+    }
+  }, [isEditMode, existingArticle, tagGroups, form, editor]);
+
+  const createMutation = useMutation({
     mutationFn: (data: PageCreatePayload) => createPage(data),
     onSuccess: (data) => {
       toast.success("Article submitted for review!");
       navigate(`/article/${data.id}?status=pending`);
     },
-    onError: (error) => {
-      toast.error("Submission failed", { description: error.message });
-    },
+    onError: (error) => toast.error("Submission failed", { description: error.message }),
   });
 
-  // Handle form submission
+  const updateMutation = useMutation({
+    mutationFn: (data: PageUpdatePayload) => updatePage(pageId!, data),
+    onSuccess: () => {
+      toast.success("Article updated and resubmitted for review!");
+      navigate('/my-submissions');
+    },
+    onError: (error) => toast.error("Update failed", { description: error.message }),
+  });
+  
+  const mutation = isEditMode ? updateMutation : createMutation;
+
   const onSubmit = (data: z.infer<typeof dynamicSchema>) => {
     const content = editor?.getHTML() || "";
     if (content.length < 50) {
-      toast.error("Content is too short", {
-        description: "Content must be at least 50 characters.",
-      });
+      toast.error("Content is too short", { description: "Content must be at least 50 characters." });
       return;
     }
 
-    const attachmentPayload: AttachmentInfo[] = attachments.map((a) => ({
-      temp_id: a.tempId,
-      file_name: a.file.name,
-    }));
-
-    // Flatten all selected tags from the dynamic fields into a single array
     const allSelectedTags: string[] = [];
     if (tagGroups) {
       tagGroups.forEach((group) => {
         const groupKey = group.name.replace(/\s+/g, "_") as keyof typeof data;
-        const selected = data[groupKey];
-        if (Array.isArray(selected)) {
-          allSelectedTags.push(...selected);
+        if (Array.isArray(data[groupKey])) {
+          allSelectedTags.push(...(data[groupKey] as string[]));
         }
       });
     }
 
-    const payload: PageCreatePayload = {
-      title: data.title,
-      description: data.description,
-      content: content,
-      parent_id: data.parent_id,
-      tags: allSelectedTags, // Use the flattened array
-      attachments: attachmentPayload,
-    };
-
-    mutation.mutate(payload);
+    if (isEditMode) {
+      const payload: PageUpdatePayload = {
+        title: data.title,
+        description: data.description,
+        content: content,
+        parent_id: data.parent_id,
+        tags: allSelectedTags,
+      };
+      updateMutation.mutate(payload);
+    } else {
+      const attachmentPayload: AttachmentInfo[] = attachments.map((a) => ({ temp_id: a.tempId, file_name: a.file.name }));
+      const payload: PageCreatePayload = {
+        title: data.title,
+        description: data.description,
+        content: content,
+        parent_id: data.parent_id,
+        tags: allSelectedTags,
+        attachments: attachmentPayload,
+      };
+      createMutation.mutate(payload);
+    }
   };
 
-  const breadcrumbs = [{ label: "Create New Article" }];
+  const breadcrumbs = [{ label: isEditMode ? "Edit Submission" : "Create New Article" }];
+
+  if (isLoadingArticle) {
+      return (
+        <KnowledgeLayout breadcrumbs={breadcrumbs}>
+            <div className="text-center p-12">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+                <p className="mt-4 text-muted-foreground">Loading article for editing...</p>
+            </div>
+        </KnowledgeLayout>
+      );
+  }
 
   return (
     <KnowledgeLayout breadcrumbs={breadcrumbs}>
       <div className="max-w-4xl mx-auto">
         <Card>
           <CardHeader>
-            <CardTitle>Create New Article</CardTitle>
+            <CardTitle>{isEditMode ? `Edit: ${existingArticle?.title}` : "Create New Article"}</CardTitle>
             <CardDescription>
-              Fill out the details below to submit a new article for review.
+              {isEditMode ? "Modify your submission and save to resubmit it for review." : "Fill out the details below to submit a new article for review."}
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {isEditMode && submissionDetails?.rejectionComment && (
+                <Alert variant="destructive" className="mb-6">
+                    <MessageSquareWarning className="h-4 w-4" />
+                    <AlertTitle>Admin Feedback</AlertTitle>
+                    <AlertDescription className="whitespace-pre-wrap">
+                        {submissionDetails.rejectionComment}
+                    </AlertDescription>
+                </Alert>
+            )}
+
             <Form {...form}>
-              <form
-                onSubmit={form.handleSubmit(onSubmit)}
-                className="space-y-6"
-              >
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                
                 <FormField
                   control={form.control}
                   name="title"
@@ -317,7 +359,7 @@ export default function CreatePage() {
                           placeholder="Select a parent category..."
                           value={field.value}
                           onChange={field.onChange}
-                          allowedOnly={showAllowedOnly} // Pass the state as a prop
+                          allowedOnly={showAllowedOnly}
                         />
                       </FormControl>
                       <FormMessage />
@@ -325,7 +367,6 @@ export default function CreatePage() {
                   )}
                 />
 
-                {/* Tags Section */}
                 <div className="space-y-4">
                   <div>
                     <FormLabel className="text-sm font-medium text-foreground">
@@ -339,12 +380,8 @@ export default function CreatePage() {
 
                   {isLoadingTags ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {[...Array(2)].map((_, i) => (
-                        <div key={i} className="space-y-2">
-                          <Skeleton className="h-5 w-1/3" />
-                          <Skeleton className="h-10 w-full" />
-                        </div>
-                      ))}
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
                     </div>
                   ) : (
                     <div className={tagGridClass}>
@@ -368,9 +405,7 @@ export default function CreatePage() {
                             name={formFieldName}
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel className="text-sm font-medium text-foreground">
-                                  {group.name}
-                                </FormLabel>
+                                <FormLabel className="font-semibold">{group.name}</FormLabel>
                                 <FormControl>
                                   <MultiSelect
                                     options={options}
@@ -404,60 +439,62 @@ export default function CreatePage() {
                   <RichTextEditor editor={editor} />
                 </div>
 
-                <div className="space-y-4">
-                  <FormLabel>Attachments</FormLabel>
-                  {attachments.length > 0 && (
-                    <div className="rounded-md border p-4 space-y-2">
-                      {attachments.map((att) => (
-                        <div
-                          key={att.tempId}
-                          className="flex justify-between items-center text-sm"
-                        >
-                          <span className="flex items-center gap-2 truncate text-muted-foreground">
-                            <Paperclip className="h-4 w-4 flex-shrink-0" />
-                            <span className="truncate">{att.file.name}</span>
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 flex-shrink-0"
-                            onClick={() => {
-                              setAttachments((prev) =>
-                                prev.filter((a) => a.tempId !== att.tempId)
-                              );
-                              toast.info(
-                                `Removed attachment: ${att.file.name}`
-                              );
-                            }}
+                {!isEditMode && (
+                  <div className="space-y-4">
+                    <FormLabel>Attachments</FormLabel>
+                    {attachments.length > 0 && (
+                      <div className="rounded-md border p-4 space-y-2">
+                        {attachments.map((att) => (
+                          <div
+                            key={att.tempId}
+                            className="flex justify-between items-center text-sm"
                           >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
+                            <span className="flex items-center gap-2 truncate text-muted-foreground">
+                              <Paperclip className="h-4 w-4 flex-shrink-0" />
+                              <span className="truncate">{att.file.name}</span>
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 flex-shrink-0"
+                              onClick={() => {
+                                setAttachments((prev) =>
+                                  prev.filter((a) => a.tempId !== att.tempId)
+                                );
+                                toast.info(
+                                  `Removed attachment: ${att.file.name}`
+                                );
+                              }}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploading}
+                      >
+                        {isUploading ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Upload className="mr-2 h-4 w-4" />
+                        )}
+                        Add Attachment
+                      </Button>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileSelect}
+                        className="hidden"
+                      />
                     </div>
-                  )}
-                  <div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isUploading}
-                    >
-                      {isUploading ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Upload className="mr-2 h-4 w-4" />
-                      )}
-                      Add Attachment
-                    </Button>
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={handleFileSelect}
-                      className="hidden"
-                    />
                   </div>
-                </div>
+                )}
 
                 <Button
                   type="submit"
@@ -466,7 +503,7 @@ export default function CreatePage() {
                   {(mutation.isPending || isUploading) && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  Submit for Review
+                  {isEditMode ? "Save & Resubmit" : "Submit for Review"}
                 </Button>
               </form>
             </Form>

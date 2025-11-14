@@ -84,16 +84,18 @@ model Group {
 }
 
 model ArticleSubmission {
-  id               Int      @id @default(autoincrement())
-  confluencePageId String   @unique
-  title            String
-  status           String
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  author           User     @relation(fields: [authorId], references: [id])
-  authorId         Int
-  page             Page     @relation(fields: [confluencePageId], references: [confluenceId])
+  id                 Int      @id @default(autoincrement())
+  confluencePageId   String   @unique
+  title              String
+  status             String
+  rejectionComment   String?  
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  author             User     @relation(fields: [authorId], references: [id])
+  authorId           Int
+  page               Page     @relation(fields: [confluencePageId], references: [confluenceId])
 }
+
 
 model Notification {
   id          Int      @id @default(autoincrement())

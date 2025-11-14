@@ -416,7 +416,7 @@ class PageRepository:
             data={
                 'title': title,
                 'slug': self._slugify(title),
-                'description': description,
+                # 'description': description, <-- THIS PROBLEMATIC LINE HAS BEEN REMOVED
                 'pageType': page_type,
                 'authorName': author_name,
                 'updatedAt': updated_at,

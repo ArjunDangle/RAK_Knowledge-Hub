@@ -192,7 +192,7 @@ export default function ArticlePage({ pageId: propPageId, isPreviewMode = false 
       {contentBlocks.map((block, index) => {
           if (block.type === 'pdf' && pageId && block.fileName) { return <PdfSlideshow key={`pdf-${index}`} fileUrl={`${API_BASE_URL}/attachment/${pageId}/${block.fileName}`} />; }
           if (block.type === 'video' && pageId && block.fileName) { return <VideoPlayer key={`video-${index}`} fileUrl={`${API_BASE_URL}/attachment/${pageId}/${block.fileName}`} />; }
-          if (block.type === 'html' && block.content) { return (<div key={`html-${index}`} className="prose dark:prose-invert max-w-none mb-12" dangerouslySetInnerHTML={{ __html: block.content }} />); }
+          if (block.type === 'html' && block.content) { return (<div key={`html-${index}`} className="prose dark:prose-invert max-w-none mb-12 break-words" dangerouslySetInnerHTML={{ __html: block.content }} />); }
           return null;
       })}
       {relatedArticles && relatedArticles.length > 0 && !isPreviewMode && (

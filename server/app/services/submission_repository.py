@@ -37,7 +37,7 @@ class SubmissionRepository:
         """Fetches all submissions with a PENDING_REVIEW status."""
         return await self.db.articlesubmission.find_many(
             where={'status': ArticleSubmissionStatus.PENDING_REVIEW},
-            include={'author': True},
+            include={'author': True, 'page': True},
             order={'updatedAt': 'desc'}
         )
 
@@ -58,12 +58,23 @@ class SubmissionRepository:
     async def update_status(
         self,
         confluence_id: str,
-        status: ArticleSubmissionStatus
+        status: ArticleSubmissionStatus,
+        comment: Optional[str] = None
     ) -> Optional[ArticleSubmission]:
-        """Updates the status of an existing submission."""
+        """Updates the status of an existing submission and handles the rejection comment."""
+        update_data = {'status': status}
+
+        # If rejecting, set the comment.
+        if status == ArticleSubmissionStatus.REJECTED:
+            update_data['rejectionComment'] = comment
+        # If approving, explicitly clear the comment.
+        elif status == ArticleSubmissionStatus.PUBLISHED:
+            update_data['rejectionComment'] = None
+        # If resubmitting (to PENDING_REVIEW), the comment is intentionally left untouched.
+        
         return await self.db.articlesubmission.update(
             where={'confluencePageId': confluence_id},
-            data={'status': status}
+            data=update_data
         )
     
     async def update_title(self, confluence_id: str, title: str) -> Optional[ArticleSubmission]:

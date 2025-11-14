@@ -109,7 +109,7 @@ export default function CategoryPage() {
                   <>
                     <Separator className="mb-6" />
                     <div 
-                      className="prose dark:prose-invert max-w-none"
+                      className="prose dark:prose-invert max-w-none break-words"
                       dangerouslySetInnerHTML={{ __html: currentPageData.html }} 
                     />
                   </>

@@ -40,6 +40,7 @@ class ArticleSubmissionResponse(BaseModel):
     confluencePageId: str
     title: str
     status: ArticleSubmissionStatus
+    rejectionComment: Optional[str] = None
     updatedAt: datetime
 
     class Config:
