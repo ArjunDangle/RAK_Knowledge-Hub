@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 from fastapi import HTTPException, status
 from fastapi.responses import StreamingResponse
 
+from app.db import db
 from app.config import Settings
 from app.schemas.content_schemas import Article, Tag, Subsection, GroupInfo, PageContentItem, Ancestor, PageTreeNode, PageTreeNodeWithPermission
 from app.schemas.cms_schemas import PageCreate, PageUpdate, ContentNode, PageDetailResponse
@@ -33,6 +34,7 @@ class ConfluenceService:
         self.page_repo = PageRepository()
         self.submission_repo = SubmissionRepository()
         self.notification_service = NotificationService()
+        self.db = db
 
         # Get startup data from the Confluence repository
         self.root_page_ids = self.confluence_repo.root_page_ids
@@ -172,29 +174,39 @@ class ConfluenceService:
             print(f"Error in get_page_contents router: {e}")
             raise HTTPException(status_code=500, detail="Failed to fetch page contents.")
 
+    # server/app/services/confluence_service.py
+
     async def get_article_by_id_hybrid(self, page_id: str, user: Optional[UserResponse] = None) -> Optional[Article]:
         """
-        HYBRID FETCH: Fetches metadata from local DB and content from Confluence.
-        - If the user is an ADMIN, it fetches the page regardless of status.
-        - Otherwise, it only fetches publicly visible pages.
+        HYBRID FETCH: Fetches article metadata, live content, and checks permissions.
+        - Publicly visible to everyone if PUBLISHED.
+        - Visible to Admins regardless of status.
+        - Visible to the original Author if PENDING_REVIEW or REJECTED.
         """
-        
-        # Step 1: Decide which function to call based on user role
-        is_admin_preview = user and user.role == 'ADMIN'
-        
-        if is_admin_preview:
-            # Admins use the unfiltered internal method to see everything
-            page_metadata = await self.page_repo.get_page_by_id(confluence_id=page_id)
-        else:
-            # Everyone else uses the public, filtered method
-            page_metadata = await self.page_repo.get_public_page_by_id(confluence_id=page_id)
+        # 1. Fetch the page and its submission status unconditionally first.
+        page_metadata = await self.db.page.find_unique(
+            where={'confluenceId': page_id},
+            include={'tags': True, 'submission': True}  # Include submission status
+        )
 
+        # 2. If the page doesn't exist or isn't an article, it's a hard 404.
         if not page_metadata or page_metadata.pageType != PageType.ARTICLE:
-            return None # Not found or not an article
+            return None
 
-        # Step 2: Fetch live content from Confluence
+        # 3. Perform visibility checks.
+        is_published = not page_metadata.submission or page_metadata.submission.status == ArticleSubmissionStatus.PUBLISHED
+        is_admin = user and user.role == 'ADMIN'
+        is_author = user and page_metadata.submission and user.id == page_metadata.submission.authorId
+
+        # 4. If the page isn't public and the user is neither an admin nor the author, deny access.
+        if not is_published and not is_admin and not is_author:
+            return None  # From their perspective, it's "Not Found"
+
+        # If the checks pass, proceed with fetching live content and formatting the response.
+        
+        # Step 5: Fetch live content from Confluence
         html_content = ""
-        read_minutes = 1 # Default
+        read_minutes = 1  # Default
         try:
             html_content = self.confluence_repo.get_page_content(page_id)
             plain_text = self._get_plain_text(html_content)
@@ -204,12 +216,12 @@ class ConfluenceService:
             print(f"CRITICAL: Could not fetch content for page {page_id} from Confluence. Error: {e}")
             html_content = "<p>Error: Could not load document content from the source.</p>"
         
-        # Step 3: Get ancestors to determine group/subsection slugs
+        # Step 6: Get ancestors to determine group/subsection slugs
         ancestors = await self.page_repo.get_ancestors_from_db(page_metadata)
         group_slug = self._get_group_from_ancestors(ancestors)
         subsection_slug = ancestors[-1].title if ancestors else "unknown"
 
-        # Step 4: Merge and format into Article schema
+        # Step 7: Merge and format into Article schema
         return Article(
             type='article',
             id=page_metadata.confluenceId,
@@ -220,7 +232,7 @@ class ConfluenceService:
             html=html_content,
             tags=[Tag.model_validate(t.model_dump()) for t in page_metadata.tags],
             group=group_slug,
-            subsection=self._slugify(subsection_slug), # Slugify the title
+            subsection=self._slugify(subsection_slug),
             updatedAt=page_metadata.updatedAt.isoformat(),
             views=page_metadata.views,
             readMinutes=read_minutes,

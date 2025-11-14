@@ -314,16 +314,16 @@ class PageRepository:
         tag_names: List[str]
     ) -> PageModel:
         tag_connect_ops = []
-        for tag_name in tag_names:
-            tag_slug = self._slugify(tag_name)
-            tag = await self.db.tag.upsert(
-                where={'name': tag_name},
-                data={
-                    'create': {'name': tag_name, 'slug': tag_slug},
-                    'update': {'slug': tag_slug}
-                }
+        if tag_names:
+            existing_tags = await self.db.tag.find_many(
+                where={'name': {'in': tag_names}}
             )
-            tag_connect_ops.append({'id': tag.id})
+            if len(existing_tags) != len(tag_names):
+                found_names = {t.name for t in existing_tags}
+                missing_names = set(tag_names) - found_names
+                raise ValueError(f"The following tags do not exist and must be created by an admin first: {', '.join(missing_names)}")
+
+            tag_connect_ops = [{'id': tag.id} for tag in existing_tags]
         
         return await self.db.page.create(data={
             'confluenceId': confluence_id,
@@ -357,16 +357,21 @@ class PageRepository:
 
         if tag_names is not None:
             tag_connect_ops = []
-            for tag_name in tag_names:
-                tag_slug = self._slugify(tag_name)
-                tag = await self.db.tag.upsert(
-                    where={'name': tag_name},
-                    data={
-                        'create': {'name': tag_name, 'slug': tag_slug},
-                        'update': {'slug': tag_slug}
-                    }
+            if tag_names:
+                # Find all existing tags in a single, efficient query.
+                existing_tags = await self.db.tag.find_many(
+                    where={'name': {'in': tag_names}}
                 )
-                tag_connect_ops.append({'id': tag.id})
+
+                # Validate that all provided tags exist.
+                if len(existing_tags) != len(tag_names):
+                    found_names = {t.name for t in existing_tags}
+                    missing_names = set(tag_names) - found_names
+                    raise ValueError(f"The following tags do not exist and must be created by an admin first: {', '.join(missing_names)}")
+                
+                tag_connect_ops = [{'id': tag.id} for tag in existing_tags]
+
+            # Use 'set' to replace all existing tags with the new list.
             update_data['tags'] = {'set': tag_connect_ops}
 
         return await self.db.page.update(

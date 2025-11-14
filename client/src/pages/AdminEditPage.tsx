@@ -1,5 +1,5 @@
 // client/src/pages/AdminEditPage.tsx
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react"; // MODIFIED: Added useMemo
 import { useParams, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -31,8 +31,9 @@ import {
   getPageDetailsForEdit,
   updatePage,
   PageUpdatePayload,
-  getAllTags,
+  getAllTagsGrouped, // MODIFIED: Changed from getAllTags
 } from "@/lib/api/api-client";
+import { GroupedTag } from "@/lib/types/content"; // MODIFIED: Added GroupedTag type
 import {
   RichTextEditor,
   useConfiguredEditor,
@@ -41,8 +42,8 @@ import { TreeSelect } from "@/components/cms/TreeSelect";
 import { MultiSelect, MultiSelectOption } from "@/components/ui/multi-select";
 import { Skeleton } from "@/components/ui/skeleton";
 
-// Validation schema matching the create page
-const editPageSchema = z.object({
+// MODIFIED: Base validation schema without tags
+const baseSchema = z.object({
   title: z
     .string()
     .min(5, { message: "Title must be at least 5 characters long." }),
@@ -53,10 +54,7 @@ const editPageSchema = z.object({
   parent_id: z
     .string()
     .min(1, { message: "You must select a parent category." }),
-  tags: z.array(z.string()).min(1, { message: "Select at least one tag." }),
 });
-
-type EditPageFormData = z.infer<typeof editPageSchema>;
 
 export default function AdminEditPage() {
   const { pageId } = useParams<{ pageId: string }>();
@@ -75,46 +73,77 @@ export default function AdminEditPage() {
     retry: false,
   });
 
-  // Fetch all tags for the dropdown
-  const { data: allTags, isLoading: isLoadingTags } = useQuery({
-    queryKey: ["allTags"],
-    queryFn: getAllTags,
+  // MODIFIED: Fetch all tag groups for the multi-select options
+  const { data: tagGroups, isLoading: isLoadingTags } = useQuery<GroupedTag[]>({
+    queryKey: ["allTagsGrouped"],
+    queryFn: getAllTagsGrouped,
   });
-  const tagOptions: MultiSelectOption[] = allTags
-    ? allTags.map((tag) => ({ value: tag.name, label: tag.name }))
-    : [];
 
-  const form = useForm<EditPageFormData>({
-    resolver: zodResolver(editPageSchema),
+  const tagGridClass = useMemo(() => {
+    const base = "grid grid-cols-1 gap-6";
+    if (!tagGroups) {
+      return `${base} md:grid-cols-2`; // Default while loading
+    }
+    const count = tagGroups.length;
+    switch (count) {
+      case 1:
+        return `${base} md:grid-cols-1`;
+      case 2:
+        return `${base} md:grid-cols-2`;
+      case 3:
+        return `${base} md:grid-cols-3`; // 3 columns for 3 items
+      case 4:
+        return `${base} md:grid-cols-2`; // 2x2 grid for 4 items
+      default:
+        // Responsive fallback for 5+ items
+        return `${base} md:grid-cols-2 lg:grid-cols-3`;
+    }
+  }, [tagGroups]);
+
+  // MODIFIED: Dynamically build the validation schema based on fetched groups
+  const dynamicSchema = useMemo(() => {
+    if (!tagGroups) return baseSchema;
+    const groupSchemas = tagGroups.reduce((acc, group) => {
+      return { ...acc, [group.name.replace(/\s+/g, "_")]: z.array(z.string()).min(1, { message: `Select at least one ${group.name}.` }) };
+    }, {});
+    return baseSchema.extend(groupSchemas);
+  }, [tagGroups]);
+
+  const form = useForm<z.infer<typeof dynamicSchema>>({
+    resolver: zodResolver(dynamicSchema),
     defaultValues: {
       title: "",
       description: "",
       parent_id: "",
-      tags: [],
     },
   });
 
-  // Note: Attachments are not editable in this flow to keep it simple.
-  // Admins would need to edit in Confluence for complex attachment changes.
   const editor = useConfiguredEditor(pageDetails?.content || "", () => {});
 
+  // MODIFIED: Effect to populate the form once all data is loaded
   useEffect(() => {
-    if (pageDetails) {
+    if (pageDetails && tagGroups) {
+      // Map the flat array of existing tags back to their groups for the form
+      const defaultTagValues = tagGroups.reduce((acc, group) => {
+        const groupKey = group.name.replace(/\s+/g, "_");
+        const groupTagNames = new Set(group.tags.map(t => t.name));
+        const selectedTagsForGroup = pageDetails.tags.filter(tagName => groupTagNames.has(tagName));
+        
+        return { ...acc, [groupKey]: selectedTagsForGroup };
+      }, {});
+      
       form.reset({
         title: pageDetails.title,
         description: pageDetails.description,
         parent_id: pageDetails.parent_id || "",
-        tags: pageDetails.tags,
+        ...defaultTagValues,
       });
-      if (
-        editor &&
-        !editor.isDestroyed &&
-        editor.getHTML() !== pageDetails.content
-      ) {
+
+      if (editor && !editor.isDestroyed && editor.getHTML() !== pageDetails.content) {
         editor.commands.setContent(pageDetails.content);
       }
     }
-  }, [pageDetails, form, editor]);
+  }, [pageDetails, tagGroups, form, editor]);
 
   const mutation = useMutation({
     mutationFn: (data: PageUpdatePayload) => updatePage(pageId!, data),
@@ -129,7 +158,8 @@ export default function AdminEditPage() {
     },
   });
 
-  const onSubmit = (data: EditPageFormData) => {
+  // MODIFIED: onSubmit to handle dynamic form data
+  const onSubmit = (data: z.infer<typeof dynamicSchema>) => {
     const content = editor?.getHTML() || "";
     if (content.length < 50) {
       toast.error("Content is too short", {
@@ -138,7 +168,26 @@ export default function AdminEditPage() {
       return;
     }
 
-    const payload: PageUpdatePayload = { ...data, content };
+    // Flatten all selected tags from the dynamic fields into a single array
+    const allSelectedTags: string[] = [];
+    if (tagGroups) {
+      tagGroups.forEach((group) => {
+        const groupKey = group.name.replace(/\s+/g, "_") as keyof typeof data;
+        const selected = data[groupKey];
+        if (Array.isArray(selected)) {
+          allSelectedTags.push(...selected);
+        }
+      });
+    }
+
+    const payload: PageUpdatePayload = {
+      title: data.title,
+      description: data.description,
+      content,
+      parent_id: data.parent_id,
+      tags: allSelectedTags, // Add the flattened array to the payload
+    };
+
     mutation.mutate(payload);
   };
 
@@ -228,23 +277,50 @@ export default function AdminEditPage() {
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="tags"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Tags</FormLabel>
-                      <FormControl>
-                        <MultiSelect
-                          options={tagOptions}
-                          selected={field.value}
-                          onChange={field.onChange}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
+                {/* MODIFIED: Dynamic Tags Section */}
+                <div className="space-y-4">
+                  <div>
+                    <FormLabel className="text-base font-medium text-foreground">Tags</FormLabel>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Ensure at least one tag is selected from each mandatory category.
+                    </p>
+                  </div>
+                  {isLoadingTags ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
+                    </div>
+                  ) : (
+                    <div className={tagGridClass}>
+                      {tagGroups?.map((group) => {
+                        const options: MultiSelectOption[] = group.tags.map((tag) => ({ value: tag.name, label: tag.name }));
+                        const formFieldName = group.name.replace(/\s+/g, "_") as keyof z.infer<typeof dynamicSchema>;
+
+                        return (
+                          <FormField
+                            key={group.id}
+                            control={form.control}
+                            name={formFieldName}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="font-semibold">{group.name}</FormLabel>
+                                <FormControl>
+                                  <MultiSelect
+                                    options={options}
+                                    selected={Array.isArray(field.value) ? field.value : []}
+                                    onChange={field.onChange}
+                                    placeholder={`Select for ${group.name}...`}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        );
+                      })}
+                    </div>
                   )}
-                />
+                </div>
 
                 <div>
                   <FormLabel>Content</FormLabel>

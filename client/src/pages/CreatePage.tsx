@@ -63,6 +63,7 @@ const baseSchema = z.object({
 interface UploadedFile {
   file: File;
   tempId: string;
+  type: "image" | "video" | "pdf" | "file";
 }
 
 export default function CreatePage() {
@@ -77,6 +78,29 @@ export default function CreatePage() {
     queryKey: ["allTagsGrouped"],
     queryFn: getAllTagsGrouped,
   });
+
+  const tagGridClass = useMemo(() => {
+    const base = "grid grid-cols-1 gap-6";
+    if (!tagGroups) {
+      return `${base} md:grid-cols-2`; // A sensible default while loading
+    }
+    const count = tagGroups.length;
+    switch (count) {
+      case 1:
+        return `${base} md:grid-cols-1`;
+      case 2:
+        return `${base} md:grid-cols-2`;
+      case 3:
+        // Use 3 columns on medium screens and up if there are exactly 3 groups
+        return `${base} md:grid-cols-3`;
+      case 4:
+        // Use a 2x2 grid if there are exactly 4 groups
+        return `${base} md:grid-cols-2`;
+      default:
+        // A responsive fallback for 5 or more items
+        return `${base} md:grid-cols-2 lg:grid-cols-3`;
+    }
+  }, [tagGroups]);
 
   // 2. Dynamically build the validation schema based on fetched groups
   const dynamicSchema = useMemo(() => {
@@ -115,10 +139,12 @@ export default function CreatePage() {
         ? "pdf"
         : "file";
 
-      setAttachments((prev) => [
-        ...prev,
-        { file: file, tempId: response.temp_id },
-      ]);
+        const newAttachment: UploadedFile = {
+          file: file,
+          tempId: response.temp_id,
+          type: fileType,
+        };
+        setAttachments((prev) => [...prev, newAttachment]);
 
       if (editor) {
         if (fileType === "image") {
@@ -321,7 +347,7 @@ export default function CreatePage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className={tagGridClass}>
                       {tagGroups?.map((group) => {
                         const options: MultiSelectOption[] = group.tags.map(
                           (tag) => ({
