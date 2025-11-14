@@ -76,7 +76,12 @@ async def process_page_and_children(
             updated_at = page_data["version"]["when"]
             html_content = page_data.get("body", {}).get("view", {}).get("value", "")
             plain_text = BeautifulSoup(html_content, 'html.parser').get_text(" ", strip=True)
-            description = (plain_text[:250] + '...') if len(plain_text) > 250 else "No description available."
+            if len(plain_text) > 150:
+                description = plain_text[:147] + '...'
+            elif plain_text:
+                description = plain_text
+            else:
+                description = "No description available."
             
             tag_connect_ops = []
             if legacy_group_id and tag_names:

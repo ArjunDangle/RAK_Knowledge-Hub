@@ -166,17 +166,20 @@ async def update_page_endpoint(
 @router.get(
     "/admin/preview/{page_id}",
     response_model=content_schemas.Article,
-    dependencies=[Depends(get_current_admin_user)]
+    # The dependency already ensures the user is an admin
 )
-async def get_article_preview_endpoint(page_id: str):
+async def get_article_preview_endpoint(page_id: str, current_user: auth_schemas.UserResponse = Depends(get_current_admin_user)):
     """
-    Fetches the full content of a pending article for an admin to preview.
+    Fetches the full content of a pending article for an admin to preview,
+    using the main hybrid fetcher to ensure data consistency.
     """
-    article = await confluence_service.get_article_for_preview(page_id)
+    # Use the same robust function as the main article page.
+    # It correctly handles permissions for admins.
+    article = await confluence_service.get_article_by_id_hybrid(page_id, current_user)
     if not article:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Article with ID '{page_id}' not found."
+            detail=f"Article with ID '{page_id}' not found or is not an article."
         )
     return article
 

@@ -92,7 +92,7 @@ async def delete_tag_group(group_id: int):
 async def create_tag(tag_data: TagCreate):
     import re
     slug = re.sub(r'[\s_&]+', '-', tag_data.name.lower())
-    slug = re.sub(r'[^\w\s-]', '', slug)
+    slug = re.sub(r'[^\w-]', '', slug)
     
     group = await db.taggroup.find_unique(where={'id': tag_data.tagGroupId})
     if group and group.name == 'legacy':

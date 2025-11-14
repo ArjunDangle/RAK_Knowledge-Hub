@@ -395,15 +395,21 @@ class PageRepository:
         
         tag_ops = []
         raw_labels = page_data.get("metadata", {}).get("labels", {}).get("results", [])
-        for label in raw_labels:
-            tag_name = label["name"]
-            if not tag_name.startswith("status-"):
-                tag_slug = self._slugify(tag_name)
-                tag = await self.db.tag.upsert(
-                    where={'name': tag_name},
-                    data={'create': {'name': tag_name, 'slug': tag_slug}, 'update': {'slug': tag_slug}}
-                )
-                tag_ops.append({'id': tag.id})
+        
+        # Get the list of slugs directly from Confluence labels.
+        # Confluence labels are effectively slugs (lowercase, no spaces).
+        slugs_from_confluence = [
+            label["name"] for label in raw_labels if not label["name"].startswith("status-")
+        ]
+
+        if slugs_from_confluence:
+            # Find all tags in our database where the SLUG matches the labels from Confluence.
+            existing_tags = await self.db.tag.find_many(
+                where={'slug': {'in': slugs_from_confluence}}
+            )
+            
+            # This correctly links the page to the official tags based on their slug.
+            tag_ops = [{'id': tag.id} for tag in existing_tags]
         
         return await self.db.page.update(
             where={'confluenceId': confluence_id},
