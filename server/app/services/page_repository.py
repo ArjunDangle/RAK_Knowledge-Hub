@@ -391,37 +391,22 @@ class PageRepository:
         
         html_content = page_data.get("body", {}).get("view", {}).get("value", "")
         plain_text = self._get_plain_text(html_content)
-        description = (plain_text[:250] + '...') if len(plain_text) > 250 else "No description available."
         
-        tag_ops = []
-        raw_labels = page_data.get("metadata", {}).get("labels", {}).get("results", [])
         
-        # Get the list of slugs directly from Confluence labels.
-        # Confluence labels are effectively slugs (lowercase, no spaces).
-        slugs_from_confluence = [
-            label["name"] for label in raw_labels if not label["name"].startswith("status-")
-        ]
-
-        if slugs_from_confluence:
-            # Find all tags in our database where the SLUG matches the labels from Confluence.
-            existing_tags = await self.db.tag.find_many(
-                where={'slug': {'in': slugs_from_confluence}}
-            )
-            
-            # This correctly links the page to the official tags based on their slug.
-            tag_ops = [{'id': tag.id} for tag in existing_tags]
+        update_data = {
+            'title': title,
+            'slug': self._slugify(title),
+            'pageType': page_type,
+            'authorName': author_name,
+            'updatedAt': updated_at,
+        }
+        
+        if plain_text and len(plain_text) > 20:
+            update_data['description'] = (plain_text[:250] + '...') if len(plain_text) > 250 else plain_text
         
         return await self.db.page.update(
             where={'confluenceId': confluence_id},
-            data={
-                'title': title,
-                'slug': self._slugify(title),
-                # 'description': description, <-- THIS PROBLEMATIC LINE HAS BEEN REMOVED
-                'pageType': page_type,
-                'authorName': author_name,
-                'updatedAt': updated_at,
-                'tags': {'set': tag_ops} 
-            }
+            data=update_data
         )
     
     async def get_tree_nodes_by_parent_id(self, parent_id: Optional[str]) -> List[PageTreeNode]:

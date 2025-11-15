@@ -126,10 +126,10 @@ export interface TagCreatePayload {
   tagGroupId: number;
 }
 
-// --- THIS IS THE FIX ---
-// The local declaration of PageTreeNodeWithPermission that was here has been REMOVED.
-// We are now only using the version imported from ../types/content.
-// --- END OF FIX ---
+export interface TagBulkCreatePayload {
+  tagGroupId: number;
+  names: string[];
+}
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
@@ -453,4 +453,11 @@ export async function createTag(payload: TagCreatePayload): Promise<Tag> {
 
 export async function deleteTag(tagId: number): Promise<void> {
   return apiFetch(`/api/tags/${tagId}`, { method: "DELETE" });
+}
+
+export async function createTagsInBulk(payload: TagBulkCreatePayload): Promise<{ message: string }> {
+  return apiFetch("/api/tags/bulk", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }

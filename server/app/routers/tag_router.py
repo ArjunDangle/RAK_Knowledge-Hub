@@ -36,14 +36,13 @@ class TagResponse(BaseModel):
 class GroupedTagResponse(TagGroupResponse):
     tags: List[TagResponse] = []
 
-# --- API Router ---
-# --- CORRECTION: REMOVED THE GLOBAL ADMIN DEPENDENCY ---
+class TagBulkCreate(BaseModel):
+    tagGroupId: int
+    names: List[str]
+
 router = APIRouter(
     tags=["Tags"]
 )
-# --- END CORRECTION ---
-
-# --- Endpoints for Tag Groups ---
 
 @router.post("/groups", response_model=TagGroupResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(get_current_admin_user)])
 async def create_tag_group(group_data: TagGroupCreate):
@@ -108,3 +107,48 @@ async def delete_tag(tag_id: int):
     except Exception as e:
         raise HTTPException(status_code=400, detail="Cannot delete tag. It is currently associated with one or more articles.")
     return
+
+@router.post("/bulk", status_code=status.HTTP_201_CREATED, dependencies=[Depends(get_current_admin_user)])
+async def create_tags_in_bulk(bulk_data: TagBulkCreate):
+    import re
+
+    # 1. Validate the target group
+    group = await db.taggroup.find_unique(where={'id': bulk_data.tagGroupId})
+    if not group:
+        raise HTTPException(status_code=404, detail="Target tag group not found.")
+    if group.name == 'legacy':
+        raise HTTPException(status_code=400, detail="Cannot add new tags to the 'legacy' group.")
+
+    # 2. Process the list of names into valid tag data
+    tags_to_create = []
+    for name in bulk_data.names:
+        trimmed_name = name.strip()
+        if not trimmed_name:
+            continue
+        
+        # Generate slug (consistent with single tag creation)
+        slug = re.sub(r'[\s_&]+', '-', trimmed_name.lower())
+        slug = re.sub(r'[^\w-]', '', slug)
+
+        tags_to_create.append({
+            'name': trimmed_name,
+            'slug': slug,
+            'tagGroupId': bulk_data.tagGroupId
+        })
+
+    if not tags_to_create:
+        raise HTTPException(status_code=400, detail="No valid tag names provided.")
+
+    # 3. Use create_many for an efficient bulk insert, ignoring duplicates
+    try:
+        result = await db.tag.create_many(
+            data=tags_to_create,
+            skip_duplicates=True
+        )
+        # --- THIS IS THE FIX ---
+        # The 'result' variable is the integer count directly.
+        return {"message": f"Successfully created {result} new tags."}
+        # --- END OF FIX ---
+    except Exception as e:
+        print(f"Bulk tag creation failed: {e}")
+        raise HTTPException(status_code=500, detail="An error occurred during bulk tag creation.")

@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { KnowledgeLayout } from "./KnowledgeLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea"; // Import Textarea
 import {
   Card,
   CardContent,
@@ -34,61 +35,65 @@ import {
   getAllTagGroupsWithTagsAdmin,
   createTagGroup,
   deleteTagGroup,
-  createTag,
+  createTagsInBulk, // Use the new bulk creation function
   deleteTag,
 } from "@/lib/api/api-client";
 
-// Helper function to re-fetch data after a mutation
 const invalidateQueries = (queryClient: QueryClient) => {
   queryClient.invalidateQueries({ queryKey: ["allTagsGroupedAdmin"] });
 };
 
-// Dialog for adding a new tag to a group
-function AddTagDialog({
+// --- MODIFIED COMPONENT: AddTagDialog becomes ManageTagsDialog ---
+function ManageTagsDialog({
   groupId,
   groupName,
 }: {
   groupId: number;
   groupName: string;
 }) {
-  const [tagName, setTagName] = useState("");
+  const [tagInput, setTagInput] = useState("");
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: () => createTag({ name: tagName, tagGroupId: groupId }),
-    onSuccess: () => {
-      toast.success(`Tag "${tagName}" added to group "${groupName}".`);
+    mutationFn: (tagNames: string[]) => createTagsInBulk({ names: tagNames, tagGroupId: groupId }),
+    onSuccess: (data) => {
+      toast.success(data.message || "Tags added successfully.");
       invalidateQueries(queryClient);
-      setTagName(""); // Clear input for next addition
+      setTagInput(""); // Clear textarea for next batch
     },
     onError: (e: Error) =>
-      toast.error("Failed to add tag", { description: e.message }),
+      toast.error("Failed to add tags", { description: e.message }),
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (tagName.trim()) {
-      mutation.mutate();
+    const tagNames = tagInput.split(',').map(tag => tag.trim()).filter(Boolean);
+    if (tagNames.length > 0) {
+      mutation.mutate(tagNames);
     }
   };
 
   return (
-    <Dialog onOpenChange={() => setTagName("")}>
+    <Dialog onOpenChange={() => setTagInput("")}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm" className="h-7 text-xs">
-          <PlusCircle className="h-3 w-3 mr-1" /> Add Tag
+          <PlusCircle className="h-3 w-3 mr-1" /> Add Tag(s)
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add Tag to "{groupName}"</DialogTitle>
+          <DialogTitle>Add Tags to "{groupName}"</DialogTitle>
+          <DialogDescription>
+            Enter a single tag name, or paste a comma-separated list of tags to add them in bulk.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
-          <Input
-            placeholder="New tag name..."
-            value={tagName}
-            onChange={(e) => setTagName(e.target.value)}
+          <Textarea
+            placeholder="e.g., WisGate OS, WisDM, RAKPiOS..."
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
             autoFocus
+            rows={5}
           />
           <DialogFooter>
             <DialogClose asChild>
@@ -98,12 +103,12 @@ function AddTagDialog({
             </DialogClose>
             <Button
               type="submit"
-              disabled={mutation.isPending || !tagName.trim()}
+              disabled={mutation.isPending || !tagInput.trim()}
             >
               {mutation.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              Add & Continue
+              Add Tags
             </Button>
           </DialogFooter>
         </form>
@@ -112,14 +117,14 @@ function AddTagDialog({
   );
 }
 
-// Main Page Component
+// Main Page Component (mostly unchanged, just uses the new dialog)
 export default function AdminTagsPage() {
   const queryClient = useQueryClient();
   const [newGroupName, setNewGroupName] = useState("");
 
   const { data: groups, isLoading } = useQuery({
     queryKey: ["allTagsGroupedAdmin"],
-    queryFn: getAllTagGroupsWithTagsAdmin, // This is the corrected query function
+    queryFn: getAllTagGroupsWithTagsAdmin,
   });
 
   const createGroupMutation = useMutation({
@@ -211,7 +216,7 @@ export default function AdminTagsPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     {group.name !== "legacy" && (
-                      <AddTagDialog groupId={group.id} groupName={group.name} />
+                      <ManageTagsDialog groupId={group.id} groupName={group.name} />
                     )}
                     {group.name !== "legacy" && (
                       <Button
