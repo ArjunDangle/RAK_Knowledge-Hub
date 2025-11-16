@@ -99,7 +99,7 @@ export default function SearchPage() {
   // Syncs temporary modal state when it opens
   const handleModalOpen = (isOpen: boolean) => {
     if (isOpen) {
-        const currentTagsInQuery = (mode === 'tags' && query) ? query.split(' ').filter(Boolean) : [];
+        const currentTagsInQuery = (mode === 'tags' && query) ? query.split(',').map(t => t.trim()).filter(Boolean) : [];
         setTemporarySelectedTags(new Set(currentTagsInQuery));
     }
     setDialogOpen(isOpen);
@@ -118,7 +118,7 @@ export default function SearchPage() {
   };
 
   const handleApplyTagSelection = () => {
-    const newQuery = Array.from(temporarySelectedTags).join(' ');
+    const newQuery = Array.from(temporarySelectedTags).join(', ');
     const newMode = newQuery ? 'tags' : 'all';
     setQuery(newQuery);
     setMode(newMode);
@@ -127,7 +127,11 @@ export default function SearchPage() {
   };
   
   const handleRemoveTag = (tagNameToRemove: string) => {
-    const updatedQuery = query.split(' ').filter(tag => tag !== tagNameToRemove).join(' ');
+    const updatedQuery = query
+      .split(',')
+      .map(tag => tag.trim())
+      .filter(tag => tag !== tagNameToRemove)
+      .join(', ');
     const newMode = updatedQuery ? 'tags' : 'all';
     setQuery(updatedQuery);
     setMode(newMode);
@@ -135,7 +139,7 @@ export default function SearchPage() {
   };
   
   const currentSelectedTags = useMemo(() => {
-    return (mode === 'tags' && query) ? query.split(' ').filter(Boolean) : [];
+    return (mode === 'tags' && query) ? query.split(',').map(tag => tag.trim()).filter(Boolean) : [];
   }, [query, mode]);
   
   const breadcrumbs = [{ label: "Search Results" }];

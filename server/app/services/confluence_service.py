@@ -273,10 +273,24 @@ class ConfluenceService:
         if mode == "title":
             specific_cql = f'title ~ "{sanitized_query}"'
         elif mode == "tags":
-            tags = sanitized_query.strip().split()
-            if not tags:
+            # Split the query by commas, and clean up whitespace
+            tag_names_from_query = [name.strip() for name in sanitized_query.strip().split(',') if name.strip()]
+            
+            if not tag_names_from_query:
+                # If the query is empty after splitting, return no results
                 return {"items": [], "total": 0, "page": 1, "pageSize": page_size, "hasNext": False}
-            label_clauses = [f'label = "{tag}"' for tag in tags]
+            
+            # Find the corresponding tags in the database to get their slugs, ignoring case
+            tag_records = await self.db.tag.find_many(
+                where={'name': {'in': tag_names_from_query, 'mode': 'insensitive'}}
+            )
+            
+            # Use the slugs to build the CQL query
+            if not tag_records:
+                 # If no valid tags were found, return no results
+                return {"items": [], "total": 0, "page": 1, "pageSize": page_size, "hasNext": False}
+
+            label_clauses = [f'label = "{tag.slug}"' for tag in tag_records]
             specific_cql = ' and '.join(label_clauses)
         else:  # Default to 'all' or 'content'
             specific_cql = f'text ~ "{sanitized_query}"'
@@ -385,8 +399,10 @@ class ConfluenceService:
             # 5. Handle Attachments and Labels in Confluence
             self.confluence_repo.upload_attachments(page_id, page_data.attachments)
             self.confluence_repo.add_label(page_id, 'status-unpublished')
-            for tag in page_data.tags:
-                self.confluence_repo.add_label(page_id, tag)
+            if page_data.tags:
+                tag_records = await self.db.tag.find_many(where={'name': {'in': page_data.tags}})
+                for tag in tag_records:
+                    self.confluence_repo.add_label(page_id, tag.slug)
 
             # 6. Notify admins
             await self.notification_service.notify_admins_of_submission(
@@ -499,7 +515,6 @@ class ConfluenceService:
 
             # 4. Sync labels/tags in Confluence if a tag list was sent
             if page_data.tags is not None:
-                # Get existing labels from Confluence (they are already slug-like)
                 existing_labels = {l['name'] for l in current_page_data.get("metadata", {}).get("labels", {}).get("results", []) if not l['name'].startswith('status-')}
                 
                 new_tag_records = await self.db.tag.find_many(where={'name': {'in': page_data.tags}})
