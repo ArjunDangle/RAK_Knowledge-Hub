@@ -389,24 +389,29 @@ class PageRepository:
         author_name = page_data.get("version", {}).get("by", {}).get("displayName", "Unknown")
         updated_at = page_data["version"]["when"]
         
-        html_content = page_data.get("body", {}).get("view", {}).get("value", "")
-        plain_text = self._get_plain_text(html_content)
+        tag_ops = []
+        raw_labels = page_data.get("metadata", {}).get("labels", {}).get("results", [])
         
-        
-        update_data = {
-            'title': title,
-            'slug': self._slugify(title),
-            'pageType': page_type,
-            'authorName': author_name,
-            'updatedAt': updated_at,
-        }
-        
-        if plain_text and len(plain_text) > 20:
-            update_data['description'] = (plain_text[:250] + '...') if len(plain_text) > 250 else plain_text
+        slugs_from_confluence = [
+            label["name"] for label in raw_labels if not label["name"].startswith("status-")
+        ]
+
+        if slugs_from_confluence:
+            existing_tags = await self.db.tag.find_many(
+                where={'slug': {'in': slugs_from_confluence}}
+            )
+            tag_ops = [{'id': tag.id} for tag in existing_tags]
         
         return await self.db.page.update(
             where={'confluenceId': confluence_id},
-            data=update_data
+            data={
+                'title': title,
+                'slug': self._slugify(title),
+                'pageType': page_type,
+                'authorName': author_name,
+                'updatedAt': updated_at,
+                'tags': {'set': tag_ops} 
+            }
         )
     
     async def get_tree_nodes_by_parent_id(self, parent_id: Optional[str]) -> List[PageTreeNode]:

@@ -499,16 +499,19 @@ class ConfluenceService:
 
             # 4. Sync labels/tags in Confluence if a tag list was sent
             if page_data.tags is not None:
+                # Get existing labels from Confluence (they are already slug-like)
                 existing_labels = {l['name'] for l in current_page_data.get("metadata", {}).get("labels", {}).get("results", []) if not l['name'].startswith('status-')}
-                new_tags = set(page_data.tags)
                 
-                tags_to_add = new_tags - existing_labels
-                tags_to_remove = existing_labels - new_tags
+                new_tag_records = await self.db.tag.find_many(where={'name': {'in': page_data.tags}})
+                new_slugs = {tag.slug for tag in new_tag_records}
+                
+                tags_to_add = new_slugs - existing_labels
+                tags_to_remove = existing_labels - new_slugs
 
-                for tag in tags_to_add:
-                    self.confluence_repo.add_label(page_id, tag)
-                for tag in tags_to_remove:
-                    self.confluence_repo.remove_label(page_id, tag)
+                for slug in tags_to_add:
+                    self.confluence_repo.add_label(page_id, slug)
+                for slug in tags_to_remove:
+                    self.confluence_repo.remove_label(page_id, slug)
 
             # 5. Also update the submission record's title to keep it in sync
             await self.submission_repo.update_title(page_id, page_data.title)
