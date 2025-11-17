@@ -117,7 +117,12 @@ class PageRepository:
     async def _format_page_as_subsection(self, page: PageModel, group_slug: str, html_content: str = "") -> Subsection:
         """Formats a Prisma Page model into a Subsection schema."""
         article_count = await self.db.page.count(
-            where={'parentConfluenceId': page.confluenceId}
+            where={
+                'AND': [
+                    {'parentConfluenceId': page.confluenceId},
+                    self._public_facing_filter
+                ]
+            }
         )
         
         return Subsection(

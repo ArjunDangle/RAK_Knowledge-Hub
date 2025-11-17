@@ -2,7 +2,7 @@
 import { Search, Menu, PlusCircle, LayoutDashboard, LogOut, User as UserIcon, FileText, ListTree, Users, Tag as TagIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
@@ -26,6 +26,9 @@ export function SiteHeader({
   const navigate = useNavigate();
   const { isAuthenticated, user, isAdmin, logout } = useAuth();
   
+  const location = useLocation();
+  const showHeaderSearch = location.pathname !== '/' && location.pathname !== '/search';
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
@@ -69,24 +72,28 @@ export function SiteHeader({
         </div>
 
         <div className="flex items-center gap-2">
-          <form onSubmit={handleSearch} className="hidden md:flex items-center rounded-full bg-muted/60 px-3 h-9">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-2 w-52 h-full bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0"
-            />
-          </form>
-          <Button variant="ghost" size="icon" className="md:hidden" asChild>
-            <Link to="/search">
-              <Search className="h-5 w-5" />
-              <span className="sr-only">Search</span>
-            </Link>
-          </Button>
+          {showHeaderSearch && (
+            <>
+              <form onSubmit={handleSearch} className="hidden md:flex items-center rounded-full bg-muted/60 px-3 h-9">
+                <Search className="h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-2 w-52 h-full bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                />
+              </form>
+              <Button variant="ghost" size="icon" className="md:hidden" asChild>
+                <Link to="/search">
+                  <Search className="h-5 w-5" />
+                  <span className="sr-only">Search</span>
+                </Link>
+              </Button>
 
-          <Separator orientation="vertical" className="h-6 mx-2 hidden md:block" />
+              <Separator orientation="vertical" className="h-6 mx-2 hidden md:block" />
+            </>
+          )}
 
           {isAuthenticated ? (
             <div className="flex items-center gap-4">
