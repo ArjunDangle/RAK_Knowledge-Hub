@@ -1,11 +1,11 @@
 // client/src/pages/AdminEditPage.tsx
-import { useEffect, useMemo } from "react"; // MODIFIED: Added useMemo
+import { useEffect, useMemo, useState, useRef, ChangeEvent } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, Upload, Paperclip, X } from "lucide-react";
 
 import { KnowledgeLayout } from "./KnowledgeLayout";
 import { Button } from "@/components/ui/button";
@@ -31,9 +31,11 @@ import {
   getPageDetailsForEdit,
   updatePage,
   PageUpdatePayload,
-  getAllTagsGrouped, // MODIFIED: Changed from getAllTags
+  getAllTagsGrouped,
+  uploadAttachment,
+  AttachmentInfo,
 } from "@/lib/api/api-client";
-import { GroupedTag } from "@/lib/types/content"; // MODIFIED: Added GroupedTag type
+import { GroupedTag } from "@/lib/types/content";
 import {
   RichTextEditor,
   useConfiguredEditor,
@@ -42,7 +44,6 @@ import { TreeSelect } from "@/components/cms/TreeSelect";
 import { MultiSelect, MultiSelectOption } from "@/components/ui/multi-select";
 import { Skeleton } from "@/components/ui/skeleton";
 
-// MODIFIED: Base validation schema without tags
 const baseSchema = z.object({
   title: z
     .string()
@@ -56,12 +57,60 @@ const baseSchema = z.object({
     .min(1, { message: "You must select a parent category." }),
 });
 
+interface UploadedFile {
+  file: File;
+  tempId: string;
+  type: "image" | "video" | "pdf" | "file";
+}
+
 export default function AdminEditPage() {
   const { pageId } = useParams<{ pageId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  // Fetch the article's full details for editing
+  const [attachments, setAttachments] = useState<UploadedFile[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = async (file: File) => {
+    setIsUploading(true);
+    try {
+      const response = await uploadAttachment(file);
+      const fileType = file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : file.type === "application/pdf" ? "pdf" : "file";
+      const newAttachment: UploadedFile = { file: file, tempId: response.temp_id, type: fileType };
+      setAttachments((prev) => [...prev, newAttachment]);
+
+      if (editor) {
+        if (fileType === "image") {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            if (e.target?.result) {
+              editor.chain().focus().setImage({ src: e.target.result as string }).run();
+            }
+          };
+          reader.readAsDataURL(file);
+        } else {
+          editor.chain().focus().setAttachment({ "data-file-name": file.name, "data-attachment-type": fileType }).run();
+        }
+      }
+      toast.success("Attachment uploaded successfully.");
+    } catch (error) {
+      toast.error("Upload failed", { description: (error as Error).message });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      handleFileUpload(file);
+    }
+    if (event.target) {
+      event.target.value = "";
+    }
+  };
+
   const {
     data: pageDetails,
     isLoading: isLoadingDetails,
@@ -73,7 +122,6 @@ export default function AdminEditPage() {
     retry: false,
   });
 
-  // MODIFIED: Fetch all tag groups for the multi-select options
   const { data: tagGroups, isLoading: isLoadingTags } = useQuery<GroupedTag[]>({
     queryKey: ["allTagsGrouped"],
     queryFn: getAllTagsGrouped,
@@ -82,7 +130,7 @@ export default function AdminEditPage() {
   const tagGridClass = useMemo(() => {
     const base = "grid grid-cols-1 gap-6";
     if (!tagGroups) {
-      return `${base} md:grid-cols-2`; // Default while loading
+      return `${base} md:grid-cols-2`;
     }
     const count = tagGroups.length;
     switch (count) {
@@ -91,16 +139,14 @@ export default function AdminEditPage() {
       case 2:
         return `${base} md:grid-cols-2`;
       case 3:
-        return `${base} md:grid-cols-3`; // 3 columns for 3 items
+        return `${base} md:grid-cols-3`;
       case 4:
-        return `${base} md:grid-cols-2`; // 2x2 grid for 4 items
+        return `${base} md:grid-cols-2`;
       default:
-        // Responsive fallback for 5+ items
         return `${base} md:grid-cols-2 lg:grid-cols-3`;
     }
   }, [tagGroups]);
 
-  // MODIFIED: Dynamically build the validation schema based on fetched groups
   const dynamicSchema = useMemo(() => {
     if (!tagGroups) return baseSchema;
     const groupSchemas = tagGroups.reduce((acc, group) => {
@@ -118,12 +164,10 @@ export default function AdminEditPage() {
     },
   });
 
-  const editor = useConfiguredEditor(pageDetails?.content || "", () => {});
+  const editor = useConfiguredEditor(pageDetails?.content || "", handleFileUpload);
 
-  // MODIFIED: Effect to populate the form once all data is loaded
   useEffect(() => {
     if (pageDetails && tagGroups) {
-      // Map the flat array of existing tags back to their groups for the form
       const defaultTagValues = tagGroups.reduce((acc, group) => {
         const groupKey = group.name.replace(/\s+/g, "_");
         const groupTagNames = new Set(group.tags.map(t => t.name));
@@ -158,7 +202,6 @@ export default function AdminEditPage() {
     },
   });
 
-  // MODIFIED: onSubmit to handle dynamic form data
   const onSubmit = (data: z.infer<typeof dynamicSchema>) => {
     const content = editor?.getHTML() || "";
     if (content.length < 50) {
@@ -168,7 +211,6 @@ export default function AdminEditPage() {
       return;
     }
 
-    // Flatten all selected tags from the dynamic fields into a single array
     const allSelectedTags: string[] = [];
     if (tagGroups) {
       tagGroups.forEach((group) => {
@@ -180,12 +222,18 @@ export default function AdminEditPage() {
       });
     }
 
+    const attachmentPayload: AttachmentInfo[] = attachments.map((a) => ({
+      temp_id: a.tempId,
+      file_name: a.file.name,
+    }));
+
     const payload: PageUpdatePayload = {
       title: data.title,
       description: data.description,
       content,
       parent_id: data.parent_id,
-      tags: allSelectedTags, // Add the flattened array to the payload
+      tags: allSelectedTags,
+      attachments: attachmentPayload,
     };
 
     mutation.mutate(payload);
@@ -277,7 +325,6 @@ export default function AdminEditPage() {
                   )}
                 />
 
-                {/* MODIFIED: Dynamic Tags Section */}
                 <div className="space-y-4">
                   <div>
                     <FormLabel className="text-base font-medium text-foreground">Tags</FormLabel>
@@ -325,6 +372,35 @@ export default function AdminEditPage() {
                 <div>
                   <FormLabel>Content</FormLabel>
                   <RichTextEditor editor={editor} />
+                </div>
+
+                <div className="space-y-4">
+                  <FormLabel>Attachments</FormLabel>
+                  <p className="text-sm text-muted-foreground">
+                    Add any new files needed for this article.
+                  </p>
+                  {attachments.length > 0 && (
+                    <div className="rounded-md border p-4 space-y-2">
+                      {attachments.map((att) => (
+                        <div key={att.tempId} className="flex justify-between items-center text-sm">
+                          <span className="flex items-center gap-2 truncate text-muted-foreground">
+                            <Paperclip className="h-4 w-4 flex-shrink-0" />
+                            <span className="truncate">{att.file.name}</span>
+                          </span>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => setAttachments(prev => prev.filter(a => a.tempId !== att.tempId))}>
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div>
+                    <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+                      {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                      Add Attachment
+                    </Button>
+                    <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" />
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-4">

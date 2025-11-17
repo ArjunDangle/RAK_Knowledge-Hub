@@ -474,7 +474,6 @@ class ConfluenceService:
             
             updated_at_str = updated_page_data["version"]["when"]
 
-            # --- THIS IS THE NEW, CORRECTED LOGIC ---
             # 2. Check if this update should trigger a resubmission
             submission = await self.submission_repo.get_by_confluence_id(page_id)
 
@@ -498,7 +497,6 @@ class ConfluenceService:
                     title=page_data.title,
                     author_name=author_name
                 )
-            # --- END OF NEW LOGIC ---
 
             # 3. Update the local Page record metadata
             await self.page_repo.update_page_metadata(
@@ -525,8 +523,13 @@ class ConfluenceService:
                     self.confluence_repo.add_label(page_id, slug)
                 for slug in tags_to_remove:
                     self.confluence_repo.remove_label(page_id, slug)
+            
+            # 5. Handle any new attachments uploaded during the edit session
+            if page_data.attachments:
+                print(f"Uploading {len(page_data.attachments)} new attachments to page {page_id}.")
+                self.confluence_repo.upload_attachments(page_id, page_data.attachments)
 
-            # 5. Also update the submission record's title to keep it in sync
+            # 6. Also update the submission record's title to keep it in sync
             await self.submission_repo.update_title(page_id, page_data.title)
             
             return True

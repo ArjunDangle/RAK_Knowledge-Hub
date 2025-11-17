@@ -5,7 +5,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Loader2, Upload, Paperclip, X, MessageSquareWarning } from "lucide-react";
+import {
+  Loader2,
+  Upload,
+  Paperclip,
+  X,
+  MessageSquareWarning,
+} from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -76,17 +82,17 @@ export default function CreatePage() {
   const isEditMode = !!pageId;
 
   const { data: existingArticle, isLoading: isLoadingArticle } = useQuery({
-    queryKey: ['articleForEdit', pageId],
+    queryKey: ["articleForEdit", pageId],
     queryFn: () => getArticleById(pageId!),
     enabled: isEditMode,
     retry: false,
   });
 
   const { data: submissionDetails } = useQuery({
-      queryKey: ['mySubmissions'],
-      queryFn: getMySubmissions,
-      enabled: isEditMode,
-      select: (data) => data.find(sub => sub.confluencePageId === pageId),
+    queryKey: ["mySubmissions"],
+    queryFn: getMySubmissions,
+    enabled: isEditMode,
+    select: (data) => data.find((sub) => sub.confluencePageId === pageId),
   });
 
   const [attachments, setAttachments] = useState<UploadedFile[]>([]);
@@ -145,8 +151,18 @@ export default function CreatePage() {
     setIsUploading(true);
     try {
       const response = await uploadAttachment(file);
-      const fileType = file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : file.type === "application/pdf" ? "pdf" : "file";
-      const newAttachment: UploadedFile = { file: file, tempId: response.temp_id, type: fileType };
+      const fileType = file.type.startsWith("image/")
+        ? "image"
+        : file.type.startsWith("video/")
+        ? "video"
+        : file.type === "application/pdf"
+        ? "pdf"
+        : "file";
+      const newAttachment: UploadedFile = {
+        file: file,
+        tempId: response.temp_id,
+        type: fileType,
+      };
       setAttachments((prev) => [...prev, newAttachment]);
 
       if (editor) {
@@ -154,12 +170,23 @@ export default function CreatePage() {
           const reader = new FileReader();
           reader.onload = (e) => {
             if (e.target?.result) {
-              editor.chain().focus().setImage({ src: e.target.result as string }).run();
+              editor
+                .chain()
+                .focus()
+                .setImage({ src: e.target.result as string })
+                .run();
             }
           };
           reader.readAsDataURL(file);
         } else {
-          editor.chain().focus().setAttachment({ "data-file-name": file.name, "data-attachment-type": fileType }).run();
+          editor
+            .chain()
+            .focus()
+            .setAttachment({
+              "data-file-name": file.name,
+              "data-attachment-type": fileType,
+            })
+            .run();
         }
       }
       toast.success("Attachment uploaded successfully.");
@@ -180,17 +207,22 @@ export default function CreatePage() {
     }
   };
 
-  const editor = useConfiguredEditor(existingArticle?.html || "", handleFileUpload);
-  
+  const editor = useConfiguredEditor(
+    existingArticle?.html || "",
+    handleFileUpload
+  );
+
   useEffect(() => {
     if (isEditMode && existingArticle && tagGroups && editor) {
       const defaultTagValues = tagGroups.reduce((acc, group) => {
         const groupKey = group.name.replace(/\s+/g, "_");
-        const groupTagNames = new Set(group.tags.map(t => t.name));
-        const selectedTags = existingArticle.tags.map(t => t.name).filter(tagName => groupTagNames.has(tagName));
+        const groupTagNames = new Set(group.tags.map((t) => t.name));
+        const selectedTags = existingArticle.tags
+          .map((t) => t.name)
+          .filter((tagName) => groupTagNames.has(tagName));
         return { ...acc, [groupKey]: selectedTags };
       }, {});
-      
+
       form.reset({
         title: existingArticle.title,
         description: existingArticle.description || existingArticle.excerpt,
@@ -199,7 +231,7 @@ export default function CreatePage() {
       });
 
       if (!editor.isDestroyed && editor.getHTML() !== existingArticle.html) {
-          editor.commands.setContent(existingArticle.html);
+        editor.commands.setContent(existingArticle.html);
       }
     }
   }, [isEditMode, existingArticle, tagGroups, form, editor]);
@@ -210,18 +242,20 @@ export default function CreatePage() {
       toast.success("Article submitted for review!");
       navigate(`/article/${data.id}?status=pending`);
     },
-    onError: (error) => toast.error("Submission failed", { description: error.message }),
+    onError: (error) =>
+      toast.error("Submission failed", { description: error.message }),
   });
 
   const updateMutation = useMutation({
     mutationFn: (data: PageUpdatePayload) => updatePage(pageId!, data),
     onSuccess: () => {
       toast.success("Article updated and resubmitted for review!");
-      navigate('/my-submissions');
+      navigate("/my-submissions");
     },
-    onError: (error) => toast.error("Update failed", { description: error.message }),
+    onError: (error) =>
+      toast.error("Update failed", { description: error.message }),
   });
-  
+
   const mutation = isEditMode ? updateMutation : createMutation;
 
   const onSubmit = (data: z.infer<typeof dynamicSchema>) => {
@@ -230,7 +264,7 @@ export default function CreatePage() {
       toast.error("Content is too short", { description: "Content must be at least 50 characters." });
       return;
     }
-
+  
     const allSelectedTags: string[] = [];
     if (tagGroups) {
       tagGroups.forEach((group) => {
@@ -240,7 +274,12 @@ export default function CreatePage() {
         }
       });
     }
-
+  
+    const attachmentPayload: AttachmentInfo[] = attachments.map((a) => ({
+      temp_id: a.tempId,
+      file_name: a.file.name,
+    }));
+  
     if (isEditMode) {
       const payload: PageUpdatePayload = {
         title: data.title,
@@ -248,10 +287,10 @@ export default function CreatePage() {
         content: content,
         parent_id: data.parent_id,
         tags: allSelectedTags,
+        attachments: attachmentPayload,
       };
       updateMutation.mutate(payload);
     } else {
-      const attachmentPayload: AttachmentInfo[] = attachments.map((a) => ({ temp_id: a.tempId, file_name: a.file.name }));
       const payload: PageCreatePayload = {
         title: data.title,
         description: data.description,
@@ -264,17 +303,21 @@ export default function CreatePage() {
     }
   };
 
-  const breadcrumbs = [{ label: isEditMode ? "Edit Submission" : "Create New Article" }];
+  const breadcrumbs = [
+    { label: isEditMode ? "Edit Submission" : "Create New Article" },
+  ];
 
   if (isLoadingArticle) {
-      return (
-        <KnowledgeLayout breadcrumbs={breadcrumbs}>
-            <div className="text-center p-12">
-                <Loader2 className="h-8 w-8 animate-spin mx-auto" />
-                <p className="mt-4 text-muted-foreground">Loading article for editing...</p>
-            </div>
-        </KnowledgeLayout>
-      );
+    return (
+      <KnowledgeLayout breadcrumbs={breadcrumbs}>
+        <div className="text-center p-12">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+          <p className="mt-4 text-muted-foreground">
+            Loading article for editing...
+          </p>
+        </div>
+      </KnowledgeLayout>
+    );
   }
 
   return (
@@ -282,25 +325,33 @@ export default function CreatePage() {
       <div className="max-w-4xl mx-auto">
         <Card>
           <CardHeader>
-            <CardTitle>{isEditMode ? `Edit: ${existingArticle?.title}` : "Create New Article"}</CardTitle>
+            <CardTitle>
+              {isEditMode
+                ? `Edit: ${existingArticle?.title}`
+                : "Create New Article"}
+            </CardTitle>
             <CardDescription>
-              {isEditMode ? "Modify your submission and save to resubmit it for review." : "Fill out the details below to submit a new article for review."}
+              {isEditMode
+                ? "Modify your submission and save to resubmit it for review."
+                : "Fill out the details below to submit a new article for review."}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {isEditMode && submissionDetails?.rejectionComment && (
-                <Alert variant="destructive" className="mb-6">
-                    <MessageSquareWarning className="h-4 w-4" />
-                    <AlertTitle>Admin Feedback</AlertTitle>
-                    <AlertDescription className="whitespace-pre-wrap">
-                        {submissionDetails.rejectionComment}
-                    </AlertDescription>
-                </Alert>
+              <Alert variant="destructive" className="mb-6">
+                <MessageSquareWarning className="h-4 w-4" />
+                <AlertTitle>Admin Feedback</AlertTitle>
+                <AlertDescription className="whitespace-pre-wrap">
+                  {submissionDetails.rejectionComment}
+                </AlertDescription>
+              </Alert>
             )}
 
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                
+              <form
+                onSubmit={form.handleSubmit(onSubmit)}
+                className="space-y-6"
+              >
                 <FormField
                   control={form.control}
                   name="title"
@@ -405,7 +456,9 @@ export default function CreatePage() {
                             name={formFieldName}
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel className="font-semibold">{group.name}</FormLabel>
+                                <FormLabel className="font-semibold">
+                                  {group.name}
+                                </FormLabel>
                                 <FormControl>
                                   <MultiSelect
                                     options={options}
@@ -439,62 +492,60 @@ export default function CreatePage() {
                   <RichTextEditor editor={editor} />
                 </div>
 
-                {!isEditMode && (
-                  <div className="space-y-4">
-                    <FormLabel>Attachments</FormLabel>
-                    {attachments.length > 0 && (
-                      <div className="rounded-md border p-4 space-y-2">
-                        {attachments.map((att) => (
-                          <div
-                            key={att.tempId}
-                            className="flex justify-between items-center text-sm"
+                <div className="space-y-4">
+                  <FormLabel>Attachments</FormLabel>
+                  {attachments.length > 0 && (
+                    <div className="rounded-md border p-4 space-y-2">
+                      {attachments.map((att) => (
+                        <div
+                          key={att.tempId}
+                          className="flex justify-between items-center text-sm"
+                        >
+                          <span className="flex items-center gap-2 truncate text-muted-foreground">
+                            <Paperclip className="h-4 w-4 flex-shrink-0" />
+                            <span className="truncate">{att.file.name}</span>
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 flex-shrink-0"
+                            onClick={() => {
+                              setAttachments((prev) =>
+                                prev.filter((a) => a.tempId !== att.tempId)
+                              );
+                              toast.info(
+                                `Removed attachment: ${att.file.name}`
+                              );
+                            }}
                           >
-                            <span className="flex items-center gap-2 truncate text-muted-foreground">
-                              <Paperclip className="h-4 w-4 flex-shrink-0" />
-                              <span className="truncate">{att.file.name}</span>
-                            </span>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 flex-shrink-0"
-                              onClick={() => {
-                                setAttachments((prev) =>
-                                  prev.filter((a) => a.tempId !== att.tempId)
-                                );
-                                toast.info(
-                                  `Removed attachment: ${att.file.name}`
-                                );
-                              }}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isUploading}
-                      >
-                        {isUploading ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Upload className="mr-2 h-4 w-4" />
-                        )}
-                        Add Attachment
-                      </Button>
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleFileSelect}
-                        className="hidden"
-                      />
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
                     </div>
+                  )}
+                  <div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                    >
+                      {isUploading ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Upload className="mr-2 h-4 w-4" />
+                      )}
+                      Add Attachment
+                    </Button>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
                   </div>
-                )}
+                </div>
 
                 <Button
                   type="submit"

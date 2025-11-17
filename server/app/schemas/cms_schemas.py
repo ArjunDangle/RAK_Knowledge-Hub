@@ -21,11 +21,13 @@ class PageCreate(BaseModel):
     tags: List[str] = []
     attachments: List[AttachmentInfo] = []
 
-# NEW: Add this model for the update endpoint
 class PageUpdate(BaseModel):
     title: str
     description: str
     content: str
+    parent_id: Optional[str] = None
+    tags: Optional[List[str]] = None
+    attachments: Optional[List[AttachmentInfo]] = None
     
 class PageReject(BaseModel):
     comment: Optional[str] = Field(None, min_length=1)
@@ -68,10 +70,3 @@ class PageDetailResponse(BaseModel):
     content: str
     parent_id: Optional[str] = None
     tags: List[str] = []
-
-class PageUpdate(BaseModel):
-    title: str
-    description: str
-    content: str
-    parent_id: Optional[str] = None
-    tags: Optional[List[str]] = None

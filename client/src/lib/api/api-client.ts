@@ -59,14 +59,16 @@ export interface PageDetailResponse {
   tags: string[];
 }
 
+// client/src/lib/api/api-client.ts
+
 export interface PageUpdatePayload {
   title: string;
   description: string;
   content: string;
   parent_id?: string;
   tags?: string[];
+  attachments?: AttachmentInfo[];
 }
-
 export interface RejectPayload {
   comment?: string;
 }
