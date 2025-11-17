@@ -385,8 +385,9 @@ class PageRepository:
         page_data: Dict[str, Any],
         page_type: PageType
     ) -> PageModel:
+        # Find this function and replace its content with the following corrected version.
+        
         title = page_data["title"]
-        author_name = page_data.get("version", {}).get("by", {}).get("displayName", "Unknown")
         updated_at = page_data["version"]["when"]
         
         tag_ops = []
@@ -408,8 +409,6 @@ class PageRepository:
                 'title': title,
                 'slug': self._slugify(title),
                 'pageType': page_type,
-                'authorName': author_name,
-                'updatedAt': updated_at,
                 'tags': {'set': tag_ops} 
             }
         )

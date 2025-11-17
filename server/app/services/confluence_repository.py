@@ -137,13 +137,12 @@ class ConfluenceRepository:
 
     def create_page(self, title: str, parent_id: str, content_storage_format: str, author_name: str) -> Dict[str, Any]:
         """Creates a new page in Confluence."""
-        full_content = f"<p><em>Submitted by: {author_name}</em></p>{content_storage_format}"
         try:
             new_page = self.confluence.create_page(
                 space=self.settings.confluence_space_key,
                 title=title,
                 parent_id=parent_id,
-                body=full_content,
+                body=content_storage_format,
                 representation='storage'
             )
             if not new_page:
