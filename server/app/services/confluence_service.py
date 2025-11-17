@@ -429,9 +429,7 @@ class ConfluenceService:
         - Fetches live content from Confluence.
         - Fetches metadata (tags, parent) from the local database.
         """
-        # 1. Fetch live content from Confluence for accuracy
-        # Note: We fetch 'storage' format because that's what Tiptap works with best.
-        page_from_confluence = self.confluence_repo.get_page_by_id(page_id, expand="body.storage")
+        page_from_confluence = self.confluence_repo.get_page_by_id(page_id, expand="body.view")
         if not page_from_confluence:
             return None
         
@@ -443,7 +441,7 @@ class ConfluenceService:
         return PageDetailResponse(
             title=page_from_db.title,
             description=page_from_db.description,
-            content=page_from_confluence.get("body", {}).get("storage", {}).get("value", ""),
+            content=page_from_confluence.get("body", {}).get("view", {}).get("value", ""),
             parent_id=page_from_db.parentConfluenceId,
             tags=[tag.name for tag in page_from_db.tags]
         )

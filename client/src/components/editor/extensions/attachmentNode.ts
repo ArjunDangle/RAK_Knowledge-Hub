@@ -6,7 +6,7 @@ import { AttachmentComponent } from './AttachmentComponent';
 export const AttachmentNode = Node.create({
   name: 'attachmentNode',
   group: 'block',
-  atom: true, // Treat as a single, indivisible unit
+  atom: true,
   draggable: true,
 
   addAttributes() {
@@ -17,19 +17,68 @@ export const AttachmentNode = Node.create({
   },
 
   parseHTML() {
-    return [{ tag: 'div[data-attachment-type]' }];
+    return [
+      {
+        tag: 'div[data-attachment-type]',
+      },
+
+      {
+        tag: 'span.confluence-embedded-file-wrapper',
+        getAttrs: (element: HTMLElement) => {
+          const link = element.querySelector('a');
+          const href = link?.getAttribute('href');
+          if (!href) {
+            return false;
+          }
+
+          const videoExtensions = ['.mp4', '.mov', '.avi', '.webm'];
+          const isVideo = videoExtensions.some(ext => href.toLowerCase().includes(ext));
+
+          if (!isVideo) {
+            return false;
+          }
+
+          try {
+            const urlParts = href.split('/');
+            const lastPart = urlParts[urlParts.length - 1];
+            const fileName = decodeURIComponent(lastPart.split('?')[0]);
+            return {
+              'data-file-name': fileName,
+              'data-attachment-type': 'video',
+            };
+          } catch (e) {
+            console.error("Failed to parse attachment filename from href:", href, e);
+            return false;
+          }
+        },
+      },
+      {
+        tag: 'div[data-macro-name="viewpdf"]',
+        getAttrs: (element: HTMLElement) => {
+          const attachmentElement = element.querySelector('div[data-attachment-name]');
+          const fileName = attachmentElement?.getAttribute('data-attachment-name');
+
+          if (fileName) {
+            return {
+              'data-file-name': fileName,
+              'data-attachment-type': 'pdf',
+            };
+          }
+          
+          return false;
+        },
+      },
+    ];
   },
 
   renderHTML({ HTMLAttributes }) {
-    // This is the HTML that will be saved in the final output
     return ['div', mergeAttributes(HTMLAttributes)];
   },
 
   addNodeView() {
-    // This is the React component that will be rendered in the editor
     return ReactNodeViewRenderer(AttachmentComponent);
   },
-  
+
   addCommands() {
     return {
       setAttachment: (options) => ({ commands }) => {
@@ -42,7 +91,6 @@ export const AttachmentNode = Node.create({
   },
 });
 
-// Augment the TipTap commands to include our new command
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     attachmentNode: {
