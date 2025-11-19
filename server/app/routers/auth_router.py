@@ -30,7 +30,15 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     
     user = await db.user.find_unique(
         where={'username': token_data.username},
-        include={'groups': {'include': {'managedPage': True}}} # <-- NESTED INCLUDE
+        include={
+            'groupMemberships': {
+                'include': {
+                    'group': {
+                        'include': {'managedPage': True}
+                    }
+                }
+            }
+        }
     )
     if user is None:
         raise credentials_exception
@@ -59,7 +67,15 @@ async def get_current_user_optional(token: Optional[str] = Depends(oauth2_scheme
     
     user = await db.user.find_unique(
         where={'username': token_data.username},
-        include={'groups': {'include': {'managedPage': True}}} # <-- NESTED INCLUDE
+        include={
+            'groupMemberships': {
+                'include': {
+                    'group': {
+                        'include': {'managedPage': True}
+                    }
+                }
+            }
+        }
     )
     return user
 
@@ -74,21 +90,36 @@ async def register_user(user_data: auth_schemas.UserCreate):
     
     hashed_password = security.hash_password(user_data.password)
     
-    new_user = await db.user.create(
+    # Create the user but don't return the result directly
+    await db.user.create(
         data={
             'username': user_data.username,
-            'name': user_data.name,  # <-- SAVE THE NAME
+            'name': user_data.name,
             'hashed_password': hashed_password,
             'role': user_data.role
         }
     )
-    return new_user
+
+    new_user_with_relations = await db.user.find_unique(
+        where={'username': user_data.username},
+        include={'groupMemberships': True}
+    )
+    
+    return new_user_with_relations
 
 @router.post("/token") 
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     user = await db.user.find_unique(
         where={'username': form_data.username},
-        include={'groups': {'include': {'managedPage': True}}} # <-- NESTED INCLUDE
+        include={
+            'groupMemberships': {
+                'include': {
+                    'group': {
+                        'include': {'managedPage': True}
+                    }
+                }
+            }
+        }
     )
     
     if not user or not security.verify_password(form_data.password, user.hashed_password):
@@ -103,6 +134,8 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
     
+    user_response = auth_schemas.UserResponse.model_validate(user)
+    
     return {
         "access_token": access_token, 
         "token_type": "bearer",
@@ -110,7 +143,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
             "username": user.username,
             "name": user.name,
             "role": user.role,
-            "groups": user.groups 
+            "groupMemberships": user_response.groupMemberships
         }
     }
 

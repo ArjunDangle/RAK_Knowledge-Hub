@@ -218,20 +218,26 @@ class ConfluenceRepository:
     # --- Attachment Methods ---
 
     def upload_attachments(self, page_id: str, attachments: List[AttachmentInfo]):
-        """Uploads a list of temporary files to a Confluence page."""
+        """
+        Uploads a list of temporary files to a Confluence page.
+        If an attachment with the same name already exists, it updates it.
+        """
+        # --- THIS IS THE FIX ---
+        # The URL is changed to allow for updates on duplicates.
         attachment_url = f"{self.settings.confluence_url}/rest/api/content/{page_id}/child/attachment"
         headers = {"X-Atlassian-Token": "no-check"}
         
         for attachment in attachments:
             temp_file_path = os.path.join(UPLOAD_DIR, attachment.temp_id)
             if os.path.exists(temp_file_path):
+                target_url = f"{attachment_url}/{attachment.file_name}/data"
                 try:
                     content_type, _ = mimetypes.guess_type(attachment.file_name)
                     content_type = content_type or 'application/octet-stream'
                     
                     with open(temp_file_path, 'rb') as file_handle:
                         files = {'file': (attachment.file_name, file_handle, content_type)}
-                        response = self.confluence.session.post(attachment_url, headers=headers, files=files)
+                        response = self.confluence.session.post(target_url, headers=headers, files=files)
                         response.raise_for_status()
                 except Exception as e:
                     print(f"Error uploading attachment {attachment.file_name}: {e}")

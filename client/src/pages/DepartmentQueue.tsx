@@ -1,7 +1,8 @@
 // client/src/pages/DepartmentQueue.tsx
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle, XCircle, FileClock, Loader2, Eye } from "lucide-react";
+import { CheckCircle, XCircle, FileClock, Loader2, Eye, Edit, ExternalLink } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 import { KnowledgeLayout } from "./KnowledgeLayout";
 import { getDepartmentPendingArticles, approveArticle, rejectArticle } from "@/lib/api/api-client";
@@ -105,6 +106,11 @@ export default function DepartmentQueue() {
                                             <TableCell>{article.author || 'N/A'}</TableCell>
                                             <TableCell>{formatRelativeTime(article.updatedAt)}</TableCell>
                                             <TableCell className="text-right space-x-2">
+                                                <Button variant="outline" size="sm" asChild>
+                                                    <Link to={`/edit/${article.id}`}>
+                                                        <Edit className="h-4 w-4 mr-2" />Edit
+                                                    </Link>
+                                                </Button>
                                                 <Button variant="outline" size="sm" onClick={() => setReviewingArticle(article)}>
                                                     <Eye className="h-4 w-4 mr-2" />Review
                                                 </Button>
@@ -127,10 +133,20 @@ export default function DepartmentQueue() {
 
             <Dialog open={!!reviewingArticle} onOpenChange={(isOpen) => !isOpen && handleCloseModal()}>
                 <DialogContent className="max-w-6xl h-[95vh] flex flex-col p-0">
-                    <DialogHeader className="p-6 pb-2">
+                <DialogHeader className="p-6 pb-2 flex-row items-start justify-between">
+                    <div>
                         <DialogTitle>Article Preview</DialogTitle>
                         <DialogDescription>Review the article content. You can approve it directly or add comments before rejecting.</DialogDescription>
-                    </DialogHeader>
+                    </div>
+                    {reviewingArticle && (
+                        <Button variant="outline" size="sm" asChild>
+                            <Link to={`/admin/preview/${reviewingArticle.id}`} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                                Preview in Full Page
+                            </Link>
+                        </Button>
+                    )}
+                </DialogHeader>
                     <div className="flex-1 overflow-y-auto px-1">
                         {reviewingArticle && (
                             <ArticlePage pageId={reviewingArticle.id} isPreviewMode={true} />

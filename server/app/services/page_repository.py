@@ -1,6 +1,6 @@
 # server/app/services/page_repository.py
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Set
 from bs4 import BeautifulSoup 
 
 from app.db import db
@@ -49,7 +49,6 @@ class PageRepository:
         soup = BeautifulSoup(html, 'html.parser')
         return soup.get_text(" ", strip=True)
 
-    # --- THIS IS THE MISSING FUNCTION ---
     async def get_all_managed_and_descendant_ids(self, user: User) -> set[int]:
         """
         For a given user, finds all pages managed by their groups and all
@@ -60,26 +59,28 @@ class PageRepository:
             # Returning an empty set and checking for the admin role in the service is cleaner.
             return set()
 
-        user_with_groups = await self.db.user.find_unique(
+        # --- THIS IS THE FIX ---
+        # The query now correctly includes the nested groupMemberships relation.
+        user_with_memberships = await self.db.user.find_unique(
             where={'id': user.id},
-            include={'groups': {'include': {'managedPage': True}}}
+            include={'groupMemberships': {'include': {'group': {'include': {'managedPage': True}}}}}
         )
+        # --- END OF FIX ---
 
-        if not user_with_groups or not user_with_groups.groups:
+        if not user_with_memberships or not user_with_memberships.groupMemberships:
             return set()
 
-        # Get the initial DB IDs of the root pages managed by the user's groups
+        # The logic to extract the IDs also needs to be updated.
         root_managed_page_ids = [
-            group.managedPage.id 
-            for group in user_with_groups.groups 
-            if group.managedPage
+            membership.group.managedPage.id 
+            for membership in user_with_memberships.groupMemberships 
+            if membership.group and membership.group.managedPage
         ]
 
         if not root_managed_page_ids:
             return set()
 
-        # Use a recursive raw SQL query (Common Table Expression) to find all descendants.
-        # This is far more efficient than looping in Python.
+        # The recursive SQL query is correct and does not need to change.
         query = f"""
         WITH RECURSIVE descendants AS (
             SELECT id, "confluenceId" FROM "Page" WHERE id IN ({','.join(map(str, root_managed_page_ids))})
@@ -93,7 +94,30 @@ class PageRepository:
         results = await self.db.query_raw(query)
         
         return {item['id'] for item in results}
-    # --- END OF THE MISSING FUNCTION ---
+    
+    async def get_all_descendant_confluence_ids(self, parent_confluence_ids: List[str]) -> Set[str]:
+        """
+        Takes a list of parent Confluence IDs and returns a set containing those IDs
+        plus the IDs of all their descendants in the page tree.
+        """
+        if not parent_confluence_ids:
+            return set()
+
+        # Sanitize inputs for the IN clause
+        in_clause = ','.join([f"'{str(id)}'" for id in parent_confluence_ids])
+
+        query = f"""
+        WITH RECURSIVE descendants AS (
+            SELECT "confluenceId", "parentConfluenceId" FROM "Page" WHERE "confluenceId" IN ({in_clause})
+            UNION ALL
+            SELECT p."confluenceId", p."parentConfluenceId" FROM "Page" p
+            INNER JOIN descendants d ON p."parentConfluenceId" = d."confluenceId"
+        )
+        SELECT "confluenceId" FROM descendants;
+        """
+        
+        results = await self.db.query_raw(query)
+        return {item['confluenceId'] for item in results}
 
     async def _format_page_as_article(self, page: PageModel, group_slug: str, subsection_slug: str) -> Article:
         """Formats a Prisma Page model into an Article schema."""

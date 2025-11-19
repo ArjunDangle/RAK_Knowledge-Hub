@@ -25,6 +25,14 @@ class GroupSummary(BaseModel):
     class Config:
         from_attributes = True
 
+class GroupMembershipResponse(BaseModel):
+    groupId: int
+    role: str
+    group: GroupSummary
+
+    class Config:
+        from_attributes = True
+
 class UserCreate(BaseModel):
     username: str
     name: str
@@ -36,7 +44,7 @@ class UserResponse(BaseModel):
     username: str
     name: str
     role: str
-    groups: Optional[List[GroupSummary]] = []
+    groupMemberships: List[GroupMembershipResponse] = []
 
     class Config:
         from_attributes = True

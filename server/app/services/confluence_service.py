@@ -174,17 +174,17 @@ class ConfluenceService:
             print(f"Error in get_page_contents router: {e}")
             raise HTTPException(status_code=500, detail="Failed to fetch page contents.")
 
-    # server/app/services/confluence_service.py
-
-    async def get_article_by_id_hybrid(self, page_id: str, user: Optional[UserResponse] = None) -> Optional[Article]:
+    async def get_article_by_id_hybrid(self, page_id: str, user: Optional[UserResponse] = None, bypass_publication_check: bool = False) -> Optional[Article]:
         page_metadata = await self.db.page.find_unique(where={'confluenceId': page_id}, include={'tags': True, 'submission': True})
         if not page_metadata or page_metadata.pageType != PageType.ARTICLE: return None
 
-        is_published = not page_metadata.submission or page_metadata.submission.status == ArticleSubmissionStatus.PUBLISHED
-        is_admin = user and user.role == 'ADMIN'
-        is_author = user and page_metadata.submission and user.id == page_metadata.submission.authorId
+        if not bypass_publication_check:
+            is_published = not page_metadata.submission or page_metadata.submission.status == ArticleSubmissionStatus.PUBLISHED
+            is_admin = user and user.role == 'ADMIN'
+            is_author = user and page_metadata.submission and user.id == page_metadata.submission.authorId
 
-        if not is_published and not is_admin and not is_author: return None
+            if not is_published and not is_admin and not is_author:
+                return None
 
         html_content = ""
         read_minutes = 1
@@ -206,8 +206,6 @@ class ConfluenceService:
             id=page_metadata.confluenceId,
             slug=page_metadata.slug,
             title=page_metadata.title,
-            # Use the DB description as the primary value for BOTH fields.
-            # The card will prioritize `description`, and `excerpt` is a good fallback.
             excerpt=page_metadata.description,
             description=page_metadata.description,
             html=html_content,
@@ -565,7 +563,48 @@ class ConfluenceService:
             }) for sub in pending_submissions
         ]
 
-    # In server/app/services/confluence_service.py
+    async def get_pending_submissions_for_group_admin(self, current_user: UserResponse) -> List[Article]:
+        """
+        Fetches pending submissions that are within the scope of a Group Admin.
+        """
+        # 1. Find all groups where the current user is a GROUP_ADMIN.
+        group_admin_memberships = [
+            m for m in current_user.groupMemberships if m.role == 'GROUP_ADMIN'
+        ]
+
+        if not group_admin_memberships:
+            return []
+
+        # 2. Get the Confluence IDs of the pages managed by these groups.
+        managed_page_confluence_ids = [
+            m.group.managedPage.confluenceId 
+            for m in group_admin_memberships 
+            if m.group and m.group.managedPage
+        ]
+        
+        if not managed_page_confluence_ids:
+            return []
+            
+        # 3. Find all descendant pages for these managed root pages.
+        all_scoped_page_ids = await self.page_repo.get_all_descendant_confluence_ids(managed_page_confluence_ids)
+
+        # 4. Fetch pending submissions that fall within this scope.
+        scoped_submissions = await self.submission_repo.get_pending_submissions_for_pages(list(all_scoped_page_ids))
+
+        # 5. Format the results into the Article schema for the response.
+        return [
+            Article.model_validate({
+                "id": sub.confluencePageId,
+                "title": sub.title,
+                "author": sub.author.name if sub.author else "Unknown",
+                "updatedAt": sub.updatedAt.isoformat(),
+                "slug": self._slugify(sub.title),
+                "excerpt": sub.page.description if sub.page else "Description not available.",
+                "description": sub.page.description if sub.page else "Description not available.",
+                "html": "", "tags": [], "group": "unknown", "subsection": "unknown",
+                "views": 0, "readMinutes": 1
+            }) for sub in scoped_submissions
+        ]
 
     async def approve_page(self, page_id: str) -> bool:
         """

@@ -1,5 +1,5 @@
 // client/src/components/layout/SiteHeader.tsx
-import { Search, Menu, PlusCircle, LayoutDashboard, LogOut, User as UserIcon, FileText, ListTree, Users, Tag as TagIcon } from "lucide-react";
+import { Search, Menu, PlusCircle, LayoutDashboard,LayoutGrid, LogOut, User as UserIcon, FileText, ListTree, Users, Tag as TagIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link, useNavigate, useLocation } from "react-router-dom";
@@ -24,7 +24,7 @@ export function SiteHeader({
 }: SiteHeaderProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
-  const { isAuthenticated, user, isAdmin, logout } = useAuth();
+  const { isAuthenticated, user, isAdmin, isGroupAdmin, logout } = useAuth();
   
   const location = useLocation();
   const showHeaderSearch = location.pathname !== '/' && location.pathname !== '/search';
@@ -132,6 +132,14 @@ export function SiteHeader({
                       <span>My Submissions</span>
                     </Link>
                   </DropdownMenuItem>
+                  {isGroupAdmin && !isAdmin && (
+                <DropdownMenuItem asChild>
+                  <Link to="/department-queue">
+                    <LayoutGrid className="mr-2 h-4 w-4" />
+                    <span>Department Queue</span>
+                  </Link>
+                </DropdownMenuItem>
+              )}
                   {!isAdmin && (
                     <DropdownMenuItem asChild>
                       <Link to="/my-groups">

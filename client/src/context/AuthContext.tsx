@@ -1,28 +1,14 @@
 // client/src/context/AuthContext.tsx
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { LoginResponse } from '@/lib/api/api-client';
+import { LoginResponse, User } from '@/lib/api/api-client';
 
-// --- THIS IS THE FIX ---
-interface User {
-  username: string;
-  name: string;
-  role: 'MEMBER' | 'ADMIN';
-  groups: Array<{ 
-    id: number; 
-    name: string;
-    managedPage: {
-      id: number;
-      confluenceId: string;
-      title: string;
-    } | null;
-  }>;
-}
 
 interface AuthState {
   token: string | null;
   user: User | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isGroupAdmin: boolean;
   isLoading: boolean;
   login: (data: LoginResponse) => void;
   logout: () => void;
@@ -76,6 +62,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     user,
     isAuthenticated: !!token,
     isAdmin: user?.role === 'ADMIN',
+    isGroupAdmin: !!user?.groupMemberships?.some(m => m.role === 'GROUP_ADMIN'),
     isLoading,
     login,
     logout,

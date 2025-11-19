@@ -38,7 +38,6 @@ model Page {
   @@index([parentConfluenceId])
 }
 
-// --- NEW MODEL: TagGroup ---
 model TagGroup {
   id          Int     @id @default(autoincrement())
   name        String  @unique
@@ -49,7 +48,6 @@ model TagGroup {
   tags Tag[]
 }
 
-// --- MODIFIED MODEL: Tag ---
 model Tag {
   id    Int    @id @default(autoincrement())
   name  String @unique
@@ -69,18 +67,29 @@ model User {
   role            String
   createdAt       DateTime @default(now())
 
-  submissions   ArticleSubmission[]
-  notifications Notification[]
-  groups        Group[]
+  submissions      ArticleSubmission[]
+  notifications    Notification[]
+  groupMemberships GroupMembership[]
 }
 
 model Group {
   id   Int    @id @default(autoincrement())
   name String @unique
 
-  members       User[]
-  managedPage   Page? @relation(fields: [managedPageId], references: [id])
-  managedPageId Int?  @unique
+  memberships   GroupMembership[]
+  managedPage   Page?             @relation(fields: [managedPageId], references: [id])
+  managedPageId Int?              @unique
+}
+
+model GroupMembership {
+  user    User   @relation(fields: [userId], references: [id])
+  userId  Int
+  group   Group  @relation(fields: [groupId], references: [id])
+  groupId Int
+  role    String @default("MEMBER") // e.g., "MEMBER", "GROUP_ADMIN"
+
+  @@id([userId, groupId])
+  @@map("GroupMembership") // Explicitly name the table
 }
 
 model ArticleSubmission {

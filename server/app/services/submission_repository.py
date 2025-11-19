@@ -40,6 +40,24 @@ class SubmissionRepository:
             include={'author': True, 'page': True},
             order={'updatedAt': 'desc'}
         )
+        
+    async def get_pending_submissions_for_pages(self, confluence_page_ids: List[str]) -> List[ArticleSubmission]:
+        """
+        Fetches all PENDING_REVIEW submissions that are within a specific list of Confluence page IDs.
+        """
+        if not confluence_page_ids:
+            return []
+            
+        return await self.db.articlesubmission.find_many(
+            where={
+                'status': ArticleSubmissionStatus.PENDING_REVIEW,
+                'confluencePageId': {
+                    'in': confluence_page_ids
+                }
+            },
+            include={'author': True, 'page': True},
+            order={'updatedAt': 'desc'}
+        )
 
     async def create_submission(
         self,

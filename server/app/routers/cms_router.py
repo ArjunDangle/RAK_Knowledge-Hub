@@ -23,6 +23,26 @@ confluence_service = ConfluenceService(settings)
 submission_repo = SubmissionRepository()
 permission_service = PermissionService()
 
+async def get_user_with_management_permission_for_page(
+    page_id: str,
+    current_user: auth_schemas.UserResponse = Depends(get_current_user)
+):
+    """
+    Dependency that grants access if the user is a global ADMIN
+    or a GROUP_ADMIN for the specified page.
+    """
+    if current_user.role == 'ADMIN':
+        return current_user
+    
+    is_group_admin = await permission_service.user_is_group_admin_for_page(page_id, current_user)
+    if is_group_admin:
+        return current_user
+    
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="You do not have management permissions for this content."
+    )
+
 @router.get(
     "/admin/content-index",
     response_model=List[ContentNode],
@@ -166,16 +186,14 @@ async def update_page_endpoint(
 @router.get(
     "/admin/preview/{page_id}",
     response_model=content_schemas.Article,
-    # The dependency already ensures the user is an admin
+    dependencies=[Depends(get_user_with_management_permission_for_page)]
 )
-async def get_article_preview_endpoint(page_id: str, current_user: auth_schemas.UserResponse = Depends(get_current_admin_user)):
+async def get_article_preview_endpoint(page_id: str, current_user: auth_schemas.UserResponse = Depends(get_current_user)):
     """
-    Fetches the full content of a pending article for an admin to preview,
-    using the main hybrid fetcher to ensure data consistency.
+    Fetches the full content of a pending article for an admin or group admin to preview.
     """
-    # Use the same robust function as the main article page.
-    # It correctly handles permissions for admins.
-    article = await confluence_service.get_article_by_id_hybrid(page_id, current_user)
+    article = await confluence_service.get_article_by_id_hybrid(page_id, current_user, bypass_publication_check=True)
+    
     if not article:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -192,10 +210,22 @@ async def get_pages_pending_review():
     """Fetches all submissions pending review."""
     return await confluence_service.get_pending_submissions()
 
+@router.get(
+    "/department-queue",
+    response_model=List[content_schemas.Article]
+)
+async def get_department_review_queue(current_user: auth_schemas.UserResponse = Depends(get_current_user)):
+    """
+    Fetches pending submissions that fall under the management scope
+    of the current user if they are a GROUP_ADMIN.
+    """
+    return await confluence_service.get_pending_submissions_for_group_admin(current_user)
+
+
 @router.post(
     "/admin/pages/{page_id}/approve", 
     status_code=status.HTTP_204_NO_CONTENT, 
-    dependencies=[Depends(get_current_admin_user)]
+    dependencies=[Depends(get_user_with_management_permission_for_page)]
 )
 async def approve_page_endpoint(page_id: str):
     """Approves a page."""
@@ -207,7 +237,7 @@ async def approve_page_endpoint(page_id: str):
 @router.post(
     "/admin/pages/{page_id}/reject", 
     status_code=status.HTTP_204_NO_CONTENT, 
-    dependencies=[Depends(get_current_admin_user)]
+    dependencies=[Depends(get_user_with_management_permission_for_page)]
 )
 async def reject_page_endpoint(page_id: str, payload: cms_schemas.PageReject):
     """Rejects a page."""
@@ -256,7 +286,7 @@ async def resubmit_page_endpoint(
 @router.delete(
     "/admin/pages/{page_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(get_current_admin_user)]
+    dependencies=[Depends(get_user_with_management_permission_for_page)]
 )
 async def delete_page_permanently_endpoint(page_id: str):
     """

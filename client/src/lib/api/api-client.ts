@@ -20,6 +20,19 @@ export interface User {
   username: string;
   name: string;
   role: "MEMBER" | "ADMIN";
+  groupMemberships: {
+    groupId: number;
+    role: "MEMBER" | "GROUP_ADMIN";
+    group: {
+      id: number;
+      name: string;
+      managedPage: {
+        id: number;
+        confluenceId: string;
+        title: string;
+      } | null;
+    };
+  }[];
 }
 
 export interface LoginResponse {
@@ -355,6 +368,9 @@ export async function updatePage(pageId: string, payload: PageUpdatePayload) {
 export async function getPendingArticles(): Promise<Article[]> {
   return apiFetch("/cms/admin/pending");
 }
+export async function getDepartmentPendingArticles(): Promise<Article[]> {
+  return apiFetch("/cms/department-queue");
+}
 export async function approveArticle(pageId: string): Promise<void> {
   return apiFetch(`/cms/admin/pages/${pageId}/approve`, { method: "POST" });
 }
@@ -415,7 +431,7 @@ export async function addMemberToGroup(
 export async function removeMemberFromGroup(
   groupId: number,
   userId: number
-): Promise<PermissionGroup> {
+): Promise<void> {
   return apiFetch(`/api/groups/${groupId}/members/${userId}`, {
     method: "DELETE",
   });
@@ -459,5 +475,31 @@ export async function createTagsInBulk(payload: TagBulkCreatePayload): Promise<{
   return apiFetch("/api/tags/bulk", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+export interface PermissionGroup {
+  id: number;
+  name: string;
+  managedPageConfluenceId: string | null;
+  memberships: {
+    userId: number;
+    role: "MEMBER" | "GROUP_ADMIN";
+    user: {
+      id: number;
+      name: string;
+      username: string;
+    };
+  }[];
+}
+
+export async function updateMemberRole(
+  groupId: number,
+  userId: number,
+  role: "MEMBER" | "GROUP_ADMIN"
+): Promise<void> {
+  return apiFetch(`/api/groups/${groupId}/members`, {
+    method: "PUT",
+    body: JSON.stringify({ userId, role }),
   });
 }
