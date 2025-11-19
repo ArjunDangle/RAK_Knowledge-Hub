@@ -151,7 +151,8 @@ export default function AdminEditPage() {
       toast.success("Article updated successfully!");
       queryClient.invalidateQueries({ queryKey: ["pageEditDetails", pageId] });
       queryClient.invalidateQueries({ queryKey: ["pendingArticles"] });
-      navigate(`/article/${pageId}?status=preview`);
+      queryClient.invalidateQueries({ queryKey: ["departmentPendingArticles"] }); // Added this line
+      navigate(-1);
     },
     onError: (error) => {
       toast.error("Update failed", { description: error.message });

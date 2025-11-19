@@ -140,7 +140,7 @@ export default function AdminDashboard() {
                         </div>
                         {reviewingArticle && (
                             <Button variant="outline" size="sm" asChild>
-                                <Link to={`/admin/preview/${reviewingArticle.id}`} target="_blank" rel="noopener noreferrer">
+                                <Link to={`/admin/preview/${reviewingArticle.id}?status=preview`} target="_blank" rel="noopener noreferrer">
                                     <ExternalLink className="h-4 w-4 mr-2" />
                                     Preview in Full Page
                                 </Link>

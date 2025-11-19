@@ -107,7 +107,7 @@ export default function DepartmentQueue() {
                                             <TableCell>{formatRelativeTime(article.updatedAt)}</TableCell>
                                             <TableCell className="text-right space-x-2">
                                                 <Button variant="outline" size="sm" asChild>
-                                                    <Link to={`/edit/${article.id}`}>
+                                                    <Link to={`/admin/edit/${article.id}`}>
                                                         <Edit className="h-4 w-4 mr-2" />Edit
                                                     </Link>
                                                 </Button>
@@ -140,7 +140,7 @@ export default function DepartmentQueue() {
                     </div>
                     {reviewingArticle && (
                         <Button variant="outline" size="sm" asChild>
-                            <Link to={`/admin/preview/${reviewingArticle.id}`} target="_blank" rel="noopener noreferrer">
+                            <Link to={`/admin/preview/${reviewingArticle.id}?status=preview`} target="_blank" rel="noopener noreferrer">
                                 <ExternalLink className="h-4 w-4 mr-2" />
                                 Preview in Full Page
                             </Link>

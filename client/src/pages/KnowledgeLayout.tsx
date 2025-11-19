@@ -26,9 +26,10 @@ export const useLayout = () => useContext(LayoutContext);
 interface KnowledgeLayoutProps {
   breadcrumbs?: Array<{ label: string; href?: string }>;
   children?: ReactNode;
+  isPreview?: boolean;
 }
 
-export function KnowledgeLayout({ breadcrumbs, children }: KnowledgeLayoutProps) {
+export function KnowledgeLayout({ breadcrumbs, children, isPreview = false }: KnowledgeLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { pageId, group } = useParams<{ pageId?: string; group?: string }>();
   const location = useLocation();
@@ -54,7 +55,7 @@ export function KnowledgeLayout({ breadcrumbs, children }: KnowledgeLayoutProps)
         }
         return getPageById(idToFetch);
       },
-      enabled: !!idToFetch && !group,
+      enabled: !!idToFetch && !group && !isPreview,
       staleTime: 5 * 60 * 1000,
   });
   

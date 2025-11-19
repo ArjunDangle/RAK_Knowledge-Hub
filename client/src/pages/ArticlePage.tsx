@@ -29,7 +29,7 @@ interface ArticlePageProps {
 export default function ArticlePage({ pageId: propPageId, isPreviewMode = false }: ArticlePageProps) {
   const params = useParams<{ pageId: string }>();
   const [searchParams] = useSearchParams();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isAdmin, isGroupAdmin } = useAuth();
 
   const pageId = propPageId || params.pageId;
   
@@ -154,19 +154,22 @@ export default function ArticlePage({ pageId: propPageId, isPreviewMode = false 
   
   const breadcrumbs = ancestors ? [...ancestors.map((ancestor, index) => { if (index === 0) { return { label: ancestor.title, href: `/category/${article.group}` }; } return { label: ancestor.title, href: `/page/${ancestor.id}` }; }), { label: article.title }] : [];
 
-  const renderContent = () => (
+  const renderContent = () => {
+    const isManager = isAdmin || isGroupAdmin;
+    const editLinkUrl = isManager ? `/admin/edit/${article.id}` : `/edit/${article.id}`;
+
+    return (
     <>
       <header className="mb-8">
           <div className="flex justify-between items-start mb-4">
               <h1 className="text-4xl font-bold text-foreground leading-tight flex-1 pr-8">{article.title}</h1>
               {!isPreviewMode && (
                   <div className="flex gap-2 flex-shrink-0">
-                      {/* --- THIS IS THE NEW CONDITIONAL EDIT BUTTON --- */}
                       {article.canEdit && (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button asChild variant="outline" size="icon">
-                              <Link to={`/edit/${article.id}`}>
+                              <Link to={editLinkUrl}>
                                 <Edit className="h-4 w-4" />
                                 <span className="sr-only">Edit Page</span>
                               </Link>
@@ -203,7 +206,7 @@ export default function ArticlePage({ pageId: propPageId, isPreviewMode = false 
         </section>
       )}
     </>
-  );
+  )};
   
   if (isPreviewMode) {
     return (

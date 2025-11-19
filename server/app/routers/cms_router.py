@@ -99,11 +99,6 @@ async def get_page_tree_structure(parent_id: Optional[str] = Query(None)):
     response_model=List[PageTreeNodeWithPermission],
     dependencies=[Depends(get_current_user)]
 )
-@router.get(
-    "/pages/tree-with-permissions",
-    response_model=List[PageTreeNodeWithPermission],
-    dependencies=[Depends(get_current_user)]
-)
 async def get_page_tree_with_permissions_endpoint(
     parent_id: Optional[str] = Query(None),
     allowed_only: bool = Query(False),
@@ -137,7 +132,7 @@ async def create_page(
 @router.get(
     "/admin/edit-details/{page_id}",
     response_model=cms_schemas.PageDetailResponse,
-    dependencies=[Depends(get_current_admin_user)]
+    dependencies=[Depends(get_user_with_management_permission_for_page)]
 )
 async def get_page_details_for_edit_endpoint(page_id: str):
     """
@@ -310,4 +305,3 @@ async def search_content_index_endpoint(query: str = Query(..., min_length=2)):
     Searches the content index for pages matching the query and returns a flat list.
     """
     return await confluence_service.search_content_index(query)
-

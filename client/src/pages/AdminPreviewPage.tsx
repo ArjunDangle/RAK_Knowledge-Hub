@@ -1,4 +1,4 @@
-// Create this new file at client/src/pages/AdminPreviewPage.tsx
+// client/src/pages/AdminPreviewPage.tsx
 
 import { useParams } from "react-router-dom";
 import { KnowledgeLayout } from "./KnowledgeLayout";
@@ -16,20 +16,14 @@ export default function AdminPreviewPage() {
 
   if (!pageId) {
     return (
-      <KnowledgeLayout breadcrumbs={breadcrumbs}>
+      <KnowledgeLayout breadcrumbs={breadcrumbs} isPreview={true}>
         <div className="text-center">Article ID is missing.</div>
       </KnowledgeLayout>
     );
   }
 
   return (
-    <KnowledgeLayout breadcrumbs={breadcrumbs}>
-      {/* 
-        This is the key part. We render the existing ArticlePage component,
-        but the `isPreviewMode={true}` prop tells it to fetch data from the
-        secure `/cms/admin/preview/:pageId` backend endpoint instead of the
-        public `/article/:pageId` endpoint.
-      */}
+    <KnowledgeLayout breadcrumbs={breadcrumbs} isPreview={true}>
       <ArticlePage pageId={pageId} isPreviewMode={true} />
     </KnowledgeLayout>
   );

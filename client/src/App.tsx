@@ -42,6 +42,17 @@ const ProtectedRoute = () => {
     return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
 };
 
+const ManagementRoute = () => {
+    const { isAuthenticated, isAdmin, isGroupAdmin, isLoading } = useAuth();
+    if (isLoading) {
+        return <LoadingSpinner />;
+    }
+    if (!isAuthenticated) {
+        return <Navigate to="/login" replace />;
+    }
+    return (isAdmin || isGroupAdmin) ? <Outlet /> : <Navigate to="/" replace />;
+};
+
 const AdminRoute = () => {
     const { isAuthenticated, isAdmin, isLoading } = useAuth();
     if (isLoading) {
@@ -81,12 +92,16 @@ const App = () => (
               <Route path="/department-queue" element={<DepartmentQueue />} />
             </Route>
 
-            {/* Protected Routes for Admins */}
+            {/* Routes accessible by BOTH Admins and Group Admins */}
+            <Route element={<ManagementRoute />}>
+              <Route path="/admin/preview/:pageId" element={<AdminPreviewPage />} />
+              <Route path="/admin/edit/:pageId" element={<AdminEditPage />} />
+            </Route>
+
+            {/* Routes accessible ONLY by Global Admins */}
             <Route element={<AdminRoute />}>
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
               <Route path="/admin/content-index" element={<AdminIndexPage />} />
-              <Route path="/admin/preview/:pageId" element={<AdminPreviewPage />} />
-              <Route path="/admin/edit/:pageId" element={<AdminEditPage />} />
               <Route path="/admin/groups" element={<AdminGroupsPage />} />
               <Route path="/admin/tags" element={<AdminTagsPage />} />
             </Route>
