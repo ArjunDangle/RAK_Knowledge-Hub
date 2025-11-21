@@ -56,8 +56,12 @@ async def shutdown():
 origins = [
     "http://localhost:8080",
     "http://127.0.0.1:8080",
-    "https://rak-knowledge-hub.vercel.app",
 ]
+
+extra_origins = os.getenv("FRONTEND_URLS")
+
+if extra_origins:
+    origins.extend(url.strip() for url in extra_origins.split(",") if url.strip())
 
 app.add_middleware(
     CORSMiddleware,
