@@ -1,9 +1,9 @@
 // client/src/App.tsx
-import { useState, useEffect } from "react"; // <-- Add useEffect
+import { useState, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner, toast } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from "@tanstack/react-query"; // <-- Import QueryCache and MutationCache
+import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import Landing from "./pages/Landing";
 import CategoryPage from "./pages/CategoryPage";
@@ -26,7 +26,6 @@ import AdminTagsPage from "./pages/AdminTagsPage";
 import AdminRegisterPage from "./pages/AdminRegisterPage";
 import { Loader2 } from "lucide-react";
 
-// This is our custom error type that includes the status
 interface ApiError extends Error {
   status?: number;
 }
@@ -35,28 +34,35 @@ const AppContent = () => {
     const { logout } = useAuth();
 
     const [queryClient] = useState(() => new QueryClient({
-      queryCache: new QueryCache({
-          onError: (error: ApiError) => {
-              if (error.status === 401) {
-                  logout("Your session has expired. Please sign in again.");
-              }
-          },
-      }),
-      mutationCache: new MutationCache({
-          onError: (error: ApiError) => {
-              if (error.status === 401) {
-                  logout("Your session has expired. Please sign in again.");
-              }
-          },
-      }),
-      defaultOptions: {
-          queries: {
-              retry: false,
-          },
-      },
-  }));
+        queryCache: new QueryCache({
+            onError: (error: ApiError) => {
+                if (error.status === 401) {
+                    logout("Your session has expired. Please sign in again.");
+                }
+            },
+        }),
+        // --- THIS IS THE CORRECTED LOGIC ---
+        mutationCache: new MutationCache({
+            onError: (error: ApiError, _variables, _context, mutation) => {
+                // Check if the mutation has our special meta flag.
+                // If it does, stop here and let the local handler do its job.
+                if (mutation.options.meta?.isLoginAttempt) {
+                    return;
+                }
 
-    // The rest of the component remains the same
+                // If the flag is not present, proceed with the global logout logic.
+                if (error.status === 401) {
+                    logout("Your session has expired. Please sign in again.");
+                }
+            },
+        }),
+        defaultOptions: {
+            queries: {
+                retry: false,
+            },
+        },
+    }));
+
     return (
         <QueryClientProvider client={queryClient}>
             <TooltipProvider>
@@ -65,7 +71,6 @@ const AppContent = () => {
                 <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
                     <ScrollToTop />
                     <Routes>
-                        {/* All your routes remain exactly the same */}
                         <Route path="/" element={<Landing />} />
                         <Route path="/login" element={<LoginPage />} />
                         <Route path="/search" element={<SearchPage />} />
@@ -100,29 +105,30 @@ const AppContent = () => {
 };
 
 const LoadingSpinner = () => (
-  <div className="flex h-screen w-full items-center justify-center">
-      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-  </div>
+    <div className="flex h-screen w-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    </div>
 );
+
 const ProtectedRoute = () => {
-  const { isAuthenticated, isLoading } = useAuth();
-  if (isLoading) {
-      return <LoadingSpinner />;
-  }
-  return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
-};
-const AdminRoute = () => {
-  const { isAuthenticated, isAdmin, isLoading } = useAuth();
-  if (isLoading) {
-      return <LoadingSpinner />;
-  }
-  if (!isAuthenticated) {
-      return <Navigate to="/login" replace />;
-  }
-  return isAdmin ? <Outlet /> : <Navigate to="/" replace />;
+    const { isAuthenticated, isLoading } = useAuth();
+    if (isLoading) {
+        return <LoadingSpinner />;
+    }
+    return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
 };
 
-// The main App component is now simpler
+const AdminRoute = () => {
+    const { isAuthenticated, isAdmin, isLoading } = useAuth();
+    if (isLoading) {
+        return <LoadingSpinner />;
+    }
+    if (!isAuthenticated) {
+        return <Navigate to="/login" replace />;
+    }
+    return isAdmin ? <Outlet /> : <Navigate to="/" replace />;
+};
+
 const App = () => (
   <AuthProvider>
     <AppContent />

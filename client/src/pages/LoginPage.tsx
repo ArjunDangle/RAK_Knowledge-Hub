@@ -1,12 +1,12 @@
 // client/src/pages/LoginPage.tsx
-import { useState, useEffect } from "react"; // 1. ADD useEffect TO IMPORTS
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation } from "@tanstack/react-query";
 import { Loader2, AlertCircle } from "lucide-react";
-import { toast } from "sonner"; // 2. IMPORT toast FROM SONNER
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,21 +31,16 @@ export default function LoginPage() {
   const { login } = useAuth();
   const [apiError, setApiError] = useState<string | null>(null);
 
-  // 3. ADD THIS useEffect HOOK
   useEffect(() => {
-    // Check for a logout message when the component first loads
     const logoutMessage = localStorage.getItem('logoutMessage');
-    
     if (logoutMessage) {
-      // If a message exists, show it as a toast
       toast.info("Session Expired", {
         description: logoutMessage,
-        duration: 5000, // Show for 5 seconds
+        duration: 5000,
       });
-      // IMPORTANT: Remove the message from storage so it doesn't show again
       localStorage.removeItem('logoutMessage');
     }
-  }, []); // The empty dependency array ensures this runs only once when the page loads
+  }, []);
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -57,11 +52,17 @@ export default function LoginPage() {
 
   const mutation = useMutation<LoginResponse, Error, LoginCredentials>({
     mutationFn: loginUser,
+    // --- ADD THIS META PROPERTY ---
+    // This tells our global error handler to ignore this specific mutation.
+    meta: {
+      isLoginAttempt: true,
+    },
     onSuccess: (data) => {
       login(data);
       navigate("/");
     },
     onError: (error) => {
+      // This local onError will now be the ONLY one that runs for a failed login.
       setApiError(error.message || "An unknown error occurred.");
     },
   });
