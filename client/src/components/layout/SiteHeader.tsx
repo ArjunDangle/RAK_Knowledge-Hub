@@ -1,5 +1,6 @@
 // client/src/components/layout/SiteHeader.tsx
 import { Search, Menu, PlusCircle, LayoutDashboard, LogOut, User as UserIcon, FileText, ListTree, Users, Tag as TagIcon } from "lucide-react";
+import { UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link, useNavigate, useLocation } from "react-router-dom";
@@ -158,6 +159,12 @@ export function SiteHeader({
                         <Link to="/admin/groups">
                           <Users className="mr-2 h-4 w-4" />
                           <span>Group Permissions</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to="/admin/register">
+                          <UserPlus className="mr-2 h-4 w-4" />
+                          <span>Register New User</span>
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>

@@ -1,11 +1,12 @@
 // client/src/pages/LoginPage.tsx
-import { useState } from "react";
+import { useState, useEffect } from "react"; // 1. ADD useEffect TO IMPORTS
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation } from "@tanstack/react-query";
 import { Loader2, AlertCircle } from "lucide-react";
+import { toast } from "sonner"; // 2. IMPORT toast FROM SONNER
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,9 +14,10 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SiteHeader } from "@/components/layout/SiteHeader";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 import { useAuth } from "@/context/AuthContext";
-import { loginUser, LoginResponse } from "@/lib/api/api-client";
+import { loginUser, LoginResponse, LoginCredentials } from "@/lib/api/api-client";
 
 const loginSchema = z.object({
   username: z.string().min(1, { message: "Username is required" }),
@@ -29,6 +31,22 @@ export default function LoginPage() {
   const { login } = useAuth();
   const [apiError, setApiError] = useState<string | null>(null);
 
+  // 3. ADD THIS useEffect HOOK
+  useEffect(() => {
+    // Check for a logout message when the component first loads
+    const logoutMessage = localStorage.getItem('logoutMessage');
+    
+    if (logoutMessage) {
+      // If a message exists, show it as a toast
+      toast.info("Session Expired", {
+        description: logoutMessage,
+        duration: 5000, // Show for 5 seconds
+      });
+      // IMPORTANT: Remove the message from storage so it doesn't show again
+      localStorage.removeItem('logoutMessage');
+    }
+  }, []); // The empty dependency array ensures this runs only once when the page loads
+
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -37,8 +55,8 @@ export default function LoginPage() {
     },
   });
 
-  const mutation = useMutation({
-    mutationFn: (credentials: LoginFormData): Promise<LoginResponse> => loginUser(credentials),
+  const mutation = useMutation<LoginResponse, Error, LoginCredentials>({
+    mutationFn: loginUser,
     onSuccess: (data) => {
       login(data);
       navigate("/");
@@ -50,7 +68,7 @@ export default function LoginPage() {
 
   const onSubmit = (data: LoginFormData) => {
     setApiError(null);
-    mutation.mutate(data);
+    mutation.mutate(data as LoginCredentials);
   };
 
   return (
@@ -94,7 +112,7 @@ export default function LoginPage() {
                     <FormItem>
                       <FormLabel>Password</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="Enter your password" {...field} />
+                        <PasswordInput placeholder="Enter your password" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

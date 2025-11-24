@@ -12,7 +12,7 @@ from app.config import settings
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token", auto_error=False)
 router = APIRouter(tags=["Authentication"])
 
-# ... (get_current_user and get_current_admin_user functions are unchanged) ...
+
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -30,7 +30,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     
     user = await db.user.find_unique(
         where={'username': token_data.username},
-        include={'groups': {'include': {'managedPage': True}}} # <-- NESTED INCLUDE
+        include={'groups': {'include': {'managedPage': True}}}
     )
     if user is None:
         raise credentials_exception
@@ -62,6 +62,30 @@ async def get_current_user_optional(token: Optional[str] = Depends(oauth2_scheme
         include={'groups': {'include': {'managedPage': True}}} # <-- NESTED INCLUDE
     )
     return user
+
+@router.post("/admin/register", response_model=auth_schemas.UserResponse, dependencies=[Depends(get_current_admin_user)])
+async def register_user_by_admin(user_data: auth_schemas.UserCreate):
+    """
+    Admin-only endpoint to create a new user (either ADMIN or MEMBER).
+    """
+    existing_user = await db.user.find_unique(where={'username': user_data.username})
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already registered"
+        )
+    
+    hashed_password = security.hash_password(user_data.password)
+    
+    new_user = await db.user.create(
+        data={
+            'username': user_data.username,
+            'name': user_data.name,
+            'hashed_password': hashed_password,
+            'role': user_data.role
+        }
+    )
+    return new_user
 
 @router.post("/register", response_model=auth_schemas.UserResponse)
 async def register_user(user_data: auth_schemas.UserCreate):

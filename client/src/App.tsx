@@ -1,8 +1,9 @@
 // client/src/App.tsx
+import { useState, useEffect } from "react"; // <-- Add useEffect
 import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
+import { Toaster as Sonner, toast } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from "@tanstack/react-query"; // <-- Import QueryCache and MutationCache
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import Landing from "./pages/Landing";
 import CategoryPage from "./pages/CategoryPage";
@@ -22,78 +23,110 @@ import AdminEditPage from "./pages/AdminEditPage";
 import AdminGroupsPage from "./pages/AdminGroupsPage";
 import MyGroupsPage from "./pages/MyGroupsPage";
 import AdminTagsPage from "./pages/AdminTagsPage";
+import AdminRegisterPage from "./pages/AdminRegisterPage";
 import { Loader2 } from "lucide-react";
 
-const queryClient = new QueryClient();
+// This is our custom error type that includes the status
+interface ApiError extends Error {
+  status?: number;
+}
+
+const AppContent = () => {
+    const { logout } = useAuth();
+
+    const [queryClient] = useState(() => new QueryClient({
+      queryCache: new QueryCache({
+          onError: (error: ApiError) => {
+              if (error.status === 401) {
+                  logout("Your session has expired. Please sign in again.");
+              }
+          },
+      }),
+      mutationCache: new MutationCache({
+          onError: (error: ApiError) => {
+              if (error.status === 401) {
+                  logout("Your session has expired. Please sign in again.");
+              }
+          },
+      }),
+      defaultOptions: {
+          queries: {
+              retry: false,
+          },
+      },
+  }));
+
+    // The rest of the component remains the same
+    return (
+        <QueryClientProvider client={queryClient}>
+            <TooltipProvider>
+                <Toaster />
+                <Sonner />
+                <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                    <ScrollToTop />
+                    <Routes>
+                        {/* All your routes remain exactly the same */}
+                        <Route path="/" element={<Landing />} />
+                        <Route path="/login" element={<LoginPage />} />
+                        <Route path="/search" element={<SearchPage />} />
+                        <Route path="/category/:group" element={<CategoryPage />} />
+                        <Route path="/page/:pageId" element={<CategoryPage />} />
+                        <Route path="/article/:pageId" element={<ArticlePage />} />
+                        <Route path="/whats-new" element={<WhatsNewPage />} />
+                        
+                        <Route element={<ProtectedRoute />}>
+                          <Route path="/create" element={<CreatePage />} />
+                          <Route path="/edit-submission/:pageId" element={<CreatePage />} /> 
+                          <Route path="/my-submissions" element={<MySubmissionsPage />} />
+                          <Route path="/my-groups" element={<MyGroupsPage />} /> 
+                          <Route path="/edit/:pageId" element={<EditPage />} />
+                        </Route>
+
+                        <Route element={<AdminRoute />}>
+                          <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                          <Route path="/admin/content-index" element={<AdminIndexPage />} />
+                          <Route path="/admin/edit/:pageId" element={<AdminEditPage />} />
+                          <Route path="/admin/groups" element={<AdminGroupsPage />} />
+                          <Route path="/admin/tags" element={<AdminTagsPage />} />
+                          <Route path="/admin/register" element={<AdminRegisterPage />} />
+                        </Route>
+
+                        <Route path="*" element={<NotFound />} />
+                    </Routes>
+                </BrowserRouter>
+            </TooltipProvider>
+        </QueryClientProvider>
+    );
+};
 
 const LoadingSpinner = () => (
-    <div className="flex h-screen w-full items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-    </div>
+  <div className="flex h-screen w-full items-center justify-center">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+  </div>
 );
-
 const ProtectedRoute = () => {
-    const { isAuthenticated, isLoading } = useAuth();
-    if (isLoading) {
-        return <LoadingSpinner />;
-    }
-    return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) {
+      return <LoadingSpinner />;
+  }
+  return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
 };
-
 const AdminRoute = () => {
-    const { isAuthenticated, isAdmin, isLoading } = useAuth();
-    if (isLoading) {
-        return <LoadingSpinner />;
-    }
-    if (!isAuthenticated) {
-        return <Navigate to="/login" replace />;
-    }
-    return isAdmin ? <Outlet /> : <Navigate to="/" replace />;
+  const { isAuthenticated, isAdmin, isLoading } = useAuth();
+  if (isLoading) {
+      return <LoadingSpinner />;
+  }
+  if (!isAuthenticated) {
+      return <Navigate to="/login" replace />;
+  }
+  return isAdmin ? <Outlet /> : <Navigate to="/" replace />;
 };
 
+// The main App component is now simpler
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <AuthProvider>
-        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <ScrollToTop />
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/" element={<Landing />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/search" element={<SearchPage />} />
-            <Route path="/category/:group" element={<CategoryPage />} />
-            <Route path="/page/:pageId" element={<CategoryPage />} />
-            <Route path="/article/:pageId" element={<ArticlePage />} />
-            <Route path="/whats-new" element={<WhatsNewPage />} />
-            
-            {/* Protected Routes for Logged-in Users */}
-            <Route element={<ProtectedRoute />}>
-              <Route path="/create" element={<CreatePage />} />
-              <Route path="/edit-submission/:pageId" element={<CreatePage />} /> 
-              <Route path="/my-submissions" element={<MySubmissionsPage />} />
-              <Route path="/my-groups" element={<MyGroupsPage />} /> 
-              <Route path="/edit/:pageId" element={<EditPage />} />
-            </Route>
-
-            {/* Protected Routes for Admins */}
-            <Route element={<AdminRoute />}>
-              <Route path="/admin/dashboard" element={<AdminDashboard />} />
-              <Route path="/admin/content-index" element={<AdminIndexPage />} />
-              <Route path="/admin/edit/:pageId" element={<AdminEditPage />} />
-              <Route path="/admin/groups" element={<AdminGroupsPage />} />
-              <Route path="/admin/tags" element={<AdminTagsPage />} />
-            </Route>
-
-            {/* Not Found Route */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </AuthProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
+  <AuthProvider>
+    <AppContent />
+  </AuthProvider>
 );
 
 export default App;

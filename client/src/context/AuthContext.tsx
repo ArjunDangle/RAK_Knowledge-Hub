@@ -1,22 +1,6 @@
 // client/src/context/AuthContext.tsx
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { LoginResponse } from '@/lib/api/api-client';
-
-// --- THIS IS THE FIX ---
-interface User {
-  username: string;
-  name: string;
-  role: 'MEMBER' | 'ADMIN';
-  groups: Array<{ 
-    id: number; 
-    name: string;
-    managedPage: {
-      id: number;
-      confluenceId: string;
-      title: string;
-    } | null;
-  }>;
-}
+import { LoginResponse, User } from '@/lib/api/api-client';
 
 interface AuthState {
   token: string | null;
@@ -25,7 +9,7 @@ interface AuthState {
   isAdmin: boolean;
   isLoading: boolean;
   login: (data: LoginResponse) => void;
-  logout: () => void;
+  logout: (message?: string) => void;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -40,7 +24,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const storedToken = localStorage.getItem('authToken');
       const storedUser = localStorage.getItem('authUser');
       if (storedToken && storedUser) {
-        setUser(JSON.parse(storedUser));
+        setUser(JSON.parse(storedUser)); 
         setToken(storedToken);
       }
     } catch (error) {
@@ -55,7 +39,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const login = (data: LoginResponse) => {
     if (data && data.access_token && data.user) {
       setToken(data.access_token);
-      setUser(data.user);
+      setUser(data.user); 
       localStorage.setItem('authToken', data.access_token);
       localStorage.setItem('authUser', JSON.stringify(data.user));
     } else {
@@ -63,7 +47,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const logout = () => {
+  const logout = (message?: string) => {
+    if (message) {
+      localStorage.setItem('logoutMessage', message);
+    }
+    
     setToken(null);
     setUser(null);
     localStorage.removeItem('authToken');

@@ -15,17 +15,28 @@ import {
   PageTreeNodeWithPermission,
 } from "../types/content";
 
+export interface UserGroup {
+  id: number;
+  name: string;
+  managedPage: {
+    id: number;
+    confluenceId: string;
+    title: string;
+  } | null;
+}
+
 export interface User {
   id: number;
   username: string;
   name: string;
   role: "MEMBER" | "ADMIN";
+  groups: UserGroup[]; // <-- ADDED THIS REQUIRED PROPERTY
 }
 
 export interface LoginResponse {
   access_token: string;
   token_type: string;
-  user: User;
+  user: User; // <-- This now correctly uses the updated User type
 }
 
 export interface AttachmentUploadResponse {
@@ -133,14 +144,28 @@ export interface TagBulkCreatePayload {
   names: string[];
 }
 
+export interface UserCreatePayload {
+  username: string;
+  name: string;
+  password: string;
+  role: 'ADMIN' | 'MEMBER';
+}
+
+interface ApiError extends Error {
+  status?: number;
+}
+
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    const error = await response
-      .json()
-      .catch(() => ({ detail: "Network response was not ok" }));
-    throw new Error(error.detail || `HTTP error! status: ${response.status}`);
+    const errorBody = await response.json().catch(() => ({ detail: "An unexpected API error occurred." }));
+    
+    const error: ApiError = new Error(errorBody.detail || `HTTP error! status: ${response.status}`);
+    
+    error.status = response.status;
+    
+    throw error;
   }
   if (response.status === 204) {
     return null as T;
@@ -459,6 +484,13 @@ export async function deleteTag(tagId: number): Promise<void> {
 
 export async function createTagsInBulk(payload: TagBulkCreatePayload): Promise<{ message: string }> {
   return apiFetch("/api/tags/bulk", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function registerUserByAdmin(payload: UserCreatePayload): Promise<User> {
+  return apiFetch<User>("/auth/admin/register", {
     method: "POST",
     body: JSON.stringify(payload),
   });
