@@ -1,5 +1,5 @@
 // client/src/components/layout/SiteHeader.tsx
-import { Search, Menu, PlusCircle, LayoutDashboard, LogOut, User as UserIcon, FileText, ListTree, Users, Tag as TagIcon } from "lucide-react";
+import { Search, Menu, PlusCircle, LayoutDashboard, LogOut, User as UserIcon, FileText, ListTree, Users, Tag as TagIcon, Settings, Shield } from "lucide-react";
 import { UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,17 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { Separator } from "@/components/ui/separator";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger
+} from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { NotificationBell } from "@/components/layout/NotificationBell";
 
@@ -127,6 +137,8 @@ export function SiteHeader({
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  
+                  {/* Personal Section - Always visible */}
                   <DropdownMenuItem asChild>
                     <Link to="/my-submissions">
                       <FileText className="mr-2 h-4 w-4" />
@@ -141,8 +153,14 @@ export function SiteHeader({
                       </Link>
                     </DropdownMenuItem>
                   )}
+
+                  {/* Admin Section - Cleaner layout */}
                   {isAdmin && (
                     <>
+                      {/* Single separator between personal and admin items */}
+                      <DropdownMenuSeparator />
+                      
+                      {/* Primary Actions */}
                       <DropdownMenuItem asChild>
                         <Link to="/admin/dashboard">
                           <LayoutDashboard className="mr-2 h-4 w-4" />
@@ -155,34 +173,51 @@ export function SiteHeader({
                           <span>Content Index</span>
                         </Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link to="/admin/groups">
-                          <Users className="mr-2 h-4 w-4" />
-                          <span>Group Permissions</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link to="/admin/register">
-                          <UserPlus className="mr-2 h-4 w-4" />
-                          <span>Register New User</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link to="/admin/tags">
-                          <TagIcon className="mr-2 h-4 w-4" />
-                          <span>Tag Management</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link to="/admin/users">
-                          <Users className="mr-2 h-4 w-4" />
-                          <span>User Management</span>
-                        </Link>
-                      </DropdownMenuItem>
+
+                      {/* Nested Settings Menu */}
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                          <Settings className="mr-2 h-4 w-4" />
+                          <span>System Management</span>
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="w-56">
+                          <DropdownMenuLabel className="text-xs">Access Control</DropdownMenuLabel>
+                          <DropdownMenuItem asChild>
+                            <Link to="/admin/users">
+                              <Shield className="mr-2 h-4 w-4" />
+                              <span>User Management</span>
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link to="/admin/groups">
+                              <Users className="mr-2 h-4 w-4" />
+                              <span>Group Permissions</span>
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link to="/admin/register">
+                              <UserPlus className="mr-2 h-4 w-4" />
+                              <span>Register New User</span>
+                            </Link>
+                          </DropdownMenuItem>
+                          
+                          <DropdownMenuSeparator />
+                          
+                          <DropdownMenuLabel className="text-xs">Taxonomy</DropdownMenuLabel>
+                          <DropdownMenuItem asChild>
+                            <Link to="/admin/tags">
+                              <TagIcon className="mr-2 h-4 w-4" />
+                              <span>Tag Management</span>
+                            </Link>
+                          </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
                     </>
                   )}
+                  
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => logout()}>
+                  
+                  <DropdownMenuItem onClick={() => logout()} className="text-red-600 focus:text-red-600 focus:bg-red-50">
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Logout</span>
                   </DropdownMenuItem>
