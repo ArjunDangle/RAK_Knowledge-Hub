@@ -1,4 +1,4 @@
-# server/schemas/auth_schemas.py
+# server/app/schemas/auth_schemas.py
 from pydantic import BaseModel
 from typing import Optional, List
 
@@ -40,3 +40,9 @@ class UserResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class UserRoleUpdate(BaseModel):
+    role: str
+
+class AdminPasswordReset(BaseModel):
+    password: str

@@ -24,6 +24,7 @@ import AdminGroupsPage from "./pages/AdminGroupsPage";
 import MyGroupsPage from "./pages/MyGroupsPage";
 import AdminTagsPage from "./pages/AdminTagsPage";
 import AdminRegisterPage from "./pages/AdminRegisterPage";
+import AdminUsersPage from "./pages/AdminUsersPage";
 import { Loader2 } from "lucide-react";
 
 interface ApiError extends Error {
@@ -94,6 +95,7 @@ const AppContent = () => {
                           <Route path="/admin/groups" element={<AdminGroupsPage />} />
                           <Route path="/admin/tags" element={<AdminTagsPage />} />
                           <Route path="/admin/register" element={<AdminRegisterPage />} />
+                          <Route path="/admin/users" element={<AdminUsersPage />} />
                         </Route>
 
                         <Route path="*" element={<NotFound />} />

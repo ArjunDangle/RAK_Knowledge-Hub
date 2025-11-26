@@ -495,3 +495,24 @@ export async function registerUserByAdmin(payload: UserCreatePayload): Promise<U
     body: JSON.stringify(payload),
   });
 }
+export async function getAdminUsers(): Promise<User[]> {
+  return apiFetch<User[]>("/auth/users");
+}
+
+export async function deleteUser(userId: number): Promise<void> {
+  return apiFetch(`/auth/users/${userId}`, { method: "DELETE" });
+}
+
+export async function updateUserRole(userId: number, role: "ADMIN" | "MEMBER"): Promise<User> {
+  return apiFetch<User>(`/auth/users/${userId}/role`, {
+    method: "PATCH",
+    body: JSON.stringify({ role }),
+  });
+}
+
+export async function adminResetPassword(userId: number, password: string): Promise<void> {
+  return apiFetch(`/auth/users/${userId}/reset-password`, {
+    method: "POST",
+    body: JSON.stringify({ password }),
+  });
+}
