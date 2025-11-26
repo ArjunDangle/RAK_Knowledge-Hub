@@ -682,35 +682,52 @@ class ConfluenceService:
     async def get_submissions_by_author(self, author_id: int) -> List[dict]:
         """Fetches submissions for an author from the repository."""
         submissions = await self.submission_repo.get_by_author_id(author_id)
-        # Convert to dict for the router, as Pydantic models are used for response
         return [sub.model_dump() for sub in submissions]
     
     async def delete_page_permanently(self, page_id: str) -> bool:
         """
-        Orchestrates deleting a page completely.
-        1. Delete from Confluence.
-        2. Delete submission record from local DB.
-        3. Delete page record from local DB.
+        Orchestrates deleting a page completely, but only if it has no children.
         """
         try:
-            # Step 1: Delete the page from Confluence
-            self.confluence_repo.delete_page(page_id)
-            
-            # Step 2: Delete the associated submission record from our database.
-            # This must happen before deleting the Page record due to foreign key constraints.
-            await self.submission_repo.delete_by_confluence_id(page_id)
+            # Check for children in our local database first.
+            has_children = await self.page_repo.has_children(page_id)
+            if has_children:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="This page cannot be deleted because it has child pages. Please delete its children first."
+                )
 
-            # Step 3: Delete the main Page record from our database.
+            # If the check passes, proceed with the original deletion logic.
+            self.confluence_repo.delete_page(page_id)
+            await self.submission_repo.delete_by_confluence_id(page_id)
             await self.page_repo.delete_by_confluence_id(page_id)
             
             return True
         except Exception as e:
             print(f"Error during permanent deletion of page {page_id}: {e}")
-            # This exception will now correctly report the original Confluence error
-            # on the second attempt, but will also catch any DB errors.
             if isinstance(e, HTTPException):
                 raise e
             raise HTTPException(status_code=503, detail=str(e))
+    
+    async def delete_pages_in_bulk(self, page_ids: List[str]) -> dict:
+        """
+        Attempts to delete a list of pages. Returns a summary of successes and failures.
+        """
+        deleted_ids = []
+        failed_items = []
+
+        for page_id in page_ids:
+            try:
+                # Reuse our single-delete logic which now contains the child check
+                success = await self.delete_page_permanently(page_id)
+                if success:
+                    deleted_ids.append(page_id)
+            except HTTPException as e:
+                failed_items.append({"id": page_id, "reason": e.detail})
+            except Exception as e:
+                failed_items.append({"id": page_id, "reason": str(e)})
+
+        return {"deleted": deleted_ids, "failed": failed_items}
 
     def get_page_tree(self, parent_id: Optional[str] = None) -> List[Dict]:
         """

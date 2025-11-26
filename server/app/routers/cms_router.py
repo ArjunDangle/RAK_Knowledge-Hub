@@ -281,3 +281,13 @@ async def search_content_index_endpoint(query: str = Query(..., min_length=2)):
     """
     return await confluence_service.search_content_index(query)
 
+@router.post(
+    "/admin/pages/bulk-delete",
+    dependencies=[Depends(get_current_admin_user)]
+)
+async def bulk_delete_pages_endpoint(payload: cms_schemas.BulkDeletePayload):
+    """
+    Deletes a list of pages, respecting the rule that pages with children cannot be deleted.
+    """
+    result = await confluence_service.delete_pages_in_bulk(payload.page_ids)
+    return result

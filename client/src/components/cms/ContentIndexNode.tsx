@@ -1,13 +1,13 @@
 // client/src/components/cms/ContentIndexNode.tsx
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { ChevronRight, Edit, ExternalLink, Send, Check, X, MoreVertical, Trash2, Loader2 } from 'lucide-react';
-import { ContentNode, approveArticle, rejectArticle, deletePage, getContentIndex } from '@/lib/api/api-client'; // <-- FIX: Import getContentIndex
+import { ContentNode, approveArticle, rejectArticle, deletePage, getContentIndex } from '@/lib/api/api-client';
 import { cn } from '@/lib/utils';
 import { formatRelativeTime } from '@/lib/utils/date';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // <-- FIX: Import useQuery
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -19,11 +19,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Skeleton } from '../ui/skeleton'; // <-- FIX: Import Skeleton
+import { Skeleton } from '../ui/skeleton';
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface ContentIndexNodeProps {
   node: ContentNode;
   level: number;
+  onToggleSelection: (ids: string[], action: 'add' | 'remove') => void;
+  selectedIds: Set<string>;
+  isManageMode: boolean;
+}
+
+interface ApiError {
+  detail?: string;
 }
 
 const statusConfig = {
@@ -32,27 +40,29 @@ const statusConfig = {
     PUBLISHED: { text: "Published", className: "bg-green-100 text-green-800 border-green-200" },
 };
 
-// Helper function to recursively remove a node from the tree
-const removeNodeFromTree = (nodes: ContentNode[], idToRemove: string): ContentNode[] => {
-    return nodes
-        .filter(node => node.id !== idToRemove)
-        .map(node => ({
-            ...node,
-            children: node.children ? removeNodeFromTree(node.children, idToRemove) : [],
-        }));
+// Helper function to recursively get all descendant IDs from loaded nodes
+const getAllDescendantIds = (nodes: ContentNode[] | undefined): string[] => {
+    if (!nodes) return [];
+    let ids: string[] = [];
+    for (const n of nodes) {
+        ids.push(n.id);
+        if (n.children && n.children.length > 0) {
+            ids = [...ids, ...getAllDescendantIds(n.children)];
+        }
+    }
+    return ids;
 };
 
-export const ContentIndexNode = ({ node, level }: ContentIndexNodeProps) => {
+export const ContentIndexNode = ({ node, level, onToggleSelection, selectedIds, isManageMode }: ContentIndexNodeProps) => {
   const [isExpanded, setIsExpanded] = useState(level < 1);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const queryClient = useQueryClient();
 
-  // --- FIX: ADD QUERY TO FETCH CHILDREN ON DEMAND ---
   const { data: children, isLoading: childrenLoading } = useQuery({
     queryKey: ['contentIndex', node.id],
     queryFn: () => getContentIndex(node.id),
-    enabled: isExpanded && node.hasChildren, // Only fetch if it's expanded and has children
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    enabled: isExpanded && node.hasChildren,
+    staleTime: 5 * 60 * 1000,
   });
 
   const approveMutation = useMutation({
@@ -72,27 +82,74 @@ export const ContentIndexNode = ({ node, level }: ContentIndexNodeProps) => {
     },
     onError: (error) => toast.error("Rejection failed", { description: error.message }),
   });
-
+  
   const deleteMutation = useMutation({
-    mutationFn: deletePage,
+    mutationFn: (pageId: string) => deletePage(pageId),
     onSuccess: (_, pageId) => {
         toast.success(`'${node.title}' has been deleted.`);
-        queryClient.setQueryData(['contentIndex', 'root'], (oldData: ContentNode[] | undefined) => {
-            if (!oldData) return [];
-            return removeNodeFromTree(oldData, pageId);
-        });
-        queryClient.invalidateQueries({ queryKey: ['contentIndex'] });
+        queryClient.invalidateQueries({ queryKey: ['contentIndex', 'root'] });
+        queryClient.invalidateQueries({ queryKey: ['contentIndexSearch'] });
     },
-    onError: (error) => toast.error("Deletion failed", { description: error.message }),
+    onError: (error: ApiError) => {
+      const description = error.detail || "Deletion failed. Please try again.";
+      toast.error(`'${node.title}' could not be deleted.`, { description });
+    },
   });
 
+  const descendantIds = useMemo(() => getAllDescendantIds(children), [children]);
+
+  const checkboxState = useMemo(() => {
+    // For leaf nodes (no children), state is simple: checked or not.
+    if (!node.hasChildren) {
+      return selectedIds.has(node.id);
+    }
+    // For parent nodes, the state depends on its children.
+    // If children are not loaded yet, we can't be certain.
+    // We can check if any descendant we know of is selected.
+    if (!children) {
+        const isSelfSelected = selectedIds.has(node.id);
+        // A simple check: if the parent is selected but we don't know about children, it's indeterminate.
+        // If not selected, it's false. This is a best-effort for collapsed nodes.
+        return isSelfSelected ? 'indeterminate' : false;
+    }
+    
+    // Children are loaded, so we can be accurate.
+    const childIds = children.map(c => c.id);
+    const selectedChildrenCount = childIds.filter(id => selectedIds.has(id)).length;
+
+    if (selectedChildrenCount === 0) {
+        // If no children are selected, the parent is only checked if it was selected independently.
+        return selectedIds.has(node.id) ? 'indeterminate' : false;
+    }
+    if (selectedChildrenCount === childIds.length) {
+        // If ALL children are selected, the parent should appear fully checked.
+        return true;
+    }
+    // If SOME children are selected, the parent is indeterminate.
+    return 'indeterminate';
+  }, [selectedIds, node.id, node.hasChildren, children]);
+
+  const handleCheckboxClick = () => {
+    const allRelatedIds = [node.id, ...descendantIds];
+    // If it's currently checked, the action is to remove. Otherwise, add.
+    const action = checkboxState === true ? 'remove' : 'add';
+    onToggleSelection(allRelatedIds, action);
+  };
+  
   const status = statusConfig[node.status] || { text: 'Unknown', className: 'bg-gray-200' };
 
   return (
     <>
-        <div className="flex items-center hover:bg-muted/50 rounded-md py-1 group">
-            <div style={{ paddingLeft: `${level * 1.5}rem` }} className="flex items-center flex-1 min-w-0">
-                {/* --- FIX: UPDATE EXPANDER LOGIC --- */}
+        <div className={cn("flex items-center hover:bg-muted/50 rounded-md py-1 group", checkboxState !== false && isManageMode && "bg-accent/60")}>
+            <div style={{ paddingLeft: `${level * 1.5}rem` }} className="flex items-center flex-1 min-w-0 pl-4">
+                {isManageMode && (
+                    <Checkbox
+                        checked={checkboxState}
+                        onCheckedChange={handleCheckboxClick}
+                        aria-label={`Select row ${node.title}`}
+                        className="mr-4"
+                    />
+                )}
                 {childrenLoading ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : node.hasChildren ? (
@@ -101,7 +158,7 @@ export const ContentIndexNode = ({ node, level }: ContentIndexNodeProps) => {
                         onClick={() => setIsExpanded(!isExpanded)}
                     />
                 ) : (
-                    <span className="w-6 mr-2" />
+                    <span className="inline-block w-4 mr-2" />
                 )}
                 <span className="truncate font-medium flex-1 pr-4">{node.title}</span>
             </div>
@@ -112,7 +169,7 @@ export const ContentIndexNode = ({ node, level }: ContentIndexNodeProps) => {
                 <span className="w-32 text-sm text-muted-foreground hidden lg:block">{formatRelativeTime(node.updatedAt)}</span>
                 
                 <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
+                     <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity">
                             <MoreVertical className="h-4 w-4" />
                         </Button>
@@ -160,22 +217,28 @@ export const ContentIndexNode = ({ node, level }: ContentIndexNodeProps) => {
             </div>
         </div>
 
-        {/* --- FIX: UPDATE CHILDREN RENDERING LOGIC --- */}
         {isExpanded && (
             <div>
                 {childrenLoading && <div className="pl-8 py-2"><Skeleton className="h-6 w-3/4" /></div>}
                 {children?.map(childNode => (
-                    <ContentIndexNode key={childNode.id} node={childNode} level={level + 1} />
+                    <ContentIndexNode
+                        key={childNode.id}
+                        node={childNode}
+                        level={level + 1}
+                        onToggleSelection={onToggleSelection}
+                        selectedIds={selectedIds}
+                        isManageMode={isManageMode}
+                    />
                 ))}
             </div>
         )}
 
         <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-            <AlertDialogContent>
+             <AlertDialogContent>
                 <AlertDialogHeader>
                     <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                     <AlertDialogDescription>
-                        This action will move the page "{node.title}" and all its children to the trash in Confluence. It will also delete its submission record. This is a destructive action.
+                        This action will attempt to delete the page "{node.title}". This will fail if the page has children. This is a destructive action.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

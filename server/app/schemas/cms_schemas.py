@@ -70,3 +70,6 @@ class PageDetailResponse(BaseModel):
     content: str
     parent_id: Optional[str] = None
     tags: List[str] = []
+
+class BulkDeletePayload(BaseModel):
+    page_ids: List[str]
