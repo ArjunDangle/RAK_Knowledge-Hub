@@ -31,7 +31,15 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     
     user = await db.user.find_unique(
         where={'username': token_data.username},
-        include={'groups': {'include': {'managedPage': True}}}
+        include={
+            'groupMemberships': {
+                'include': {
+                    'group': {
+                        'include': {'managedPage': True}
+                    }
+                }
+            }
+        }
     )
     if user is None:
         raise credentials_exception
@@ -60,7 +68,15 @@ async def get_current_user_optional(token: Optional[str] = Depends(oauth2_scheme
     
     user = await db.user.find_unique(
         where={'username': token_data.username},
-        include={'groups': {'include': {'managedPage': True}}}
+        include={
+            'groupMemberships': {
+                'include': {
+                    'group': {
+                        'include': {'managedPage': True}
+                    }
+                }
+            }
+        }
     )
     return user
 
@@ -113,7 +129,15 @@ async def register_user(user_data: auth_schemas.UserCreate):
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     user = await db.user.find_unique(
         where={'username': form_data.username},
-        include={'groups': {'include': {'managedPage': True}}}
+        include={
+            'groupMemberships': {
+                'include': {
+                    'group': {
+                        'include': {'managedPage': True}
+                    }
+                }
+            }
+        }
     )
     
     if not user or not security.verify_password(form_data.password, user.hashed_password):
@@ -131,12 +155,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     return {
         "access_token": access_token, 
         "token_type": "bearer",
-        "user": {
-            "username": user.username,
-            "name": user.name,
-            "role": user.role,
-            "groups": user.groups 
-        }
+        "user": user
     }
 
 @router.get("/users/me", response_model=auth_schemas.UserResponse)
@@ -150,7 +169,15 @@ async def get_all_users_admin():
     """Fetches all users for the admin management page."""
     users = await db.user.find_many(
         order={'createdAt': 'desc'},
-        include={'groups': {'include': {'managedPage': True}}}
+        include={
+            'groupMemberships': {
+                'include': {
+                    'group': {
+                        'include': {'managedPage': True}
+                    }
+                }
+            }
+        }
     )
     return users
 

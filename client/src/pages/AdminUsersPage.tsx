@@ -156,8 +156,12 @@ export default function AdminUsersPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
-                        {u.groups && u.groups.length > 0 ? (
-                            u.groups.map(g => <Badge key={g.id} variant="secondary" className="text-[10px]">{g.name}</Badge>)
+                        {u.groupMemberships && u.groupMemberships.length > 0 ? (
+                            u.groupMemberships.map(m => (
+                                <Badge key={m.groupId} variant="secondary" className="text-[10px]">
+                                    {m.group.name} {m.role === 'ADMIN' && '★'}
+                                </Badge>
+                            ))
                         ) : (
                             <span className="text-muted-foreground text-xs">-</span>
                         )}

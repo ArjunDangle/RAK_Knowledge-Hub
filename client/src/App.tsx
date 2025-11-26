@@ -121,14 +121,14 @@ const ProtectedRoute = () => {
 };
 
 const AdminRoute = () => {
-    const { isAuthenticated, isAdmin, isLoading } = useAuth();
+    const { isAuthenticated, isAdmin, isGroupAdmin, isLoading } = useAuth();
     if (isLoading) {
         return <LoadingSpinner />;
     }
     if (!isAuthenticated) {
         return <Navigate to="/login" replace />;
     }
-    return isAdmin ? <Outlet /> : <Navigate to="/" replace />;
+    return (isAdmin || isGroupAdmin) ? <Outlet /> : <Navigate to="/" replace />;
 };
 
 const App = () => (

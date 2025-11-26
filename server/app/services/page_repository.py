@@ -62,17 +62,17 @@ class PageRepository:
 
         user_with_groups = await self.db.user.find_unique(
             where={'id': user.id},
-            include={'groups': {'include': {'managedPage': True}}}
+            include={'groupMemberships': {'include': {'group': {'include': {'managedPage': True}}}}}
         )
 
-        if not user_with_groups or not user_with_groups.groups:
+        if not user_with_groups or not user_with_groups.groupMemberships:
             return set()
 
         # Get the initial DB IDs of the root pages managed by the user's groups
         root_managed_page_ids = [
-            group.managedPage.id 
-            for group in user_with_groups.groups 
-            if group.managedPage
+            membership.group.managedPage.id 
+            for membership in user_with_groups.groupMemberships 
+            if membership.group.managedPage
         ]
 
         if not root_managed_page_ids:

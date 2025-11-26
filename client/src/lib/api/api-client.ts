@@ -15,14 +15,20 @@ import {
   PageTreeNodeWithPermission,
 } from "../types/content";
 
-export interface UserGroup {
-  id: number;
-  name: string;
-  managedPage: {
+export type GroupRole = 'MEMBER' | 'ADMIN';
+
+export interface GroupMembership {
+  groupId: number;
+  role: GroupRole;
+  group: {
     id: number;
-    confluenceId: string;
-    title: string;
-  } | null;
+    name: string;
+    managedPage: {
+      id: number;
+      confluenceId: string;
+      title: string;
+    } | null;
+  };
 }
 
 export interface User {
@@ -30,7 +36,7 @@ export interface User {
   username: string;
   name: string;
   role: "MEMBER" | "ADMIN";
-  groups: UserGroup[]; // <-- ADDED THIS REQUIRED PROPERTY
+  groupMemberships: GroupMembership[];
 }
 
 export interface LoginResponse {
@@ -121,7 +127,7 @@ export interface PermissionGroup {
   id: number;
   name: string;
   managedPageConfluenceId: string | null;
-  members: User[];
+  members: User[]; 
 }
 
 export interface GroupUpdatePayload {
@@ -514,5 +520,16 @@ export async function adminResetPassword(userId: number, password: string): Prom
   return apiFetch(`/auth/users/${userId}/reset-password`, {
     method: "POST",
     body: JSON.stringify({ password }),
+  });
+}
+
+export async function updateGroupMemberRole(
+  groupId: number,
+  userId: number,
+  role: "ADMIN" | "MEMBER"
+): Promise<void> {
+  return apiFetch(`/api/groups/${groupId}/members/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ role }),
   });
 }

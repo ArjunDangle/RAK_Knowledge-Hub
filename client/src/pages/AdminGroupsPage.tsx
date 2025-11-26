@@ -6,12 +6,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription, DialogClose } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { MultiSelect, MultiSelectOption } from "@/components/ui/multi-select";
 import { TreeSelect } from "@/components/cms/TreeSelect";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { PlusCircle, Trash2, Edit, Loader2 } from "lucide-react";
+import { PlusCircle, Trash2, Edit, Loader2, Shield, User } from "lucide-react";
 import {
   getAllGroups,
   createGroup,
@@ -19,9 +29,11 @@ import {
   updateGroup,
   addMemberToGroup,
   removeMemberFromGroup,
+  updateGroupMemberRole,
   getAllUsers,
   PermissionGroup,
   GroupUpdatePayload,
+  User as ApiUser
 } from "@/lib/api/api-client";
 
 // Helper component for the Edit/Manage Members Dialog
@@ -30,104 +42,229 @@ function ManageGroupDialog({ group, trigger }: { group: PermissionGroup; trigger
   const [isOpen, setIsOpen] = useState(false);
   const [name, setName] = useState(group.name);
   const [managedPageConfluenceId, setManagedPageConfluenceId] = useState<string | undefined>(group.managedPageConfluenceId || undefined);
-  const [selectedMembers, setSelectedMembers] = useState<string[]>(group.members.map(m => String(m.id)));
-
+  
+  // Users not yet in the group (for the Add dropdown)
+  const existingMemberIds = new Set(group.members.map(m => m.id));
   const { data: allUsers } = useQuery({ queryKey: ['allUsers'], queryFn: getAllUsers });
-
+  
   const userOptions: MultiSelectOption[] = allUsers
     ? allUsers
-        .filter(user => user.role !== 'ADMIN')
+        .filter(user => !existingMemberIds.has(user.id) && user.role !== 'ADMIN')
         .map(u => ({ value: String(u.id), label: u.name }))
     : [];
+
+  // State for the "Add New" dropdown
+  const [usersToAdd, setUsersToAdd] = useState<string[]>([]);
 
   const updateMutation = useMutation({
     mutationFn: (payload: GroupUpdatePayload) => updateGroup(group.id, payload),
     onSuccess: () => {
-      toast.success("Group details updated successfully.");
+      toast.success("Group details updated.");
       queryClient.invalidateQueries({ queryKey: ['allGroups'] });
-      setIsOpen(false); // Close dialog on successful save
     },
-    onError: (e: Error) => toast.error("Update failed", { description: e.message }),
   });
 
-  const memberMutation = useMutation({
-    mutationFn: ({ userId, action }: { userId: number; action: 'add' | 'remove' }) => {
-      return action === 'add' ? addMemberToGroup(group.id, userId) : removeMemberFromGroup(group.id, userId);
-    },
+  const addMemberMutation = useMutation({
+    mutationFn: (userId: number) => addMemberToGroup(group.id, userId),
     onSuccess: () => {
-      toast.success("Members updated.");
-      // THIS IS THE FIX (PART 1): We NO LONGER invalidate the query here, preventing the re-render.
+        toast.success("Member added.");
+        setUsersToAdd([]); // Clear selection
+        queryClient.invalidateQueries({ queryKey: ['allGroups'] });
+    }
+  });
+
+  const removeMemberMutation = useMutation({
+    mutationFn: (userId: number) => removeMemberFromGroup(group.id, userId),
+    onSuccess: () => {
+        toast.success("Member removed.");
+        queryClient.invalidateQueries({ queryKey: ['allGroups'] });
+    }
+  });
+
+  const roleMutation = useMutation({
+    mutationFn: ({ userId, role }: { userId: number, role: "ADMIN" | "MEMBER" }) => 
+        updateGroupMemberRole(group.id, userId, role),
+    onSuccess: () => {
+        toast.success("Role updated.");
+        queryClient.invalidateQueries({ queryKey: ['allGroups'] });
     },
-    onError: (e: Error) => toast.error("Failed to update members", { description: e.message }),
+    onError: () => toast.error("Failed to update role.")
   });
 
   const handleSaveChanges = () => {
-    if (!name.trim()) {
-      toast.warning("Group name is required.");
-      return;
-    }
+    if (!name.trim()) return;
     updateMutation.mutate({ name: name.trim(), managedPageConfluenceId: managedPageConfluenceId || null });
-  };
-  
-  const handleMemberChange = (newSelectedIds: string[]) => {
-    const currentIds = new Set(selectedMembers);
-    const newIds = new Set(newSelectedIds);
-    
-    const added = newSelectedIds.filter(id => !currentIds.has(id));
-    const removed = selectedMembers.filter(id => !newIds.has(id));
-
-    if (added.length > 0) memberMutation.mutate({ userId: parseInt(added[0]), action: 'add' });
-    if (removed.length > 0) memberMutation.mutate({ userId: parseInt(removed[0]), action: 'remove' });
-
-    setSelectedMembers(newSelectedIds);
+    setIsOpen(false);
   };
 
-  const handleOpenChange = (open: boolean) => {
-    setIsOpen(open);
-    if (!open) {
-      // THIS IS THE FIX (PART 2): When the dialog closes, refresh the data in the main table.
-      queryClient.invalidateQueries({ queryKey: ['allGroups'] });
-    }
+  const handleAddUsers = () => {
+      usersToAdd.forEach(id => addMemberMutation.mutate(Number(id)));
+  };
+
+  // We need to access the 'memberships' to get the role, but 'group.members' is just a list of Users.
+  // We need to find the specific membership entry for this group from the user's data.
+  // UPDATED: Uses ApiUser type to fix 'any' errors
+  const getMemberRole = (user: ApiUser) => {
+      const membership = user.groupMemberships?.find((m) => m.groupId === group.id);
+      return membership?.role || "MEMBER";
   };
 
   useEffect(() => {
     if (isOpen) {
       setName(group.name);
       setManagedPageConfluenceId(group.managedPageConfluenceId || undefined);
-      setSelectedMembers(group.members.map(m => String(m.id)));
+      setUsersToAdd([]);
     }
   }, [isOpen, group]);
-  
+
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Manage Group: {group.name}</DialogTitle>
-          {/* THIS IS THE FIX: Added more descriptive text */}
           <DialogDescription>
-            Assign a root page to grant members edit access to that page and all of its children/descendant pages.
+            Configure settings and manage member roles for this group.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div>
-            <label className="text-sm font-medium">Group Name</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
+        
+        <div className="space-y-6 py-4">
+          {/* General Settings */}
+          <div className="space-y-3 p-4 border rounded-md bg-muted/20">
+            <h3 className="font-semibold text-sm">General Settings</h3>
+            <div className="grid gap-2">
+                <label className="text-xs font-medium">Group Name</label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+                <label className="text-xs font-medium">Managed Page (Permission Root)</label>
+                <TreeSelect value={managedPageConfluenceId} onChange={setManagedPageConfluenceId} />
+            </div>
+            <div className="flex justify-end">
+                <Button size="sm" onClick={handleSaveChanges} disabled={updateMutation.isPending}>Save Settings</Button>
+            </div>
           </div>
-          <div>
-            <label className="text-sm font-medium">Managed Page (Permission Root)</label>
-            <TreeSelect value={managedPageConfluenceId} onChange={setManagedPageConfluenceId} />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Members</label>
-            <MultiSelect options={userOptions} selected={selectedMembers} onChange={handleMemberChange} />
+
+          {/* Member Management */}
+          <div className="space-y-3">
+            <h3 className="font-semibold text-sm">Membership</h3>
+            
+            {/* Add New */}
+            <div className="flex gap-2 items-end">
+                <div className="flex-1">
+                    <label className="text-xs font-medium mb-1 block">Add New Members</label>
+                    <MultiSelect 
+                        options={userOptions} 
+                        selected={usersToAdd} 
+                        onChange={setUsersToAdd} 
+                        placeholder="Select users to add..."
+                    />
+                </div>
+                <Button size="sm" onClick={handleAddUsers} disabled={usersToAdd.length === 0}>
+                    <PlusCircle className="mr-2 h-4 w-4" /> Add
+                </Button>
+            </div>
+
+            {/* Current Members List */}
+            <div className="border rounded-md mt-4">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Role</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {group.members.length === 0 ? (
+                            <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">No members yet.</TableCell></TableRow>
+                        ) : (
+                            group.members.map(member => {
+                                const role = getMemberRole(member);
+                                return (
+                                    <TableRow key={member.id}>
+                                        <TableCell>{member.name}</TableCell>
+                                        <TableCell>
+                                            <Badge variant={role === 'ADMIN' ? 'default' : 'secondary'}>
+                                                {role}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-right space-x-2">
+                                            {role === 'MEMBER' ? (
+                                                <Button variant="ghost" size="sm" onClick={() => roleMutation.mutate({ userId: member.id, role: 'ADMIN' })}>
+                                                    <Shield className="h-3 w-3 mr-1" /> Promote
+                                                </Button>
+                                            ) : (
+                                                <Button variant="ghost" size="sm" onClick={() => roleMutation.mutate({ userId: member.id, role: 'MEMBER' })}>
+                                                    <User className="h-3 w-3 mr-1" /> Demote
+                                                </Button>
+                                            )}
+                                            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => removeMemberMutation.mutate(member.id)}>
+                                                <Trash2 className="h-3 w-3" />
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })
+                        )}
+                    </TableBody>
+                </Table>
+            </div>
           </div>
         </div>
         <DialogFooter>
           <DialogClose asChild><Button variant="outline">Close</Button></DialogClose>
-          <Button onClick={handleSaveChanges} disabled={updateMutation.isPending}>
-            {updateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Save Changes
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// New Component for creating groups via a Dialog
+function CreateGroupDialog({ onCreate, isPending }: { onCreate: (name: string) => void, isPending: boolean }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [name, setName] = useState("");
+
+  const handleSubmit = () => {
+    if (name.trim()) {
+      onCreate(name.trim());
+      setIsOpen(false);
+      setName("");
+    } else {
+      toast.warning("Please enter a name for the group.");
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>
+        {/* Modified button: Standard size, margin top to sit below table */}
+        <Button className="mt-4">
+          <PlusCircle className="mr-2 h-4 w-4" />
+          Create Group
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Create New Group</DialogTitle>
+          <DialogDescription>
+            Enter a unique name for the new permission group.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="py-4">
+          <Input
+            placeholder="Group Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+            autoFocus
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setIsOpen(false)}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={isPending}>
+            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Create
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -138,7 +275,7 @@ function ManageGroupDialog({ group, trigger }: { group: PermissionGroup; trigger
 // Main Page Component
 export default function AdminGroupsPage() {
   const queryClient = useQueryClient();
-  const [newGroupName, setNewGroupName] = useState("");
+  const [groupToDelete, setGroupToDelete] = useState<PermissionGroup | null>(null);
 
   const { data: groups, isLoading } = useQuery({
     queryKey: ['allGroups'],
@@ -150,7 +287,6 @@ export default function AdminGroupsPage() {
     onSuccess: (data) => {
       toast.success(`Group "${data.name}" created.`);
       queryClient.invalidateQueries({ queryKey: ['allGroups'] });
-      setNewGroupName("");
     },
     onError: (e: Error) => toast.error("Failed to create group", { description: e.message }),
   });
@@ -160,17 +296,10 @@ export default function AdminGroupsPage() {
     onSuccess: () => {
       toast.success("Group deleted.");
       queryClient.invalidateQueries({ queryKey: ['allGroups'] });
+      setGroupToDelete(null);
     },
     onError: (e: Error) => toast.error("Failed to delete group", { description: e.message }),
   });
-
-  const handleCreateGroup = () => {
-    if (newGroupName.trim()) {
-      createMutation.mutate(newGroupName.trim());
-    } else {
-      toast.warning("Please enter a name for the group.");
-    }
-  };
   
   const breadcrumbs = [{ label: "Admin" }, { label: "Group Permissions" }];
 
@@ -182,19 +311,6 @@ export default function AdminGroupsPage() {
           <p className="text-muted-foreground">
             Create groups and assign them to a page category to grant edit permissions to all nested content.
           </p>
-        </div>
-
-        <div className="mb-6 flex gap-2">
-          <Input 
-            placeholder="New group name..." 
-            value={newGroupName} 
-            onChange={(e) => setNewGroupName(e.target.value)}
-            className="max-w-xs"
-          />
-          <Button onClick={handleCreateGroup} disabled={createMutation.isPending}>
-            {createMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
-            Create Group
-          </Button>
         </div>
 
         <div className="border rounded-lg">
@@ -221,9 +337,21 @@ export default function AdminGroupsPage() {
                     <TableCell className="font-medium">{group.name}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
-                        {group.members.map(member => (
-                          <Badge key={member.id} variant="secondary">{member.name}</Badge>
-                        ))}
+                        {group.members.map(member => {
+                          const isGroupAdmin = member.groupMemberships?.some(
+                            m => m.groupId === group.id && m.role === 'ADMIN'
+                          );
+                          
+                          return (
+                            <Badge 
+                              key={member.id} 
+                              variant={isGroupAdmin ? "default" : "secondary"}
+                            >
+                              {member.name}
+                              {isGroupAdmin && <Shield className="ml-1 h-3 w-3" />}
+                            </Badge>
+                          );
+                        })}
                       </div>
                     </TableCell>
                     <TableCell className="text-right space-x-2">
@@ -231,7 +359,7 @@ export default function AdminGroupsPage() {
                         group={group} 
                         trigger={<Button variant="outline" size="sm"><Edit className="h-4 w-4 mr-2" />Manage</Button>} 
                       />
-                      <Button variant="destructive" size="sm" onClick={() => deleteMutation.mutate(group.id)} disabled={deleteMutation.isPending}>
+                      <Button variant="destructive" size="sm" onClick={() => setGroupToDelete(group)} disabled={deleteMutation.isPending}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </TableCell>
@@ -245,7 +373,31 @@ export default function AdminGroupsPage() {
             </TableBody>
           </Table>
         </div>
+
+        {/* Create Group Dialog - Placed here to be at the end of the table flow */}
+        <CreateGroupDialog onCreate={(name) => createMutation.mutate(name)} isPending={createMutation.isPending} />
       </div>
+
+      <AlertDialog open={!!groupToDelete} onOpenChange={(open) => !open && setGroupToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the group <strong>"{groupToDelete?.name}"</strong>. 
+              All members will lose the permissions associated with this group.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => groupToDelete && deleteMutation.mutate(groupToDelete.id)}
+            >
+              {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Delete Group"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </KnowledgeLayout>
   );
 }

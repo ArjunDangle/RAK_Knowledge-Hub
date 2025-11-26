@@ -23,12 +23,12 @@ class PermissionService:
         # 2. Fetch the user's group memberships
         user_with_groups = await self.db.user.find_unique(
             where={'id': user.id},
-            include={'groups': True}
+            include={'groupMemberships': {'include': {'group': True}}}
         )
-        if not user_with_groups or not user_with_groups.groups:
+        if not user_with_groups or not user_with_groups.groupMemberships:
             return False
 
-        user_group_ids = {group.id for group in user_with_groups.groups}
+        user_group_ids = {m.group.id for m in user_with_groups.groupMemberships}
 
         # 3. Get the page being edited
         page_to_edit = await self.page_repo.get_page_by_id(page_confluence_id)
@@ -51,3 +51,29 @@ class PermissionService:
             return True
         else:
             return False
+    
+    async def user_is_group_admin_of_page(self, page_confluence_id: str, user_id: int) -> bool:
+        """
+        Checks if the user is a Group Admin of the group managing this specific page.
+        """
+        # 1. Get the page being acted upon
+        page = await self.page_repo.get_page_by_id(page_confluence_id)
+        if not page:
+            return False
+            
+        # 2. Get the page's ancestor chain to find the root managed page
+        ancestor_db_ids = await self.page_repo.get_ancestor_db_ids(page)
+        page_and_ancestor_db_ids = ancestor_db_ids + [page.id]
+
+        # 3. Check if the user has an 'ADMIN' role in a group managing this hierarchy
+        membership = await self.db.groupmember.find_first(
+            where={
+                'userId': user_id,
+                'role': 'ADMIN', # <--- Crucial check
+                'group': {
+                    'managedPageId': {'in': page_and_ancestor_db_ids}
+                }
+            }
+        )
+        
+        return membership is not None

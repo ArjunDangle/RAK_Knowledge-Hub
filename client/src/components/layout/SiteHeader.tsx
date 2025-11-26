@@ -155,12 +155,9 @@ export function SiteHeader({
                   )}
 
                   {/* Admin Section - Cleaner layout */}
-                  {isAdmin && (
+                  {(isAdmin || (user?.groupMemberships?.some(m => m.role === 'ADMIN'))) && (
                     <>
-                      {/* Single separator between personal and admin items */}
                       <DropdownMenuSeparator />
-                      
-                      {/* Primary Actions */}
                       <DropdownMenuItem asChild>
                         <Link to="/admin/dashboard">
                           <LayoutDashboard className="mr-2 h-4 w-4" />

@@ -8,6 +8,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isAdmin: boolean;
   isLoading: boolean;
+  isGroupAdmin: boolean;
   login: (data: LoginResponse) => void;
   logout: (message?: string) => void;
 }
@@ -59,11 +60,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     window.location.href = '/login';
   };
 
+  const isGroupAdmin = user?.groupMemberships?.some(m => m.role === 'ADMIN') || false;
+
   const value = {
     token,
     user,
     isAuthenticated: !!token,
     isAdmin: user?.role === 'ADMIN',
+    isGroupAdmin,
     isLoading,
     login,
     logout,

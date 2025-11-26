@@ -549,9 +549,20 @@ class ConfluenceService:
         # Use await here because the transform method is now async
         return await self._transform_raw_page_to_article(page_data, is_admin_view=True)
 
-    async def get_pending_submissions(self) -> List[Article]:
-        pending_submissions = await self.submission_repo.get_pending_submissions()
-        
+    async def get_pending_submissions(self, current_user: UserResponse = None) -> List[Article]:
+        # 1. If Global Admin, return everything
+        if not current_user or current_user.role == "ADMIN":
+            pending_submissions = await self.submission_repo.get_pending_submissions()
+        else:
+            # 2. If Group Admin, get allowed page IDs
+            # We reuse the PageRepository logic we fixed in Stage 2
+            allowed_ids_set = await self.page_repo.get_all_managed_and_descendant_ids(current_user)
+            
+            if not allowed_ids_set:
+                return []
+                
+            pending_submissions = await self.submission_repo.get_pending_submissions_for_pages(list(allowed_ids_set))
+
         return [
             Article.model_validate({
                 "id": sub.confluencePageId,
@@ -559,10 +570,8 @@ class ConfluenceService:
                 "author": sub.author.name if sub.author else "Unknown",
                 "updatedAt": sub.updatedAt.isoformat(),
                 "slug": self._slugify(sub.title),
-                # Use the real description from the associated page record
                 "excerpt": sub.page.description if sub.page else "Description not available.",
                 "description": sub.page.description if sub.page else "Description not available.",
-                # These fields are placeholders as they aren't needed for the list view
                 "html": "", "tags": [], "group": "unknown", "subsection": "unknown",
                 "views": 0, "readMinutes": 1
             }) for sub in pending_submissions

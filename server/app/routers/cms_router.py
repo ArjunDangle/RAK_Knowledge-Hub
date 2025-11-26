@@ -186,19 +186,36 @@ async def get_article_preview_endpoint(page_id: str, current_user: auth_schemas.
 @router.get(
     "/admin/pending", 
     response_model=List[content_schemas.Article], 
-    dependencies=[Depends(get_current_admin_user)]
+    # CHANGED: Allow standard users (Group Admins need access)
+    dependencies=[Depends(get_current_user)]
 )
-async def get_pages_pending_review():
-    """Fetches all submissions pending review."""
-    return await confluence_service.get_pending_submissions()
+async def get_pages_pending_review(current_user: auth_schemas.UserResponse = Depends(get_current_user)):
+    """Fetches submissions pending review visible to the current user."""
+    return await confluence_service.get_pending_submissions(current_user)
 
 @router.post(
     "/admin/pages/{page_id}/approve", 
     status_code=status.HTTP_204_NO_CONTENT, 
-    dependencies=[Depends(get_current_admin_user)]
+    # CHANGED: Allow any authenticated user to hit the endpoint, we check permissions inside
+    dependencies=[Depends(get_current_user)] 
 )
-async def approve_page_endpoint(page_id: str):
-    """Approves a page."""
+async def approve_page_endpoint(
+    page_id: str,
+    current_user: auth_schemas.UserResponse = Depends(get_current_user)
+):
+    """Approves a page (Global Admin OR Group Admin)."""
+    
+    # 1. Check Global Admin
+    is_global_admin = current_user.role == "ADMIN"
+    
+    # 2. Check Group Admin
+    is_group_admin = False
+    if not is_global_admin:
+        is_group_admin = await permission_service.user_is_group_admin_of_page(page_id, current_user.id)
+    
+    if not is_global_admin and not is_group_admin:
+        raise HTTPException(status_code=403, detail="You do not have permission to approve this page.")
+
     success = await confluence_service.approve_page(page_id)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to approve page.")
@@ -207,10 +224,24 @@ async def approve_page_endpoint(page_id: str):
 @router.post(
     "/admin/pages/{page_id}/reject", 
     status_code=status.HTTP_204_NO_CONTENT, 
-    dependencies=[Depends(get_current_admin_user)]
+    # CHANGED: Allow any authenticated user to hit the endpoint, we check permissions inside
+    dependencies=[Depends(get_current_user)]
 )
-async def reject_page_endpoint(page_id: str, payload: cms_schemas.PageReject):
-    """Rejects a page."""
+async def reject_page_endpoint(
+    page_id: str, 
+    payload: cms_schemas.PageReject,
+    current_user: auth_schemas.UserResponse = Depends(get_current_user)
+):
+    """Rejects a page (Global Admin OR Group Admin)."""
+    
+    is_global_admin = current_user.role == "ADMIN"
+    is_group_admin = False
+    if not is_global_admin:
+        is_group_admin = await permission_service.user_is_group_admin_of_page(page_id, current_user.id)
+    
+    if not is_global_admin and not is_group_admin:
+        raise HTTPException(status_code=403, detail="You do not have permission to reject this page.")
+
     success = await confluence_service.reject_page(page_id, payload.comment)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to reject page.")
