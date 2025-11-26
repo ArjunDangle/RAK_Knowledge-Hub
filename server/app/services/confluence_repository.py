@@ -1,7 +1,7 @@
-# server/app/services/confluence_repository.py
 import re
 import os
 import mimetypes
+import requests
 from typing import List, Dict, Optional, Any
 from atlassian import Confluence
 from fastapi import HTTPException, status
@@ -21,20 +21,6 @@ ROOT_PAGE_CONFIG = [
         "description": "Comprehensive knowledge base and documentation",
         "icon": "BookOpen"
     },
-    # {
-    #     "confluence_title": "Department",
-    #     "slug": "departments",
-    #     "display_title": "Departments",
-    #     "description": "Resources organized by team functions",
-    #     "icon": "Building2"
-    # },
-    # {
-    #     "confluence_title": "Tools",
-    #     "slug": "tools",
-    #     "display_title": "Tools",
-    #     "description": "Development tools, utilities, and platform guides",
-    #     "icon": "Wrench"
-    # }
 ]
 
 class ConfluenceRepository:
@@ -59,7 +45,6 @@ class ConfluenceRepository:
         space_key = self.settings.confluence_space_key
         discovered_ids = {}
         
-        # --- MODIFIED LOGIC ---
         for config in ROOT_PAGE_CONFIG:
             title = config["confluence_title"]
             slug = config["slug"]
@@ -116,8 +101,6 @@ class ConfluenceRepository:
     def get_child_pages(self, page_id: str) -> List[Dict[str, Any]]:
         """Fetches the immediate children of a page."""
         try:
-            # The atlassian-python-api's get_child_pages method does not take a limit argument.
-            # It returns a generator that we convert to a list.
             return list(self.confluence.get_child_pages(page_id))
         except Exception as e:
             print(f"Error fetching children for page {page_id}: {e}")
@@ -126,9 +109,7 @@ class ConfluenceRepository:
     def check_has_children(self, page_id: str) -> bool:
         """Checks if a page has any children."""
         try:
-            # Get the generator for child pages.
             child_pages_generator = self.confluence.get_child_pages(page_id)
-            # Try to get the first item from the generator. If it exists, the page has children.
             first_child = next(child_pages_generator, None)
             return first_child is not None
         except Exception as e:
@@ -158,7 +139,7 @@ class ConfluenceRepository:
             updated_page = self.confluence.update_page(
                 page_id=page_id,
                 title=title,
-                body=body, # The content is passed via this parameter.
+                body=body,
                 parent_id=parent_id,
                 version_comment=version_comment,
                 representation='storage'
@@ -241,6 +222,7 @@ class ConfluenceRepository:
     def get_attachment_data(self, page_id: str, file_name: str) -> Optional[StreamingResponse]:
         """Gets the raw data for a single attachment to stream back to the client."""
         try:
+            # 1. Find the attachment metadata to get its ID
             attachments = self.confluence.get_attachments_from_content(page_id=page_id, limit=200)
             target_attachment = next((att for att in attachments['results'] if att['title'] == file_name), None)
             
@@ -248,9 +230,38 @@ class ConfluenceRepository:
                 print(f"Attachment '{file_name}' not found on page {page_id}")
                 return None
             
-            download_link = self.settings.confluence_url + target_attachment['_links']['download']
+            attachment_id = target_attachment['id']
+            base_url = self.settings.confluence_url.rstrip('/')
             
-            response = self.confluence.session.get(download_link, stream=True)
+            # 2. Construct the official REST API Download URL
+            # This endpoint is more reliable for API usage than the web UI download links
+            download_link = f"{base_url}/rest/api/content/{page_id}/child/attachment/{attachment_id}/download"
+            
+            # 3. Request the file using requests directly with explicit auth and headers
+            # 'X-Atlassian-Token: no-check' is often required for attachment operations
+            response = requests.get(
+                download_link, 
+                stream=True,
+                auth=(self.settings.confluence_username, self.settings.confluence_api_token),
+                headers={"X-Atlassian-Token": "no-check"}
+            )
+            
+            # 4. Fallback: If REST API fails (e.g., 404), try the web link from metadata
+            if response.status_code == 404:
+                print("REST API download 404, trying web link fallback...")
+                download_path = target_attachment['_links']['download']
+                clean_path = download_path.lstrip('/')
+                if base_url.endswith('/wiki') and clean_path.startswith('wiki/'):
+                    clean_path = clean_path[5:]
+                
+                web_download_link = f"{base_url}/{clean_path}"
+                response = requests.get(
+                    web_download_link,
+                    stream=True,
+                    auth=(self.settings.confluence_username, self.settings.confluence_api_token),
+                    headers={"X-Atlassian-Token": "no-check"}
+                )
+
             response.raise_for_status()
             
             mimetype, _ = mimetypes.guess_type(file_name)
@@ -259,5 +270,6 @@ class ConfluenceRepository:
             return StreamingResponse(response.iter_content(chunk_size=8192), media_type=media_type)
         except Exception as e:
             print(f"Error fetching attachment '{file_name}' for page ID {page_id}: {e}")
+            if 'download_link' in locals():
+                print(f"Attempted download URL: {download_link}")
             raise HTTPException(status_code=503, detail="Could not retrieve attachment.")
-
