@@ -1,6 +1,6 @@
 // client/src/components/cms/ContentIndexNode.tsx
 import { useState, useMemo } from 'react';
-import { ChevronRight, Edit, ExternalLink, Send, Check, X, MoreVertical, Trash2, Loader2 } from 'lucide-react';
+import { ChevronRight, ExternalLink, Send, Check, X, MoreVertical, Trash2, Loader2 } from 'lucide-react';
 import { ContentNode, approveArticle, rejectArticle, deletePage, getContentIndex } from '@/lib/api/api-client';
 import { cn } from '@/lib/utils';
 import { formatRelativeTime } from '@/lib/utils/date';
@@ -99,39 +99,28 @@ export const ContentIndexNode = ({ node, level, onToggleSelection, selectedIds, 
   const descendantIds = useMemo(() => getAllDescendantIds(children), [children]);
 
   const checkboxState = useMemo(() => {
-    // For leaf nodes (no children), state is simple: checked or not.
     if (!node.hasChildren) {
       return selectedIds.has(node.id);
     }
-    // For parent nodes, the state depends on its children.
-    // If children are not loaded yet, we can't be certain.
-    // We can check if any descendant we know of is selected.
     if (!children) {
         const isSelfSelected = selectedIds.has(node.id);
-        // A simple check: if the parent is selected but we don't know about children, it's indeterminate.
-        // If not selected, it's false. This is a best-effort for collapsed nodes.
         return isSelfSelected ? 'indeterminate' : false;
     }
     
-    // Children are loaded, so we can be accurate.
     const childIds = children.map(c => c.id);
     const selectedChildrenCount = childIds.filter(id => selectedIds.has(id)).length;
 
     if (selectedChildrenCount === 0) {
-        // If no children are selected, the parent is only checked if it was selected independently.
         return selectedIds.has(node.id) ? 'indeterminate' : false;
     }
     if (selectedChildrenCount === childIds.length) {
-        // If ALL children are selected, the parent should appear fully checked.
         return true;
     }
-    // If SOME children are selected, the parent is indeterminate.
     return 'indeterminate';
   }, [selectedIds, node.id, node.hasChildren, children]);
 
   const handleCheckboxClick = () => {
     const allRelatedIds = [node.id, ...descendantIds];
-    // If it's currently checked, the action is to remove. Otherwise, add.
     const action = checkboxState === true ? 'remove' : 'add';
     onToggleSelection(allRelatedIds, action);
   };
@@ -176,11 +165,8 @@ export const ContentIndexNode = ({ node, level, onToggleSelection, selectedIds, 
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                            <a href={node.confluenceUrl} target="_blank" rel="noopener noreferrer">
-                                <Edit className="mr-2 h-4 w-4" /> Edit in Confluence
-                            </a>
-                        </DropdownMenuItem>
+                        {/* REMOVED: Edit in Confluence option */}
+                        
                         {node.status === 'PUBLISHED' && (
                              <DropdownMenuItem asChild>
                                 <a href={`/article/${node.id}`} target="_blank" rel="noopener noreferrer">
@@ -204,6 +190,7 @@ export const ContentIndexNode = ({ node, level, onToggleSelection, selectedIds, 
                             </DropdownMenuItem>
                         )}
                         <DropdownMenuSeparator />
+                        
                         {node.canManage && (
                             <DropdownMenuItem 
                                 className="text-destructive focus:text-destructive focus:bg-destructive/10"
