@@ -113,6 +113,7 @@ export interface ContentNode {
   confluenceUrl: string;
   children: ContentNode[];
   hasChildren: boolean;
+  canManage: boolean;
 }
 
 export interface Notification {

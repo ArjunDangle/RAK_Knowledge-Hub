@@ -26,13 +26,16 @@ permission_service = PermissionService()
 @router.get(
     "/admin/content-index",
     response_model=List[ContentNode],
-    dependencies=[Depends(get_current_admin_user)]
+    dependencies=[Depends(get_current_user)]
 )
-async def get_content_index(parent_id: Optional[str] = Query(None)):
+async def get_content_index(
+    parent_id: Optional[str] = Query(None),
+    current_user: auth_schemas.UserResponse = Depends(get_current_user) # Inject user
+):
     """
-    Provides a hierarchical tree of content. If parent_id is provided, fetches children of that node.
+    Provides a hierarchical tree of content.
     """
-    content_nodes = await confluence_service.get_content_index_nodes(parent_id)
+    content_nodes = await confluence_service.get_content_index_nodes(parent_id, current_user)
     return content_nodes
 
 @router.post(
@@ -79,11 +82,6 @@ async def get_page_tree_structure(parent_id: Optional[str] = Query(None)):
     response_model=List[PageTreeNodeWithPermission],
     dependencies=[Depends(get_current_user)]
 )
-@router.get(
-    "/pages/tree-with-permissions",
-    response_model=List[PageTreeNodeWithPermission],
-    dependencies=[Depends(get_current_user)]
-)
 async def get_page_tree_with_permissions_endpoint(
     parent_id: Optional[str] = Query(None),
     allowed_only: bool = Query(False),
@@ -117,13 +115,26 @@ async def create_page(
 @router.get(
     "/admin/edit-details/{page_id}",
     response_model=cms_schemas.PageDetailResponse,
-    dependencies=[Depends(get_current_admin_user)]
+    # CHANGED: Allow Group Admins to access edit details
+    dependencies=[Depends(get_current_user)]
 )
-async def get_page_details_for_edit_endpoint(page_id: str):
+async def get_page_details_for_edit_endpoint(
+    page_id: str,
+    current_user: auth_schemas.UserResponse = Depends(get_current_user)
+):
     """
     Fetches the combined data for a page from both the DB and Confluence,
     for populating the admin edit form.
     """
+    # Permission Check: Global Admin OR Group Admin
+    is_global_admin = current_user.role == "ADMIN"
+    is_group_admin = False
+    if not is_global_admin:
+        is_group_admin = await permission_service.user_is_group_admin_of_page(page_id, current_user.id)
+    
+    if not is_global_admin and not is_group_admin:
+        raise HTTPException(status_code=403, detail="You do not have permission to edit this page.")
+
     page_details = await confluence_service.get_page_details_for_edit(page_id)
     if not page_details:
         raise HTTPException(
@@ -166,15 +177,25 @@ async def update_page_endpoint(
 @router.get(
     "/admin/preview/{page_id}",
     response_model=content_schemas.Article,
-    # The dependency already ensures the user is an admin
+    # CHANGED: Allow Group Admins to preview
+    dependencies=[Depends(get_current_user)]
 )
-async def get_article_preview_endpoint(page_id: str, current_user: auth_schemas.UserResponse = Depends(get_current_admin_user)):
+async def get_article_preview_endpoint(page_id: str, current_user: auth_schemas.UserResponse = Depends(get_current_user)):
     """
     Fetches the full content of a pending article for an admin to preview,
     using the main hybrid fetcher to ensure data consistency.
     """
+    # Permission Check
+    is_global_admin = current_user.role == "ADMIN"
+    is_group_admin = False
+    if not is_global_admin:
+        is_group_admin = await permission_service.user_is_group_admin_of_page(page_id, current_user.id)
+    
+    # Note: get_article_by_id_hybrid also checks 'canEdit' logic, but explicit check here is safer for the admin route
+    if not is_global_admin and not is_group_admin:
+         raise HTTPException(status_code=403, detail="You do not have permission to preview this page.")
+
     # Use the same robust function as the main article page.
-    # It correctly handles permissions for admins.
     article = await confluence_service.get_article_by_id_hybrid(page_id, current_user)
     if not article:
         raise HTTPException(
@@ -186,7 +207,6 @@ async def get_article_preview_endpoint(page_id: str, current_user: auth_schemas.
 @router.get(
     "/admin/pending", 
     response_model=List[content_schemas.Article], 
-    # CHANGED: Allow standard users (Group Admins need access)
     dependencies=[Depends(get_current_user)]
 )
 async def get_pages_pending_review(current_user: auth_schemas.UserResponse = Depends(get_current_user)):
@@ -196,7 +216,6 @@ async def get_pages_pending_review(current_user: auth_schemas.UserResponse = Dep
 @router.post(
     "/admin/pages/{page_id}/approve", 
     status_code=status.HTTP_204_NO_CONTENT, 
-    # CHANGED: Allow any authenticated user to hit the endpoint, we check permissions inside
     dependencies=[Depends(get_current_user)] 
 )
 async def approve_page_endpoint(
@@ -224,7 +243,6 @@ async def approve_page_endpoint(
 @router.post(
     "/admin/pages/{page_id}/reject", 
     status_code=status.HTTP_204_NO_CONTENT, 
-    # CHANGED: Allow any authenticated user to hit the endpoint, we check permissions inside
     dependencies=[Depends(get_current_user)]
 )
 async def reject_page_endpoint(
@@ -270,14 +288,12 @@ async def resubmit_page_endpoint(
     """
     Allows an author to resubmit their own rejected article for review.
     """
-    # --- UPDATED: Use SubmissionRepository for auth check ---
     submission = await submission_repo.get_by_confluence_id(page_id)
     if not submission or submission.authorId != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not authorized to resubmit this article."
         )
-    # --- END UPDATED SECTION ---
 
     success = await confluence_service.resubmit_page_for_review(page_id, current_user.name)
     if not success:
@@ -287,12 +303,24 @@ async def resubmit_page_endpoint(
 @router.delete(
     "/admin/pages/{page_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(get_current_admin_user)]
+    # CHANGED: Allow Group Admins to delete their pages
+    dependencies=[Depends(get_current_user)]
 )
-async def delete_page_permanently_endpoint(page_id: str):
+async def delete_page_permanently_endpoint(
+    page_id: str,
+    current_user: auth_schemas.UserResponse = Depends(get_current_user)
+):
     """
     Deletes a page from Confluence and its corresponding record from the local database.
     """
+    is_global_admin = current_user.role == "ADMIN"
+    is_group_admin = False
+    if not is_global_admin:
+        is_group_admin = await permission_service.user_is_group_admin_of_page(page_id, current_user.id)
+    
+    if not is_global_admin and not is_group_admin:
+        raise HTTPException(status_code=403, detail="You do not have permission to delete this page.")
+
     success = await confluence_service.delete_page_permanently(page_id)
     if not success:
         raise HTTPException(
@@ -304,7 +332,8 @@ async def delete_page_permanently_endpoint(page_id: str):
 @router.get(
     "/admin/content-index/search",
     response_model=List[ContentNode],
-    dependencies=[Depends(get_current_admin_user)]
+    # CHANGED: Allow Group Admins to search index
+    dependencies=[Depends(get_current_user)]
 )
 async def search_content_index_endpoint(query: str = Query(..., min_length=2)):
     """
@@ -314,11 +343,22 @@ async def search_content_index_endpoint(query: str = Query(..., min_length=2)):
 
 @router.post(
     "/admin/pages/bulk-delete",
-    dependencies=[Depends(get_current_admin_user)]
+    # CHANGED: Allow Group Admins to bulk delete their pages
+    dependencies=[Depends(get_current_user)]
 )
-async def bulk_delete_pages_endpoint(payload: cms_schemas.BulkDeletePayload):
+async def bulk_delete_pages_endpoint(
+    payload: cms_schemas.BulkDeletePayload,
+    current_user: auth_schemas.UserResponse = Depends(get_current_user)
+):
     """
-    Deletes a list of pages, respecting the rule that pages with children cannot be deleted.
+    Deletes a list of pages, respecting permissions and the rule that pages with children cannot be deleted.
     """
+    if current_user.role != "ADMIN":
+        # For non-global admins, verify permission for EACH page in the batch
+        for page_id in payload.page_ids:
+            is_group_admin = await permission_service.user_is_group_admin_of_page(page_id, current_user.id)
+            if not is_group_admin:
+                 raise HTTPException(status_code=403, detail=f"You do not have permission to delete page ID {page_id}.")
+
     result = await confluence_service.delete_pages_in_bulk(payload.page_ids)
     return result

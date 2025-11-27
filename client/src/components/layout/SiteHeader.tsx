@@ -37,6 +37,9 @@ export function SiteHeader({
   const navigate = useNavigate();
   const { isAuthenticated, user, isAdmin, logout } = useAuth();
   
+  // Calculate if the user is a Group Admin
+  const isGroupAdmin = user?.groupMemberships?.some(m => m.role === 'ADMIN') || false;
+  
   const location = useLocation();
   const showHeaderSearch = location.pathname !== '/' && location.pathname !== '/search';
 
@@ -154,10 +157,12 @@ export function SiteHeader({
                     </DropdownMenuItem>
                   )}
 
-                  {/* Admin Section - Cleaner layout */}
-                  {(isAdmin || (user?.groupMemberships?.some(m => m.role === 'ADMIN'))) && (
+                  {/* Admin & Group Admin Section */}
+                  {(isAdmin || isGroupAdmin) && (
                     <>
                       <DropdownMenuSeparator />
+                      
+                      {/* Common Management Actions */}
                       <DropdownMenuItem asChild>
                         <Link to="/admin/dashboard">
                           <LayoutDashboard className="mr-2 h-4 w-4" />
@@ -171,44 +176,56 @@ export function SiteHeader({
                         </Link>
                       </DropdownMenuItem>
 
-                      {/* Nested Settings Menu */}
-                      <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>
-                          <Settings className="mr-2 h-4 w-4" />
-                          <span>System Management</span>
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent className="w-56">
-                          <DropdownMenuLabel className="text-xs">Access Control</DropdownMenuLabel>
-                          <DropdownMenuItem asChild>
-                            <Link to="/admin/users">
-                              <Shield className="mr-2 h-4 w-4" />
-                              <span>User Management</span>
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem asChild>
-                            <Link to="/admin/groups">
-                              <Users className="mr-2 h-4 w-4" />
-                              <span>Group Permissions</span>
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem asChild>
-                            <Link to="/admin/register">
-                              <UserPlus className="mr-2 h-4 w-4" />
-                              <span>Register New User</span>
-                            </Link>
-                          </DropdownMenuItem>
-                          
-                          <DropdownMenuSeparator />
-                          
-                          <DropdownMenuLabel className="text-xs">Taxonomy</DropdownMenuLabel>
-                          <DropdownMenuItem asChild>
-                            <Link to="/admin/tags">
-                              <TagIcon className="mr-2 h-4 w-4" />
-                              <span>Tag Management</span>
-                            </Link>
-                          </DropdownMenuItem>
-                        </DropdownMenuSubContent>
-                      </DropdownMenuSub>
+                      {/* Group Admin Specific: Direct Access to Group Permissions */}
+                      {!isAdmin && isGroupAdmin && (
+                        <DropdownMenuItem asChild>
+                          <Link to="/admin/groups">
+                            <Users className="mr-2 h-4 w-4" />
+                            <span>Group Permissions</span>
+                          </Link>
+                        </DropdownMenuItem>
+                      )}
+
+                      {/* Global Admin Only: Full System Management */}
+                      {isAdmin && (
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <Settings className="mr-2 h-4 w-4" />
+                            <span>System Management</span>
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent className="w-56">
+                            <DropdownMenuLabel className="text-xs">Access Control</DropdownMenuLabel>
+                            <DropdownMenuItem asChild>
+                              <Link to="/admin/users">
+                                <Shield className="mr-2 h-4 w-4" />
+                                <span>User Management</span>
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link to="/admin/groups">
+                                <Users className="mr-2 h-4 w-4" />
+                                <span>Group Permissions</span>
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link to="/admin/register">
+                                <UserPlus className="mr-2 h-4 w-4" />
+                                <span>Register New User</span>
+                              </Link>
+                            </DropdownMenuItem>
+                            
+                            <DropdownMenuSeparator />
+                            
+                            <DropdownMenuLabel className="text-xs">Taxonomy</DropdownMenuLabel>
+                            <DropdownMenuItem asChild>
+                              <Link to="/admin/tags">
+                                <TagIcon className="mr-2 h-4 w-4" />
+                                <span>Tag Management</span>
+                              </Link>
+                            </DropdownMenuItem>
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                      )}
                     </>
                   )}
                   

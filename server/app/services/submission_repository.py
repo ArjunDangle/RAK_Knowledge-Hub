@@ -3,7 +3,7 @@ from typing import List, Optional
 from datetime import datetime
 from app.db import db
 from prisma.models import ArticleSubmission
-from app.schemas.cms_schemas import ArticleSubmissionStatus  # <-- THIS IS THE FIX
+from app.schemas.cms_schemas import ArticleSubmissionStatus
 
 class SubmissionRepository:
     """
@@ -40,6 +40,21 @@ class SubmissionRepository:
             include={'author': True, 'page': True},
             order={'updatedAt': 'desc'}
         )
+
+    # --- THIS WAS MISSING ---
+    async def get_pending_submissions_for_pages(self, page_ids: List[int]) -> List[ArticleSubmission]:
+        """Fetches pending submissions only for the specified internal Page IDs."""
+        return await self.db.articlesubmission.find_many(
+            where={
+                'status': ArticleSubmissionStatus.PENDING_REVIEW,
+                'page': {
+                    'id': {'in': page_ids}
+                }
+            },
+            include={'author': True, 'page': True},
+            order={'updatedAt': 'desc'}
+        )
+    # ------------------------
 
     async def create_submission(
         self,
@@ -88,17 +103,4 @@ class SubmissionRepository:
         """Deletes a submission record by its Confluence Page ID."""
         return await self.db.articlesubmission.delete(
             where={'confluencePageId': confluence_id}
-        )
-
-async def get_pending_submissions_for_pages(self, page_ids: List[int]) -> List[ArticleSubmission]:
-        """Fetches pending submissions only for the specified internal Page IDs."""
-        return await self.db.articlesubmission.find_many(
-            where={
-                'status': ArticleSubmissionStatus.PENDING_REVIEW,
-                'page': {
-                    'id': {'in': page_ids}
-                }
-            },
-            include={'author': True, 'page': True},
-            order={'updatedAt': 'desc'}
         )

@@ -174,17 +174,36 @@ class ConfluenceService:
             print(f"Error in get_page_contents router: {e}")
             raise HTTPException(status_code=500, detail="Failed to fetch page contents.")
 
-    # server/app/services/confluence_service.py
-
     async def get_article_by_id_hybrid(self, page_id: str, user: Optional[UserResponse] = None) -> Optional[Article]:
         page_metadata = await self.db.page.find_unique(where={'confluenceId': page_id}, include={'tags': True, 'submission': True})
         if not page_metadata or page_metadata.pageType != PageType.ARTICLE: return None
 
         is_published = not page_metadata.submission or page_metadata.submission.status == ArticleSubmissionStatus.PUBLISHED
-        is_admin = user and user.role == 'ADMIN'
+        is_global_admin = user and user.role == 'ADMIN'
         is_author = user and page_metadata.submission and user.id == page_metadata.submission.authorId
 
-        if not is_published and not is_admin and not is_author: return None
+        # --- NEW LOGIC: Check for Group Admin permissions ---
+        is_group_admin = False
+        if user and not is_global_admin:
+            # 1. Collect IDs of pages managed by groups where this user is an ADMIN
+            managed_page_ids = set()
+            if user.groupMemberships:
+                for m in user.groupMemberships:
+                    if m.role == 'ADMIN' and m.group and m.group.managedPage:
+                        managed_page_ids.add(m.group.managedPage.id)
+            
+            if managed_page_ids:
+                # 2. Get the hierarchy of the current page
+                ancestor_db_ids = await self.page_repo.get_ancestor_db_ids(page_metadata)
+                # Check if the page itself or any ancestor is managed by the user's admin groups
+                page_hierarchy_ids = set(ancestor_db_ids)
+                page_hierarchy_ids.add(page_metadata.id)
+                
+                if not managed_page_ids.isdisjoint(page_hierarchy_ids):
+                    is_group_admin = True
+        # -----------------------------------------------------
+
+        if not is_published and not is_global_admin and not is_author and not is_group_admin: return None
 
         html_content = ""
         read_minutes = 1
@@ -206,8 +225,6 @@ class ConfluenceService:
             id=page_metadata.confluenceId,
             slug=page_metadata.slug,
             title=page_metadata.title,
-            # Use the DB description as the primary value for BOTH fields.
-            # The card will prioritize `description`, and `excerpt` is a good fallback.
             excerpt=page_metadata.description,
             description=page_metadata.description,
             html=html_content,
@@ -218,7 +235,8 @@ class ConfluenceService:
             views=page_metadata.views,
             readMinutes=read_minutes,
             author=page_metadata.authorName,
-            parentId=page_metadata.parentConfluenceId
+            parentId=page_metadata.parentConfluenceId,
+            canEdit=is_global_admin or is_group_admin 
         )
 
     async def get_subsection_by_id_hybrid(self, page_id: str) -> Optional[Subsection]:
@@ -811,31 +829,34 @@ class ConfluenceService:
         """
         return await self.page_repo.get_tree_nodes_by_parent_id(parent_id)
 
-    async def get_content_index_nodes(self, parent_id: Optional[str] = None) -> List[ContentNode]:
+    async def get_content_index_nodes(self, parent_id: Optional[str] = None, current_user: UserResponse = None) -> List[ContentNode]:
         """
         Fetches nodes for the admin content index page entirely from the local database.
         """
         nodes = []
         
-        # 1. Get the relevant pages from our database
+        # 1. Determine permissions
+        is_global_admin = current_user and current_user.role == "ADMIN"
+        admin_page_ids = set()
+        if current_user and not is_global_admin:
+            admin_page_ids = await self.page_repo.get_admin_managed_page_ids(current_user.id)
+
+        # 2. Get the relevant pages from our database
         child_pages_from_db = await self.page_repo.get_child_pages_for_index(parent_id)
 
         for page in child_pages_from_db:
             try:
-                # 2. Check if this page has children in our database
                 has_children = await self.page_repo.has_children(page.confluenceId)
-                
-                # 3. Get submission status and author from our database
                 submission = await self.submission_repo.get_by_confluence_id_with_author(page.confluenceId)
                 
-                # Default to 'Published' if no submission record exists (for imported pages)
                 author_name, status = page.authorName or "System", ArticleSubmissionStatus.PUBLISHED
                 if submission:
                     if submission.author:
                         author_name = submission.author.name
                     status = submission.status
                 
-                # 4. Construct the response node
+                can_manage = is_global_admin or (page.confluenceId in admin_page_ids)
+
                 nodes.append(ContentNode(
                     id=page.confluenceId, 
                     title=page.title, 
@@ -844,7 +865,8 @@ class ConfluenceService:
                     updatedAt=page.updatedAt, 
                     confluenceUrl=f"{self.settings.confluence_url}/spaces/{self.settings.confluence_space_key}/pages/{page.confluenceId}", 
                     children=[], 
-                    hasChildren=has_children
+                    hasChildren=has_children,
+                    canManage=can_manage
                 ))
             except Exception as e:
                 print(f"Error processing DB node for page {page.confluenceId}: {e}")

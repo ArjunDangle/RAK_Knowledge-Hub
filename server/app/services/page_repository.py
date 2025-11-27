@@ -547,3 +547,50 @@ class PageRepository:
                 )
             )
         return nodes_to_return
+    
+    async def get_admin_managed_page_ids(self, user_id: int) -> set[str]:
+        """
+        Returns a set of Confluence IDs for pages where the user is a Group Admin.
+        Includes the root managed pages and all their descendants.
+        """
+        # 1. Fetch groups where user is ADMIN and they have a managed page
+        user_with_admin_groups = await self.db.user.find_unique(
+            where={'id': user_id},
+            include={
+                'groupMemberships': {
+                    'where': {'role': 'ADMIN'},
+                    'include': {
+                        'group': {
+                            'include': {'managedPage': True}
+                        }
+                    }
+                }
+            }
+        )
+
+        if not user_with_admin_groups or not user_with_admin_groups.groupMemberships:
+            return set()
+
+        root_managed_db_ids = [
+            m.group.managedPage.id 
+            for m in user_with_admin_groups.groupMemberships 
+            if m.group.managedPage
+        ]
+
+        if not root_managed_db_ids:
+            return set()
+
+        # 2. Recursive query to get all descendant Page IDs (internal DB IDs)
+        # FIX: Corrected variable name here (root_managed_db_ids)
+        query = f"""
+        WITH RECURSIVE descendants AS (
+            SELECT id, "confluenceId" FROM "Page" WHERE id IN ({','.join(map(str, root_managed_db_ids))})
+            UNION ALL
+            SELECT p.id, p."confluenceId" FROM "Page" p
+            INNER JOIN descendants d ON p."parentConfluenceId" = d."confluenceId"
+        )
+        SELECT "confluenceId" FROM descendants;
+        """
+        
+        results = await self.db.query_raw(query)
+        return {item['confluenceId'] for item in results}

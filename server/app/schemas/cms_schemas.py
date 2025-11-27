@@ -57,6 +57,7 @@ class ContentNode(BaseModel):
     confluenceUrl: str
     children: List['ContentNode'] = []
     hasChildren: bool = False
+    canManage: bool = False 
 
 ContentNode.model_rebuild()
 

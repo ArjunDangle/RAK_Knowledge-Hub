@@ -148,6 +148,7 @@ export const ContentIndexNode = ({ node, level, onToggleSelection, selectedIds, 
                         onCheckedChange={handleCheckboxClick}
                         aria-label={`Select row ${node.title}`}
                         className="mr-4"
+                        disabled={!node.canManage}
                     />
                 )}
                 {childrenLoading ? (
@@ -203,15 +204,17 @@ export const ContentIndexNode = ({ node, level, onToggleSelection, selectedIds, 
                             </DropdownMenuItem>
                         )}
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem 
-                            className="text-destructive focus:text-destructive focus:bg-destructive/10"
-                            onSelect={(e) => {
-                                e.preventDefault();
-                                setIsDeleteDialogOpen(true);
-                            }}
-                        >
-                            <Trash2 className="mr-2 h-4 w-4" /> Delete Page
-                        </DropdownMenuItem>
+                        {node.canManage && (
+                            <DropdownMenuItem 
+                                className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                                onSelect={(e) => {
+                                    e.preventDefault();
+                                    setIsDeleteDialogOpen(true);
+                                }}
+                            >
+                                <Trash2 className="mr-2 h-4 w-4" /> Delete Page
+                            </DropdownMenuItem>
+                        )}
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
