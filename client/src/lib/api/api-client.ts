@@ -162,7 +162,7 @@ interface ApiError extends Error {
   status?: number;
 }
 
-export const API_BASE_URL = "https://rak-knowledge-hub-server.rak-internal.net";
+export const API_BASE_URL = "https://rak-knowledge-hub.rak-internal.net/api";
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
