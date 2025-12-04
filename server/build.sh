@@ -2,6 +2,12 @@
 # Exit on error
 set -o errexit
 
+# --- LOAD ENV FILE ---
+set -a
+source .env
+set +a
+# ---------------------
+
 # Step 1: Install all Python and Node.js dependencies.
 echo "Installing Python and Node.js dependencies..."
 pip install --no-cache-dir -r requirements.txt
