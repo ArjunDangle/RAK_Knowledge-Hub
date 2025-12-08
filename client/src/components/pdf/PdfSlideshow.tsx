@@ -7,7 +7,7 @@ import { ChevronLeft, ChevronRight, X, Download } from "lucide-react";
 import { Skeleton } from '../ui/skeleton';
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogClose } from '@/components/ui/dialog';
 
-pdfjs.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.mjs`;
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface PdfSlideshowProps {
   fileUrl: string;

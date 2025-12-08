@@ -88,7 +88,7 @@ export default function Landing() {
         <div className="container max-w-7xl mx-auto px-6 py-12 md:py-20">
           <section className="text-center mb-16">
             <div className="max-w-3xl mx-auto mb-8">
-              <h1 className="text-4xl md:text-5xl font-bold mb-4">RAKwireless Knowledge Hub</h1>
+              <h1 className="text-4xl md:text-5xl font-bold mb-4">RAKWireless Knowledge Hub</h1>
               <p className="text-xl leading-relaxed text-white/80">Your comprehensive resource for documentation, guides, and technical knowledge.</p>
             </div>
             <SearchBar 
