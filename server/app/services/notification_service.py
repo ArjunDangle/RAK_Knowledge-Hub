@@ -6,6 +6,7 @@ from typing import List
 
 from app.db import db
 from app.broadcaster import broadcast
+from app.services.page_repository import PageRepository
 
 class NotificationService:
     """
@@ -17,6 +18,7 @@ class NotificationService:
         # We can use the global db and broadcast instances
         self.db = db
         self.broadcast = broadcast
+        self.page_repo = PageRepository()
 
     def _create_notification_payload(self, message: str, link: str) -> str:
         """Helper to create a consistent JSON payload for broadcasting."""
@@ -25,10 +27,34 @@ class NotificationService:
             "link": link
         })
 
-    async def _get_admin_ids(self) -> List[int]:
-        """Fetches all admin user IDs."""
+    async def _get_global_admin_ids(self) -> List[int]:
+        """Fetches all global admin user IDs."""
         admins = await self.db.user.find_many(where={'role': 'ADMIN'})
         return [admin.id for admin in admins]
+
+    async def _get_group_admin_ids(self, page_confluence_id: str) -> List[int]:
+        """Fetches IDs of users who are Group Admins for the given page hierarchy."""
+        if not page_confluence_id:
+            return []
+            
+        page = await self.page_repo.get_page_by_id(page_confluence_id)
+        if not page:
+            return []
+
+        # Get IDs of this page and all its ancestors
+        ancestor_ids = await self.page_repo.get_ancestor_db_ids(page)
+        # We check if the group manages the page itself OR any ancestor
+        relevant_db_ids = ancestor_ids + [page.id]
+
+        group_members = await self.db.groupmember.find_many(
+            where={
+                'role': 'ADMIN',
+                'group': {
+                    'managedPageId': {'in': relevant_db_ids}
+                }
+            }
+        )
+        return [gm.userId for gm in group_members]
 
     async def _notify_user(self, user_id: int, message: str, link: str):
         """Creates a DB notification and pushes a broadcast to a single user."""
@@ -43,35 +69,46 @@ class NotificationService:
         except Exception as e:
             print(f"Error notifying user {user_id}: {e}")
 
-    async def _notify_all_admins(self, message: str, link: str):
-        """Creates DB notifications and broadcasts to all admins."""
+    async def _notify_relevant_admins(self, message: str, link: str, page_id: str = None):
+        """
+        Creates DB notifications and broadcasts.
+        Recipients = (All Global Admins) + (Group Admins who manage this specific page/hierarchy).
+        """
         try:
-            admin_ids = await self._get_admin_ids()
-            if not admin_ids:
+            # 1. Always notify Global Admins
+            recipient_ids = set(await self._get_global_admin_ids())
+
+            # 2. If a page context is provided, find Group Admins responsible for it
+            if page_id:
+                group_admin_ids = await self._get_group_admin_ids(page_id)
+                # Add them to the set (set handles duplicates if a user is both)
+                recipient_ids.update(group_admin_ids)
+            
+            if not recipient_ids:
                 return
 
             payload = self._create_notification_payload(message, link)
             
-            # Create DB records for all admins
+            # Create DB records for all unique recipients
             notifications_to_create = [
-                {'message': message, 'link': link, 'recipientId': admin_id}
-                for admin_id in admin_ids
+                {'message': message, 'link': link, 'recipientId': uid}
+                for uid in recipient_ids
             ]
             await self.db.notification.create_many(data=notifications_to_create)
 
-            # Push broadcast to all admins
-            for admin_id in admin_ids:
-                await self.broadcast.push(admin_id, payload)
+            # Push broadcast to all unique recipients
+            for uid in recipient_ids:
+                await self.broadcast.push(uid, payload)
         except Exception as e:
-            print(f"Error notifying all admins: {e}")
+            print(f"Error notifying admins: {e}")
 
     # --- Public API ---
 
-    async def notify_admins_of_submission(self, title: str, author_name: str):
-        """Notifies all admins of a new article submission."""
+    async def notify_admins_of_submission(self, title: str, author_name: str, page_id: str = None):
+        """Notifies admins of a new article submission."""
         message = f"New article '{title}' submitted by {author_name} is pending review."
         link = "/admin/dashboard"
-        await self._notify_all_admins(message, link)
+        await self._notify_relevant_admins(message, link, page_id)
 
     async def notify_author_of_approval(self, author_id: int, title: str, page_id: str):
         """Notifies an author that their article was approved."""
@@ -85,11 +122,11 @@ class NotificationService:
         link = "/my-submissions"
         await self._notify_user(author_id, message, link)
 
-    async def notify_admins_of_resubmission(self, title: str, author_name: str):
-        """Notifies all admins of an article resubmission."""
+    async def notify_admins_of_resubmission(self, title: str, author_name: str, page_id: str = None):
+        """Notifies admins of an article resubmission."""
         message = f"Article '{title}' was resubmitted by {author_name} and is pending review."
         link = "/admin/dashboard"
-        await self._notify_all_admins(message, link)
+        await self._notify_relevant_admins(message, link, page_id)
 
     async def run_cleanup_task(self):
         """

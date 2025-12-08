@@ -400,7 +400,7 @@ class ConfluenceService:
                 title=page_data.title,
                 slug=self._slugify(page_data.title),
                 description=page_data.description,
-                page_type=PageType.ARTICLE, # New pages are always articles
+                page_type=PageType.ARTICLE,
                 parent_confluence_id=page_data.parent_id,
                 author_name=author_name,
                 updated_at_str=updated_at,
@@ -422,17 +422,18 @@ class ConfluenceService:
                 for tag in tag_records:
                     self.confluence_repo.add_label(page_id, tag.slug)
 
-            # 6. Notify admins
+            # 6. Notify admins (UPDATED: pass page_id)
             await self.notification_service.notify_admins_of_submission(
                 title=page_data.title,
-                author_name=author_name
+                author_name=author_name,
+                page_id=page_id
             )
                 
             return {"id": page_id, "title": page_data.title, "status": "unpublished"}
 
         except Exception as e:
             print(f"Failed to create page for review: {e}")
-            if page_id: # Attempt to clean up Confluence if DB write failed
+            if page_id:
                 try:
                     self.confluence_repo.delete_page(page_id)
                     print(f"Cleaned up draft page {page_id} in Confluence after DB error.")
@@ -695,11 +696,12 @@ class ConfluenceService:
             # 2. Update local submission status
             submission = await self.submission_repo.update_status(page_id, ArticleSubmissionStatus.PENDING_REVIEW)
             
-            # 3. Notify admins
+            # 3. Notify admins (UPDATED: pass page_id)
             if submission:
                 await self.notification_service.notify_admins_of_resubmission(
                     title=submission.title,
-                    author_name=author_name
+                    author_name=author_name,
+                    page_id=page_id
                 )
             return True
         except Exception as e:
