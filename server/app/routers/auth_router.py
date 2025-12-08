@@ -100,7 +100,8 @@ async def register_user_by_admin(user_data: auth_schemas.UserCreate):
             'name': user_data.name,
             'hashed_password': hashed_password,
             'role': user_data.role
-        }
+        },
+        include={'groupMemberships': True}
     )
     return new_user
 
@@ -121,9 +122,11 @@ async def register_user(user_data: auth_schemas.UserCreate):
             'name': user_data.name,
             'hashed_password': hashed_password,
             'role': user_data.role
-        }
+        },
+        include={'groupMemberships': True}
     )
     return new_user
+
 
 @router.post("/token") 
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
