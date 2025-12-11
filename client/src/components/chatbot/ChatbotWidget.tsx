@@ -9,7 +9,7 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { Send, X, Sparkles, ChevronRight, ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
+import { Send, X, Sparkles, ChevronRight, ChevronDown, Maximize2, Minimize2, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import TypingIndicator from './TypingIndicator';
 import ReactMarkdown from 'react-markdown';
@@ -19,6 +19,7 @@ import { DotLottiePlayer } from '@dotlottie/react-player';
 
 // --- CONFIGURATION ---
 const ROBOT_ANIMATION_SRC = "/robot.json"; 
+const LOADING_ANIMATION_SRC = "/loading.json"; // ADDED: New loading animation
 
 type Message = {
   id: number;
@@ -26,8 +27,24 @@ type Message = {
   content: string;
 };
 
+// ... (PRODUCT_CATEGORIES and SUGGESTED_QUESTIONS constants remain the same) ...
 const PRODUCT_CATEGORIES = [
-  "All Categories", "5G", "WisBlock", "WisGate", "Meshtastic", "Software-Tools"
+  "All Categories", 
+  "5G", 
+  "Accessories", 
+  "All Categories (Global DB)", 
+  "Meshtastic", 
+  "Real-IoT-Solutions",
+  "Software-APIs-and-Libraries", 
+  "Software-Tools", 
+  "WisBlock", 
+  "WisDuino", 
+  "WisDuo", 
+  "WisGate", 
+  "WisHat", 
+  "WisLink", 
+  "WisNode", 
+  "WisTrio",
 ];
 
 const SUGGESTED_QUESTIONS = [
@@ -39,12 +56,12 @@ const SUGGESTED_QUESTIONS = [
 const API_URL = "http://localhost:8180/api/chat";
 
 const ChatbotWidget: React.FC = () => {
+  // ... (State hooks remain the same) ...
   const [isOpen, setIsOpen] = useState(false);
   const [showCallout, setShowCallout] = useState(false); 
   const [isHovered, setIsHovered] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("All Categories");
-  
   const [messages, setMessages] = useState<Message[]>([
      { id: 1, role: 'assistant', content: "Hello! I'm ready to help. Ask me a question about RAKwireless products." }
   ]);
@@ -54,7 +71,7 @@ const ChatbotWidget: React.FC = () => {
   
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
 
-  // Auto-scroll logic
+  // ... (useEffect for auto-scroll remains the same) ...
   useEffect(() => {
     if (isOpen && scrollAreaRef.current) {
         const scrollContainer = scrollAreaRef.current;
@@ -65,6 +82,7 @@ const ChatbotWidget: React.FC = () => {
     }
   }, [messages, isLoading, isExpanded, isOpen]);
 
+  // ... (handleSendMessage function remains the same) ...
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
 
@@ -127,59 +145,48 @@ const ChatbotWidget: React.FC = () => {
   const lastMessage = messages[messages.length - 1];
   const isThinking = isLoading && lastMessage?.role !== 'assistant';
 
-  // --- RESPONSIVE LAYOUT VARIANTS ---
+  // ... (Variants remain the same) ...
   const modalVariants = {
     hidden: { 
       opacity: 0, 
-      scale: 0.8, 
+      scale: 0.95, 
       y: 20, 
       pointerEvents: "none" as const
     },
     compact: { 
       opacity: 1, 
       scale: 1,
-      // Anchor to Bottom-Right
       top: "auto",
       left: "auto",
       bottom: "1.5rem", 
       right: "1.5rem",
       x: 0,
       y: 0,
-      
-      // Compact: Tall and narrow (Phone-like)
       width: "min(380px, 90vw)", 
       height: "min(600px, 80vh)", 
       borderRadius: "16px",
-      
       position: "fixed" as const,
       zIndex: 50,
       pointerEvents: "auto" as const,
-      transition: { type: "spring", stiffness: 300, damping: 30 }
     },
     expanded: { 
       opacity: 1, 
       scale: 1,
-      // Expanded: Centered Focus Mode
       top: "50%",
       left: "50%",
       bottom: "auto",
       right: "auto",
       x: "-50%",
       y: "-50%",
-      
-      // Expanded: Wider and Shorter (Landscape/Dashboard-like)
       width: "min(800px, 90vw)", 
       height: "min(70vh, 800px)", 
       borderRadius: "24px",
-      
       position: "fixed" as const,
       zIndex: 9999,
       pointerEvents: "auto" as const,
-      transition: { type: "spring", stiffness: 280, damping: 30 }
     }
   };
 
-  // --- FIX: ADDED MISSING DEFINITION HERE ---
   const backdropVariants = {
     hidden: { opacity: 0 },
     visible: { opacity: 1 }
@@ -187,7 +194,6 @@ const ChatbotWidget: React.FC = () => {
 
   return (
     <>
-      {/* 1. Backdrop (Only visible in Expanded Mode) */}
       <AnimatePresence>
         {isOpen && isExpanded && (
           <motion.div
@@ -196,16 +202,14 @@ const ChatbotWidget: React.FC = () => {
             initial="hidden"
             animate="visible"
             exit="hidden"
-            onClick={() => setIsExpanded(false)} // Clicking backdrop shrinks it back
+            onClick={() => setIsExpanded(false)}
             className="fixed inset-0 z-[9998] bg-black/40 backdrop-blur-sm"
           />
         )}
       </AnimatePresence>
 
-      {/* 2. Trigger Button */}
       <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end gap-3 font-sans pointer-events-none">
         
-        {/* Callout Bubble */}
         <AnimatePresence>
           {(showCallout || isHovered) && !isOpen && (
             <motion.div
@@ -226,7 +230,6 @@ const ChatbotWidget: React.FC = () => {
           )}
         </AnimatePresence>
 
-        {/* Trigger Button */}
         <AnimatePresence>
           {!isOpen && (
               <motion.button
@@ -249,35 +252,31 @@ const ChatbotWidget: React.FC = () => {
         </AnimatePresence>
       </div>
 
-      {/* 3. The Modal Window */}
       <AnimatePresence mode="wait">
         {isOpen && (
           <motion.div
             key="chat-modal"
-            layout // Enable smooth layout morphing
+            layout 
             variants={modalVariants}
             initial="hidden"
             animate={isExpanded ? "expanded" : "compact"}
             exit="hidden"
+            transition={{ duration: 0.4, ease: "easeInOut" }} 
             className="flex flex-col pointer-events-auto"
           >
-            {/* ROBOT PEEKING (Overlay) */}
             <div className="absolute -top-[75px] left-0 w-full flex justify-center pointer-events-none z-50">
                 <div className="w-[100px] h-[100px] filter drop-shadow-xl">
                     <DotLottiePlayer src={ROBOT_ANIMATION_SRC} loop autoplay />
                 </div>
             </div>
 
-            {/* INNER CONTENT WRAPPER */}
             <div className={cn(
               "flex flex-col h-full w-full overflow-hidden rounded-[inherit] relative z-10", 
               "shadow-2xl border border-zinc-200/80 dark:border-zinc-700 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl"
             )}>
                 
-                {/* Header */}
                 <div className="relative z-10 flex flex-col items-center justify-center pt-6 pb-3 bg-gradient-to-b from-blue-50/80 to-transparent dark:from-blue-900/20 dark:to-transparent border-b border-white/50 dark:border-zinc-800 shrink-0 select-none">
                     
-                    {/* Controls */}
                     <div className="absolute top-4 right-4 flex items-center gap-2">
                         <Button 
                             variant="ghost" 
@@ -308,24 +307,44 @@ const ChatbotWidget: React.FC = () => {
                         <span className="text-xs font-medium text-muted-foreground">Online & Ready</span>
                     </div>
 
-                    <div className="mt-4 w-[200px]">
+                    <div className="mt-4 w-full max-w-[240px]">
                         <DropdownMenu modal={false}>
                             <DropdownMenuTrigger asChild>
                                 <Button 
                                     variant="outline" 
-                                    className="w-full h-8 text-xs bg-white dark:bg-black/20 border border-zinc-200 dark:border-zinc-700 rounded-full focus:ring-0 shadow-sm backdrop-blur-sm hover:bg-white/80 transition-all flex justify-between px-3"
+                                    className="w-full h-9 text-xs bg-white/50 dark:bg-black/20 border border-zinc-200 dark:border-zinc-700 rounded-full focus:ring-0 shadow-sm backdrop-blur-sm hover:bg-white/80 dark:hover:bg-black/40 transition-all flex justify-between px-3.5 group"
                                 >
-                                    <div className="flex items-center overflow-hidden">
-                                        <Sparkles className="w-3 h-3 mr-2 text-primary flex-shrink-0" />
-                                        <span className="truncate">{selectedCategory}</span>
+                                    <div className="flex items-center overflow-hidden gap-2">
+                                        <Sparkles className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                                        <span className="truncate font-medium">{selectedCategory}</span>
                                     </div>
-                                    <ChevronDown className="h-3 w-3 opacity-50 flex-shrink-0 ml-1" />
+                                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground opacity-70 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent className="z-[9999] w-56" align="center">
+                            
+                            <DropdownMenuContent 
+                                className={cn(
+                                    "z-[9999] w-[240px] max-h-[300px] overflow-y-auto p-1 gap-1",
+                                    "[&::-webkit-scrollbar]:w-1.5",
+                                    "[&::-webkit-scrollbar-track]:bg-transparent",
+                                    "[&::-webkit-scrollbar-thumb]:bg-muted-foreground/20",
+                                    "[&::-webkit-scrollbar-thumb]:rounded-full",
+                                    "[&::-webkit-scrollbar-thumb]:hover:bg-muted-foreground/40"
+                                )}
+                                align="center"
+                                sideOffset={5}
+                            >
                                 {PRODUCT_CATEGORIES.map(cat => (
-                                    <DropdownMenuItem key={cat} onClick={() => setSelectedCategory(cat)} className="text-sm">
-                                        {cat}
+                                    <DropdownMenuItem 
+                                        key={cat} 
+                                        onClick={() => setSelectedCategory(cat)} 
+                                        className={cn(
+                                            "text-sm cursor-pointer rounded-sm px-2.5 py-2 flex items-center justify-between transition-colors",
+                                            selectedCategory === cat ? "bg-primary/10 text-primary font-medium" : "text-foreground/90"
+                                        )}
+                                    >
+                                        <span className="truncate">{cat}</span>
+                                        {selectedCategory === cat && <Check className="h-3.5 w-3.5 flex-shrink-0" />}
                                     </DropdownMenuItem>
                                 ))}
                             </DropdownMenuContent>
@@ -333,7 +352,6 @@ const ChatbotWidget: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Chat Content */}
                 <CardContent 
                     ref={scrollAreaRef} 
                     className="flex-1 overflow-y-auto p-4 space-y-5 no-scrollbar bg-slate-50/50 dark:bg-black/20"
@@ -351,8 +369,8 @@ const ChatbotWidget: React.FC = () => {
                         <div className={cn(
                             "p-3.5 text-sm shadow-sm relative",
                             message.role === 'user' 
-                            ? 'bg-primary text-primary-foreground rounded-2xl rounded-tr-sm' 
-                            : 'bg-white dark:bg-zinc-800 text-foreground border border-zinc-200 dark:border-zinc-700 rounded-2xl rounded-tl-sm'
+                                ? 'bg-primary text-primary-foreground rounded-2xl rounded-tr-sm' 
+                                : 'bg-white dark:bg-zinc-800 text-foreground border border-zinc-200 dark:border-zinc-700 rounded-2xl rounded-tl-sm'
                         )}>
                             <div className={cn("prose prose-sm max-w-none leading-relaxed", message.role === 'user' ? "prose-invert" : "dark:prose-invert")}>
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
@@ -366,7 +384,13 @@ const ChatbotWidget: React.FC = () => {
 
                     {isThinking && (
                         <div className="flex items-start">
-                            <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 p-3 rounded-2xl rounded-tl-sm shadow-sm">
+                            {/* UPDATED: Added Flex container to hold Lottie and Text together */}
+                            <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 p-3 rounded-2xl rounded-tl-sm shadow-sm flex items-center gap-3">
+                                {/* New Loading Animation */}
+                                <div className="w-8 h-8 flex-shrink-0">
+                                    <DotLottiePlayer src={LOADING_ANIMATION_SRC} loop autoplay />
+                                </div>
+                                {/* Existing Text Logic */}
                                 <TypingIndicator />
                             </div>
                         </div>
@@ -392,7 +416,6 @@ const ChatbotWidget: React.FC = () => {
                     )}
                 </CardContent>
 
-                {/* Input Footer */}
                 <CardFooter className="p-4 bg-white dark:bg-zinc-900 border-t border-zinc-100 dark:border-zinc-800 shrink-0">
                     <form onSubmit={handleSubmit} className="flex w-full items-end gap-2 relative">
                         <Input 
