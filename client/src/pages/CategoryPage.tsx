@@ -1,11 +1,18 @@
+// client/src/pages/CategoryPage.tsx
 import { useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
+import { Fragment } from "react";
+import { Loader2 } from "lucide-react";
+
 import { ArticleCard } from "@/components/cards/ArticleCard";
 import { CategoryCard } from "@/components/cards/CategoryCard";
-import { ArticleCardSkeleton, CategoryCardSkeleton } from "@/components/ui/loading-skeleton";
+// --- STEP 5: SKELETON IMPORT CLEANUP ---
+import { CategoryCardSkeleton } from "@/components/ui/loading-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
+// --- END OF CLEANUP ---
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { KnowledgeLayout } from "@/pages/KnowledgeLayout";
 import { getSubsectionsByGroup, getPageContents, getPageById, getAncestors } from "@/lib/api/api-client";
 import { Group } from "@/lib/types/content";
@@ -19,19 +26,29 @@ const groupInfo = {
 
 export default function CategoryPage() {
   const { group, pageId } = useParams<{ group?: Group; pageId?: string }>();
-
+  
   const isTopLevelPage = !!group && !pageId;
   const isNestedPage = !!pageId;
-
+  
   const { data: currentPageData, isLoading: pageDetailsLoading, isError: pageDetailsError } = useQuery({
     queryKey: ['pageDetails', pageId],
     queryFn: () => getPageById(pageId!),
     enabled: isNestedPage,
   });
 
-  const { data: contents, isLoading: contentsLoading } = useQuery({
+  const {
+    data,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ['pageContents', pageId],
-    queryFn: () => getPageContents(pageId!),
+    queryFn: ({ pageParam = 1 }) => getPageContents(pageId!, pageParam),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      return lastPage.hasNext ? lastPage.page + 1 : undefined;
+    },
     enabled: isNestedPage,
   });
 
@@ -40,35 +57,36 @@ export default function CategoryPage() {
     queryFn: () => getSubsectionsByGroup(group!),
     enabled: isTopLevelPage,
   });
-
+  
   const { data: ancestors } = useQuery({
     queryKey: ['ancestors', pageId],
     queryFn: () => getAncestors(pageId!),
     enabled: isNestedPage,
   });
-
+  
   const currentGroup = isNestedPage ? currentPageData?.group as Group : group;
-
+  
   if (!currentGroup || !(currentGroup in groupInfo)) {
-    if (pageDetailsLoading || subsectionsLoading) {
+    if (pageDetailsLoading || subsectionsLoading || isLoading) {
       return <KnowledgeLayout><div className="text-center py-12"><h1 className="text-2xl font-bold">Loading...</h1></div></KnowledgeLayout>;
     }
     return <KnowledgeLayout><div className="text-center py-12"><h1 className="text-2xl font-bold">Category Not Found</h1></div></KnowledgeLayout>;
   }
   
   const info = groupInfo[currentGroup];
-
   const responsiveGridClass = "grid grid-cols-[repeat(auto-fit,minmax(20rem,1fr))] gap-6";
 
   const breadcrumbs = isNestedPage 
     ? (ancestors || []).map((ancestor, index) => {
         if (index === 0) {
+          // The first ancestor links to the main category page
           return { label: ancestor.title, href: `/category/${currentGroup}` };
         }
+        // Subsequent ancestors link to their respective pages
         return { label: ancestor.title, href: `/page/${ancestor.id}` };
-      }).concat(currentPageData ? [{ label: currentPageData.title }] : [])
-    : [{ label: info.title }];
-
+      }).concat(currentPageData ? [{ label: currentPageData.title, href: `/page/${pageId}` }] : []) // Add href to the current page
+    : [{ label: info.title, href: `/category/${group}` }];
+  
   if (isNestedPage) {
     return (
       <KnowledgeLayout breadcrumbs={breadcrumbs}>
@@ -91,7 +109,7 @@ export default function CategoryPage() {
                   <>
                     <Separator className="mb-6" />
                     <div 
-                      className="prose dark:prose-invert max-w-none"
+                      className="prose dark:prose-invert max-w-none break-words"
                       dangerouslySetInnerHTML={{ __html: currentPageData.html }} 
                     />
                   </>
@@ -100,16 +118,45 @@ export default function CategoryPage() {
             )}
           </div>
           
-          {contentsLoading || pageDetailsLoading ? (
-            <div className={`${responsiveGridClass} mt-12`}>{Array.from({ length: 6 }).map((_, i) => <ArticleCardSkeleton key={i} />)}</div>
-          ) : contents && contents.length > 0 ? (
+          {/* --- STEP 5: SKELETONS REDUCED --- */}
+          {isLoading ? (
             <div className={`${responsiveGridClass} mt-12`}>
-              {contents.map((item) => item.type === 'subsection' ? (
-                <CategoryCard key={item.id} title={item.title} description={item.description} subsection={item} articleCount={item.articleCount} updatedAt={item.updatedAt} href={`/page/${item.id}`} />
-              ) : (
-                <ArticleCard key={item.id} article={item} pastelColor={getColorFromId(item.id)} />
-              ))}
+              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-48 w-full" />)}
             </div>
+          // --- END OF REDUCTION ---
+          
+          ) : data && data.pages.length > 0 && data.pages[0].items.length > 0 ? (
+            <>
+              <div className={`${responsiveGridClass} mt-12`}>
+                {data.pages.map((page, i) => (
+                  <Fragment key={i}>
+                    {page.items.map((item, index) => item.type === 'subsection' ? (
+                      <CategoryCard key={item.id} title={item.title} description={item.description} subsection={item} articleCount={item.articleCount} updatedAt={item.updatedAt} href={`/page/${item.id}`} index={index} />
+                    ) : (
+                      <ArticleCard key={item.id} article={item} pastelColor={getColorFromId(item.id)} />
+                    ))}
+                  </Fragment>
+                ))}
+              </div>
+
+              {hasNextPage && (
+                <div className="mt-10 text-center">
+                  <Button
+                    onClick={() => fetchNextPage()}
+                    disabled={isFetchingNextPage}
+                  >
+                    {isFetchingNextPage ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      'Load More'
+                    )}
+                  </Button>
+                </div>
+              )}
+            </>
           ) : !pageDetailsLoading && (
             <div className="text-center py-12 bg-muted/20 rounded-lg max-w-4xl mx-auto"><p className="text-muted-foreground">This section is empty.</p></div>
           )}
@@ -125,6 +172,7 @@ export default function CategoryPage() {
     );
   }
 
+  // This is the top-level page (e.g., /category/departments)
   return (
     <KnowledgeLayout breadcrumbs={breadcrumbs}>
       <div>
@@ -136,7 +184,7 @@ export default function CategoryPage() {
           <div className={responsiveGridClass}>{Array.from({ length: 6 }).map((_, i) => <CategoryCardSkeleton key={i} />)}</div>
         ) : topLevelSubsections && topLevelSubsections.length > 0 ? (
           <div className={responsiveGridClass}>
-            {topLevelSubsections.map((subsection) => (
+            {topLevelSubsections.map((subsection, index) => (
               <CategoryCard 
                 key={subsection.id} 
                 title={subsection.title} 

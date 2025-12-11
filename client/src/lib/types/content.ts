@@ -1,12 +1,24 @@
 // client/src/lib/types/content.ts
 
-export type Tag = {
-  id: string;
+export interface TagGroup {
+  id: number;
+  name: string;
+  description: string | null;
+  order: number;
+}
+
+export interface Tag {
+  id: number;
   name: string;
   slug: string;
-};
+  tagGroupId: number;
+}
 
-export type Group = 'departments' | 'resource-centre' | 'tools';
+export interface GroupedTag extends TagGroup {
+  tags: Tag[];
+}
+
+export type Group = string;
 
 export type GroupInfo = {
   id: Group;
@@ -23,7 +35,7 @@ export type Subsection = {
   description: string;
   html: string;
   group: Group;
-  tags: Tag[];
+  tags: Tag[]; // This will now use the new Tag type
   articleCount: number;
   updatedAt: string;
 };
@@ -33,19 +45,29 @@ export type Article = {
   id: string;
   slug: string;
   title: string;
+  description: string;
   excerpt: string;
   html: string;
-  tags: Tag[];
+  tags: Tag[]; // This will now use the new Tag type
   group: Group;
   subsection: string;
   updatedAt: string;
   views: number;
   readMinutes: number;
   author?: string;
+  parentId: string | null;
+  canEdit?: boolean;
 };
 
-// NEW: This type allows us to handle a mixed list of articles and subsections
 export type ContentItem = Subsection | Article;
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasNext: boolean;
+}
 
 export type SearchMode = 'all' | 'title' | 'tags' | 'content';
 
@@ -80,3 +102,7 @@ export type PageTreeNode = {
   title: string;
   hasChildren: boolean;
 };
+
+export interface PageTreeNodeWithPermission extends PageTreeNode {
+  isAllowed: boolean;
+}

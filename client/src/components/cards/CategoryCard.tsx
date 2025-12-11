@@ -25,14 +25,17 @@ interface CategoryCardProps {
   updatedAt?: string;
   href: string;
   className?: string;
+  index?: number;
 }
 
 function CategoryPreviewContent({ subsectionId }: { subsectionId: string }) {
-  const { data: children, isLoading } = useQuery({
+  const { data: paginatedResponse, isLoading } = useQuery({
     queryKey: ["preview-children", subsectionId],
-    queryFn: () => getPageContents(subsectionId),
+    queryFn: () => getPageContents(subsectionId, 1), 
     staleTime: 5 * 60 * 1000,
   });
+
+  const children = paginatedResponse?.items;
 
   if (isLoading) {
     return (
@@ -86,6 +89,7 @@ export function CategoryCard({
   updatedAt,
   href,
   className,
+  index,
 }: CategoryCardProps) {
   const formatDate = (dateString?: string) =>
     dateString
@@ -97,7 +101,7 @@ export function CategoryCard({
 
   const id = subsection?.id || title;
   const headerImage = getCardHeaderImage(id);
-  const Icon = getCardIcon(id);
+  const Icon = getCardIcon(id, index);
 
   return (
     <Card
@@ -113,7 +117,7 @@ export function CategoryCard({
             <Icon className="h-14 w-14 text-foreground" />
             <h3 className="mt-4 text-lg font-bold text-foreground">{title}</h3>
             <p className="mt-2 text-sm text-muted-foreground line-clamp-2">
-              {description}
+              {description} 
             </p>
           </div>
 
@@ -121,10 +125,12 @@ export function CategoryCard({
             <div className="flex items-center gap-2">
               {articleCount !== undefined && (
                 <span>
+                  {/* --- THIS IS THE FIX --- */}
+                  {/* Reverted to "item/items" as it's now counting all children */}
                   {articleCount} {articleCount === 1 ? "item" : "items"}
                 </span>
               )}
-              {subsection && articleCount && articleCount > 0 && (
+              {subsection && articleCount > 0 && (
                 <HoverCard>
                   <HoverCardTrigger asChild>
                     <Button

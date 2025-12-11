@@ -65,8 +65,8 @@ import {
     FileText,
   ];
   
-  export const getCardIcon = (id: string): IconComponent => {
+  export const getCardIcon = (id: string, index: number = 0): IconComponent => {
     if (!id) return cardIcons[0];
-    const hash = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const hash = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) + index;
     return cardIcons[hash % cardIcons.length];
   };

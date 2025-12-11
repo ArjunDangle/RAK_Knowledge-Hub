@@ -1,11 +1,12 @@
 // client/src/pages/LoginPage.tsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation } from "@tanstack/react-query";
 import { Loader2, AlertCircle } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,9 +14,10 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SiteHeader } from "@/components/layout/SiteHeader";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 import { useAuth } from "@/context/AuthContext";
-import { loginUser, LoginResponse } from "@/lib/api/api-client";
+import { loginUser, LoginResponse, LoginCredentials } from "@/lib/api/api-client";
 
 const loginSchema = z.object({
   username: z.string().min(1, { message: "Username is required" }),
@@ -29,6 +31,17 @@ export default function LoginPage() {
   const { login } = useAuth();
   const [apiError, setApiError] = useState<string | null>(null);
 
+  useEffect(() => {
+    const logoutMessage = localStorage.getItem('logoutMessage');
+    if (logoutMessage) {
+      toast.info("Session Expired", {
+        description: logoutMessage,
+        duration: 5000,
+      });
+      localStorage.removeItem('logoutMessage');
+    }
+  }, []);
+
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -37,20 +50,26 @@ export default function LoginPage() {
     },
   });
 
-  const mutation = useMutation({
-    mutationFn: (credentials: LoginFormData): Promise<LoginResponse> => loginUser(credentials),
+  const mutation = useMutation<LoginResponse, Error, LoginCredentials>({
+    mutationFn: loginUser,
+    // --- ADD THIS META PROPERTY ---
+    // This tells our global error handler to ignore this specific mutation.
+    meta: {
+      isLoginAttempt: true,
+    },
     onSuccess: (data) => {
       login(data);
       navigate("/");
     },
     onError: (error) => {
+      // This local onError will now be the ONLY one that runs for a failed login.
       setApiError(error.message || "An unknown error occurred.");
     },
   });
 
   const onSubmit = (data: LoginFormData) => {
     setApiError(null);
-    mutation.mutate(data);
+    mutation.mutate(data as LoginCredentials);
   };
 
   return (
@@ -94,7 +113,7 @@ export default function LoginPage() {
                     <FormItem>
                       <FormLabel>Password</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="Enter your password" {...field} />
+                        <PasswordInput placeholder="Enter your password" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

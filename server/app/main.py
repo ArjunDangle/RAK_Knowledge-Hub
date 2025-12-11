@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import db
-from app.routers import knowledge_router, auth_router, cms_router, notification_router
+from app.routers import knowledge_router, auth_router, cms_router, notification_router, group_router, tag_router
 
 app = FastAPI(
     title="Knowledge Hub API",
@@ -28,8 +28,6 @@ async def cleanup_old_notifications():
             print(f"[{datetime.now()}] Running notification cleanup task...")
             twenty_four_hours_ago = datetime.now(timezone.utc) - timedelta(hours=24)
             
-            # --- THIS IS THE FIX ---
-            # `delete_many` returns an integer, not an object with a .count attribute.
             deleted_count = await db.notification.delete_many(
                 where={
                     'createdAt': {
@@ -41,7 +39,6 @@ async def cleanup_old_notifications():
                 print(f"Cleaned up {deleted_count} old notifications.")
             else:
                 print("No old notifications to clean up.")
-            # --- END OF FIX ---
                 
         except Exception as e:
             # Catch exceptions so the loop doesn't break
@@ -63,6 +60,11 @@ origins = [
     "http://127.0.0.1:8080",
 ]
 
+extra_origins = os.getenv("FRONTEND_URLS")
+
+if extra_origins:
+    origins.extend(url.strip() for url in extra_origins.split(",") if url.strip())
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -75,6 +77,8 @@ app.include_router(knowledge_router.router)
 app.include_router(auth_router.router, prefix="/auth")
 app.include_router(cms_router.router)
 app.include_router(notification_router.router)
+app.include_router(group_router.router, prefix="/api/groups")
+app.include_router(tag_router.router, prefix="/api/tags")
 
 
 @app.get("/", tags=["Health Check"])

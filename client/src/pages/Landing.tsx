@@ -1,55 +1,42 @@
+// client/src/pages/Landing.tsx
 import { useQuery } from "@tanstack/react-query";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SearchBar } from "@/components/search/SearchBar";
 import { CategoryCard } from "@/components/cards/CategoryCard";
 import { ArticleCard } from "@/components/cards/ArticleCard";
-import { CategoryCardSkeleton, ArticleCardSkeleton } from "@/components/ui/loading-skeleton";
-import { getGroups, getSubsectionsByGroup, getPopularArticles, getRecentArticles } from "@/lib/api/api-client";
-import { Subsection, Article, SearchMode } from "@/lib/types/content";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link, useNavigate } from "react-router-dom";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Loader2 } from "lucide-react";
 import { formatRelativeTime } from "@/lib/utils/date";
 import ChatbotWidget from "@/components/chatbot/ChatbotWidget";
 import { useState } from "react";
 import { getColorFromId } from "@/lib/utils/visual-utils";
+import { Article, SearchMode, GroupInfo } from "@/lib/types/content";
+import { getGroups, getSubsectionsByGroup, getPopularArticles, getRecentArticles } from "@/lib/api/api-client";
 
-export default function Landing() {
-  const { data: groups, isLoading: groupsLoading } = useQuery({ queryKey: ['groups'], queryFn: getGroups });
-  const { data: departmentSubs, isLoading: deptLoading } = useQuery({ queryKey: ['subsections', 'departments'], queryFn: () => getSubsectionsByGroup('departments') });
-  const { data: resourceSubs, isLoading: resourceLoading } = useQuery({ queryKey: ['subsections', 'resource-centre'], queryFn: () => getSubsectionsByGroup('resource-centre') });
-  const { data: toolSubs, isLoading: toolsLoading } = useQuery({ queryKey: ['subsections', 'tools'], queryFn: () => getSubsectionsByGroup('tools') });
-  const { data: popularArticles, isLoading: popularLoading } = useQuery({ queryKey: ['articles', 'popular'], queryFn: () => getPopularArticles(4) });
-  const { data: recentArticles, isLoading: recentLoading } = useQuery({ queryKey: ['articles', 'recent'], queryFn: () => getRecentArticles(7) });
+// This new component fetches and renders a single category section
+const LandingCategorySection = ({ group }: { group: GroupInfo }) => {
+  const { data: subsections, isLoading } = useQuery({
+    queryKey: ['subsections', group.id],
+    queryFn: () => getSubsectionsByGroup(group.id)
+  });
 
-  const navigate = useNavigate();
-  const [query, setQuery] = useState('');
-  const [mode, setMode] = useState<SearchMode>('all');
-
-  const handleSearch = () => {
-    if (query.trim()) {
-      const params = new URLSearchParams();
-      params.append('q', query.trim());
-      params.append('mode', mode);
-      navigate(`/search?${params.toString()}`);
-    }
-  };
-
-  const renderCategorySection = (
-    title: string, description: string, subsections: Subsection[] | undefined, loading: boolean
-  ) => (
+  return (
     <section className="mb-16">
       <div className="mb-8">
-        <h2 className="text-2xl font-bold text-foreground mb-2">{title}</h2>
-        <p className="text-muted-foreground">{description}</p>
+        <h2 className="text-2xl font-bold text-foreground mb-2">{group.title}</h2>
+        <p className="text-muted-foreground">{group.description}</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {loading ? (
-          Array.from({ length: 4 }).map((_, i) => <CategoryCardSkeleton key={i} />)
+        {isLoading ? (
+          <div className="flex items-center justify-center col-span-4 h-40">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
         ) : (
-          subsections?.slice(0, 4).map((subsection) => (
+          subsections?.slice(0, 4).map((subsection, index) => (
             <CategoryCard
               key={subsection.id}
+              index={index}
               title={subsection.title}
               description={subsection.description}
               subsection={subsection}
@@ -62,6 +49,25 @@ export default function Landing() {
       </div>
     </section>
   );
+};
+
+export default function Landing() {
+  const { data: groups, isLoading: groupsLoading } = useQuery({ queryKey: ['groups'], queryFn: getGroups });
+  const { data: popularArticles, isLoading: popularLoading } = useQuery({ queryKey: ['articles', 'popular'], queryFn: () => getPopularArticles(4) });
+  const { data: recentArticles, isLoading: recentLoading } = useQuery({ queryKey: ['articles', 'recent'], queryFn: () => getRecentArticles(7) });
+  
+  const navigate = useNavigate();
+  const [query, setQuery] = useState('');
+  const [mode, setMode] = useState<SearchMode>('all');
+
+  const handleSearch = () => {
+    if (query.trim()) {
+      const params = new URLSearchParams();
+      params.append('q', query.trim());
+      params.append('mode', mode);
+      navigate(`/search?${params.toString()}`);
+    }
+  };
 
   const RecentArticleItem = ({ article }: { article: Article }) => (
     <Link to={`/article/${article.id}`} className="group block p-3 border-b last:border-b-0 hover:bg-muted/50">
@@ -82,7 +88,7 @@ export default function Landing() {
         <div className="container max-w-7xl mx-auto px-6 py-12 md:py-20">
           <section className="text-center mb-16">
             <div className="max-w-3xl mx-auto mb-8">
-              <h1 className="text-4xl md:text-5xl font-bold mb-4">RAKwireless Knowledge Hub</h1>
+              <h1 className="text-4xl md:text-5xl font-bold mb-4">RAKWireless Knowledge Hub</h1>
               <p className="text-xl leading-relaxed text-white/80">Your comprehensive resource for documentation, guides, and technical knowledge.</p>
             </div>
             <SearchBar 
@@ -98,16 +104,15 @@ export default function Landing() {
       </div>
       
       <main className="container max-w-7xl mx-auto px-6 py-12">
-        {groupsLoading ? <p>Loading categories...</p> : groups?.map(groupInfo => (
-          <div key={groupInfo.id}>
-            {renderCategorySection(
-              groupInfo.title,
-              groupInfo.description,
-              groupInfo.id === 'departments' ? departmentSubs : groupInfo.id === 'resource-centre' ? resourceSubs : toolSubs,
-              groupInfo.id === 'departments' ? deptLoading : groupInfo.id === 'resource-centre' ? resourceLoading : toolsLoading
-            )}
+        {groupsLoading ? (
+          <div className="flex items-center justify-center h-40">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
-        ))}
+        ) : (
+          groups?.map(groupInfo => (
+            <LandingCategorySection key={groupInfo.id} group={groupInfo} />
+          ))
+        )}
 
         <section>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-8 gap-y-12">
@@ -119,7 +124,8 @@ export default function Landing() {
               </div>
               {popularLoading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {Array.from({ length: 4 }).map((_, i) => <ArticleCardSkeleton key={i} />)}
+                  <Skeleton className="h-48 w-full" />
+                  <Skeleton className="h-48 w-full" />
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

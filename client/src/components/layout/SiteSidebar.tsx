@@ -1,4 +1,5 @@
-import { useState } from "react";
+// client/src/components/layout/SiteSidebar.tsx
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Tag, Clock, TrendingUp, PanelLeftClose } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,8 +8,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { getSubsectionsByGroup } from "@/lib/api/api-client";
+import { getSubsectionsByGroup, getGroups } from "@/lib/api/api-client";
 import { SidebarNode } from "./SidebarNode";
+import { useLayout } from "@/pages/KnowledgeLayout";
+import { Group, GroupInfo } from "@/lib/types/content"; // MODIFIED: Import both Group and GroupInfo
 import {
   Tooltip,
   TooltipContent,
@@ -27,7 +30,7 @@ const quickLinks = [
 ];
 const topTags = ["Getting Started", "Configuration", "Best Practices", "API", "Security"];
 
-const SidebarSection = ({ group }: { group: 'departments' | 'resource-centre' | 'tools' }) => {
+const SidebarSection = ({ group }: { group: Group }) => { // MODIFIED: This now correctly uses the dynamic Group type
   const { data: items, isLoading } = useQuery({
     queryKey: ['sidebar-subsections', group],
     queryFn: () => getSubsectionsByGroup(group)
@@ -49,26 +52,31 @@ const SidebarSection = ({ group }: { group: 'departments' | 'resource-centre' | 
 };
 
 export function SiteSidebar({ isCollapsed, onToggle }: SidebarProps) {
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    Departments: true,
-    'Resource Centre': true,
-    Tools: true,
+  const { activeGroup } = useLayout();
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+
+  // Fetch the navigation sections dynamically and strongly type the response
+  const { data: navSections, isLoading: isLoadingGroups } = useQuery<GroupInfo[]>({ // MODIFIED: Specify the return type here
+    queryKey: ['sidebarGroups'],
+    queryFn: getGroups,
+    staleTime: 60 * 60 * 1000, // 1 hour
   });
+
+  useEffect(() => {
+    const newExpandedState: Record<string, boolean> = {};
+    if (activeGroup && navSections) {
+      const activeSection = navSections.find(s => s.id === activeGroup);
+      if (activeSection) {
+        newExpandedState[activeSection.title] = true;
+      }
+    }
+    setExpandedSections(newExpandedState);
+  }, [activeGroup, navSections]);
 
   const toggleSection = (sectionTitle: string) => {
     setExpandedSections(prev => ({ ...prev, [sectionTitle]: !prev[sectionTitle] }));
   };
-
-  const navSections = [
-    { title: 'Departments', group: 'departments' as const },
-    { title: 'Resource Centre', group: 'resource-centre' as const },
-    { title: 'Tools', group: 'tools' as const },
-  ];
-
-  if (isCollapsed) {
-    return null;
-  }
-
+  
   return (
     <TooltipProvider delayDuration={0}>
         <aside className="flex flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border w-full h-full">
@@ -87,15 +95,23 @@ export function SiteSidebar({ isCollapsed, onToggle }: SidebarProps) {
         </div>
         <ScrollArea className="flex-1">
             <div className="p-2 space-y-4">
-            {navSections.map((section) => (
-                <div key={section.title}>
-                <Button variant="ghost" onClick={() => toggleSection(section.title)} className="w-full justify-start text-sidebar-foreground font-medium mb-1">
-                    <span className="text-sm">{section.title}</span>
-                    <ChevronDown className={cn("ml-auto h-4 w-4 transition-transform", !expandedSections[section.title] && "-rotate-90")} />
-                </Button>
-                {expandedSections[section.title] && <SidebarSection group={section.group} />}
+            {isLoadingGroups ? (
+                <div className="p-2 space-y-3">
+                    <Skeleton className="h-8 w-full" />
+                    <Skeleton className="h-8 w-full" />
                 </div>
-            ))}
+            ) : (
+                navSections?.map((section) => (
+                    <div key={section.id}>
+                        <Button variant="ghost" onClick={() => toggleSection(section.title)} className="w-full justify-start text-sidebar-foreground font-medium mb-1">
+                            <span className="text-sm">{section.title}</span>
+                            <ChevronDown className={cn("ml-auto h-4 w-4 transition-transform", !expandedSections[section.title] && "-rotate-90")} />
+                        </Button>
+                        {/* THE FIX IS HERE: TypeScript now understands that section.id is a valid Group, so no `any` or other casting is needed! */}
+                        {expandedSections[section.title] && <SidebarSection group={section.id} />}
+                    </div>
+                ))
+            )}
                 <>
                 <div>
                     <h3 className="font-medium text-sidebar-foreground mb-2 px-3 text-sm">Quick Links</h3>

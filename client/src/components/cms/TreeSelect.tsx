@@ -1,8 +1,10 @@
+// client/src/components/cms/TreeSelect.tsx
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronsUpDown, Loader2 } from 'lucide-react';
-import { getPageTree, getArticleById, getPageById } from '@/lib/api/api-client';
-import { PageTreeNode } from '@/lib/types/content';
+// --- MODIFY IMPORTS ---
+import { getPageTreeWithPermissions, getArticleById, getPageById, PageTreeNodeWithPermission } from '@/lib/api/api-client';
+// --- END MODIFICATION ---
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -12,23 +14,23 @@ interface TreeSelectProps {
   value?: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  allowedOnly?: boolean;
 }
 
-export const TreeSelect = ({ value, onChange, placeholder = 'Select a category...' }: TreeSelectProps) => {
+export const TreeSelect = ({ value, onChange, placeholder = 'Select a category...', allowedOnly = false }: TreeSelectProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedNodeTitle, setSelectedNodeTitle] = useState<string | null>(null);
 
-  // Fetch initial top-level nodes
+  // --- MODIFY THIS QUERY ---
   const { data: topLevelNodes, isLoading: isTreeLoading } = useQuery({
-    queryKey: ['pageTree', 'root'],
-    queryFn: () => getPageTree(),
+    queryKey: ['pageTreeWithPermissions', 'root', allowedOnly], // Add to query key
+    queryFn: () => getPageTreeWithPermissions(undefined, allowedOnly), // Pass to API function
     staleTime: 5 * 60 * 1000,
   });
+  // --- END MODIFICATION ---
 
-  // Fetch the full details of the currently selected page to display its title
   useEffect(() => {
     if (value) {
-      // This is a simple way to get the title. In a real app, you might have a dedicated endpoint.
       getPageById(value)
         .then(page => setSelectedNodeTitle(page.title))
         .catch(() => {
@@ -41,24 +43,34 @@ export const TreeSelect = ({ value, onChange, placeholder = 'Select a category..
     }
   }, [value]);
 
-  const handleSelect = (node: PageTreeNode) => {
+  // --- MODIFY THIS FUNCTION SIGNATURE ---
+  const handleSelect = (node: PageTreeNodeWithPermission) => {
+  // --- END MODIFICATION ---
+    // The internal logic of handleSelect in TreeNode already prevents this from
+    // being called for disallowed nodes, but we can keep the check for safety.
+    if (!node.isAllowed) return; 
+
     setSelectedNodeTitle(node.title);
     onChange(node.id);
     setIsOpen(false);
   };
   
   return (
-    <Popover open={isOpen} onOpenChange={setIsOpen}>
+    <Popover open={isOpen} onOpenChange={setIsOpen} modal={true}>
       <PopoverTrigger asChild>
+        {/* --- THIS IS THE FIX --- */}
         <Button
           variant="outline"
           role="combobox"
           aria-expanded={isOpen}
-          className="w-full justify-between font-normal"
+          className="w-full justify-between"
         >
-          <span className="truncate">{selectedNodeTitle || placeholder}</span>
+          <span className="truncate">
+            {selectedNodeTitle || placeholder}
+          </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
+        {/* --- END OF FIX --- */}
       </PopoverTrigger>
       <PopoverContent
         className="w-[--radix-popover-trigger-width] p-0"
@@ -78,6 +90,7 @@ export const TreeSelect = ({ value, onChange, placeholder = 'Select a category..
                 level={0}
                 onSelect={handleSelect}
                 selectedId={value}
+                allowedOnly={allowedOnly}
               />
             ))}
           </div>

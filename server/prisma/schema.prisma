@@ -3,7 +3,6 @@
 // This is your Prisma schema file.
 // Learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-
 generator client {
   provider                  = "prisma-client-py"
   enable_experimental_decimal = true
@@ -15,42 +14,110 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum PageType {
+  SUBSECTION
+  ARTICLE
+}
+
+enum GroupRole {
+  MEMBER
+  ADMIN
+}
+
+model Page {
+  id                 Int      @id @default(autoincrement())
+  confluenceId       String   @unique
+  title              String
+  slug               String   @unique
+  description        String
+  pageType           PageType
+  parentConfluenceId String?
+  authorName         String?
+  views              Int      @default(0)
+  updatedAt          DateTime
+
+  tags          Tag[]
+  submission    ArticleSubmission?
+  managingGroup Group?
+
+  @@index([parentConfluenceId])
+}
+
+model TagGroup {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique
+  description String?
+  order       Int     @default(0)
+
+  tags Tag[]
+}
+
+model Tag {
+  id    Int    @id @default(autoincrement())
+  name  String @unique
+  slug  String @unique
+  pages Page[]
+
+  tagGroup   TagGroup @relation(fields: [tagGroupId], references: [id])
+  tagGroupId Int
+}
+
 model User {
   id              Int      @id @default(autoincrement())
   username        String   @unique
-  name            String   // <-- NEW FIELD
+  name            String
   hashed_password String
-  role            String   // 'MEMBER' or 'ADMIN'
+  role            String
   createdAt       DateTime @default(now())
 
-  // Relation to the new ArticleSubmission table
-  submissions ArticleSubmission[]
-  notifications Notification[]
+  submissions       ArticleSubmission[]
+  notifications     Notification[]
+  groupMemberships  GroupMember[]
 }
 
-// New table to track article submissions, ownership, and status
+model Group {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+
+  memberships   GroupMember[]
+  managedPage   Page? @relation(fields: [managedPageId], references: [id])
+  managedPageId Int?  @unique
+}
+
 model ArticleSubmission {
-  id               Int      @id @default(autoincrement())
-  confluencePageId String   @unique
-  title            String
-  status           String   // e.g., "PENDING_REVIEW", "REJECTED", "PUBLISHED"
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  // Establishes a many-to-one relationship with User
-  author   User @relation(fields: [authorId], references: [id])
-  authorId Int
+  id                 Int      @id @default(autoincrement())
+  confluencePageId   String   @unique
+  title              String
+  status             String
+  rejectionComment   String?  
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  author             User     @relation(fields: [authorId], references: [id])
+  authorId           Int
+  page               Page     @relation(fields: [confluencePageId], references: [confluenceId])
 }
 
-// Add this model to server/prisma/schema.prisma
+
 model Notification {
   id          Int      @id @default(autoincrement())
   message     String
   link        String?
   isRead      Boolean  @default(false)
   createdAt   DateTime @default(now())
-
-  // Relation to the User who receives it
   recipient   User     @relation(fields: [recipientId], references: [id])
   recipientId Int
+}
+
+model GroupMember {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  groupId   Int
+  role      GroupRole @default(MEMBER)
+  
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group     Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime  @default(now())
+
+  @@unique([userId, groupId])
 }

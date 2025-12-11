@@ -1,3 +1,4 @@
+// client/src/components/layout/SidebarNode.tsx
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "react-router-dom";
@@ -16,16 +17,13 @@ interface SidebarNodeProps {
 export function SidebarNode({ item, level }: SidebarNodeProps) {
   const { activePath } = useLayout();
   const location = useLocation();
-
   const isArticle = item.type === 'article';
   const isFolder = item.type === 'subsection';
 
   const isActive = activePath.includes(item.id);
   const isCurrentPage = location.pathname.includes(item.id);
-  
   const [isExpanded, setIsExpanded] = useState(isActive);
 
-  // ===== FIX IS HERE =====
   // This effect ensures parent nodes expand when a child becomes active
   useEffect(() => {
     if (isActive) {
@@ -33,9 +31,10 @@ export function SidebarNode({ item, level }: SidebarNodeProps) {
     }
   }, [isActive]);
 
+  // This query now returns a PaginatedResponse object: { items: [], ... }
   const { data: children, isLoading } = useQuery({
     queryKey: ['sidebar-children', item.id],
-    queryFn: () => getPageContents(item.id),
+    queryFn: () => getPageContents(item.id), // This will fetch page 1
     enabled: isExpanded && isFolder,
     staleTime: 5 * 60 * 1000,
   });
@@ -78,7 +77,11 @@ export function SidebarNode({ item, level }: SidebarNodeProps) {
       {isExpanded && isFolder && (
         <div className="pl-4">
           {isLoading && <div className="space-y-2 py-2 pl-4"><Skeleton className="h-6 w-3/4" /><Skeleton className="h-6 w-2/3" /></div>}
-          {children?.map((child) => <SidebarNode key={child.id} item={child} level={level + 1} />)}
+          
+          {/* --- THIS IS THE FIX --- */}
+          {/* We now map over 'children.items' instead of 'children' */}
+          {children?.items?.map((child) => <SidebarNode key={child.id} item={child} level={level + 1} />)}
+          {/* --- END OF FIX --- */}
         </div>
       )}
     </div>

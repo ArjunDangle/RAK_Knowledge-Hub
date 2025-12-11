@@ -63,8 +63,15 @@ export function ArticleCard({
           </CardHeader>
 
           <CardContent className="p-0 flex-grow">
-            <p className="text-muted-foreground text-sm leading-relaxed mb-4">
-              {article.excerpt}
+            {/* Display the author on a separate line if it exists */}
+            {article.author && (
+              <p className="text-xs text-muted-foreground mb-2">
+                By: {article.author}
+              </p>
+            )}
+            {/* Display the description, now guaranteed to be on its own line */}
+            <p className="text-muted-foreground text-sm leading-relaxed mb-4 line-clamp-3">
+              {article.description || article.excerpt}
             </p>
           </CardContent>
 

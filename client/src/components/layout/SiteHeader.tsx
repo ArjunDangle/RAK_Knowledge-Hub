@@ -1,17 +1,26 @@
 // client/src/components/layout/SiteHeader.tsx
-
-// --- 1. ADD "NotificationBell" TO THE IMPORTS ---
-import { Search, Menu, PlusCircle, LayoutDashboard, LogOut, User as UserIcon, FileText, ListTree } from "lucide-react";
+import { Search, Menu, PlusCircle, LayoutDashboard, LogOut, User as UserIcon, FileText, ListTree, Users, Tag as TagIcon, Settings, Shield } from "lucide-react";
+import { UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { Separator } from "@/components/ui/separator";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger
+} from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { NotificationBell } from "@/components/layout/NotificationBell"; // <-- ADD THIS LINE
+import { NotificationBell } from "@/components/layout/NotificationBell";
 
 interface SiteHeaderProps {
   showSidebarToggle?: boolean;
@@ -28,6 +37,12 @@ export function SiteHeader({
   const navigate = useNavigate();
   const { isAuthenticated, user, isAdmin, logout } = useAuth();
   
+  // Calculate if the user is a Group Admin
+  const isGroupAdmin = user?.groupMemberships?.some(m => m.role === 'ADMIN') || false;
+  
+  const location = useLocation();
+  const showHeaderSearch = location.pathname !== '/' && location.pathname !== '/search';
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
@@ -71,24 +86,28 @@ export function SiteHeader({
         </div>
 
         <div className="flex items-center gap-2">
-          <form onSubmit={handleSearch} className="hidden md:flex items-center rounded-full bg-muted/60 px-3 h-9">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-2 w-52 h-full bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0"
-            />
-          </form>
-          <Button variant="ghost" size="icon" className="md:hidden" asChild>
-            <Link to="/search">
-              <Search className="h-5 w-5" />
-              <span className="sr-only">Search</span>
-            </Link>
-          </Button>
+          {showHeaderSearch && (
+            <>
+              <form onSubmit={handleSearch} className="hidden md:flex items-center rounded-full bg-muted/60 px-3 h-9">
+                <Search className="h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-2 w-52 h-full bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                />
+              </form>
+              <Button variant="ghost" size="icon" className="md:hidden" asChild>
+                <Link to="/search">
+                  <Search className="h-5 w-5" />
+                  <span className="sr-only">Search</span>
+                </Link>
+              </Button>
 
-          <Separator orientation="vertical" className="h-6 mx-2 hidden md:block" />
+              <Separator orientation="vertical" className="h-6 mx-2 hidden md:block" />
+            </>
+          )}
 
           {isAuthenticated ? (
             <div className="flex items-center gap-4">
@@ -99,7 +118,6 @@ export function SiteHeader({
                   </Link>
               </Button>
 
-              {/* --- 2. ADD THE COMPONENT HERE --- */}
               <NotificationBell />
 
               <DropdownMenu>
@@ -115,7 +133,6 @@ export function SiteHeader({
                 <DropdownMenuContent className="w-56" align="end" forceMount>
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
-                      {/* --- UPDATE: Use user.name for display --- */}
                       <p className="text-sm font-medium leading-none">{user?.name}</p>
                       <p className="text-xs leading-none text-muted-foreground">
                         {user?.role}
@@ -123,32 +140,98 @@ export function SiteHeader({
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  {/* --- ADD THIS NEW MENU ITEM --- */}
+                  
+                  {/* Personal Section - Always visible */}
                   <DropdownMenuItem asChild>
                     <Link to="/my-submissions">
                       <FileText className="mr-2 h-4 w-4" />
                       <span>My Submissions</span>
                     </Link>
                   </DropdownMenuItem>
-                  {isAdmin && (
+                  {!isAdmin && (
+                    <DropdownMenuItem asChild>
+                      <Link to="/my-groups">
+                        <Users className="mr-2 h-4 w-4" />
+                        <span>My Groups</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+
+                  {/* Admin & Group Admin Section */}
+                  {(isAdmin || isGroupAdmin) && (
                     <>
+                      <DropdownMenuSeparator />
+                      
+                      {/* Common Management Actions */}
                       <DropdownMenuItem asChild>
                         <Link to="/admin/dashboard">
                           <LayoutDashboard className="mr-2 h-4 w-4" />
                           <span>Review Dashboard</span>
                         </Link>
                       </DropdownMenuItem>
-                      {/* --- ADD THIS NEW MENU ITEM --- */}
                       <DropdownMenuItem asChild>
                         <Link to="/admin/content-index">
                           <ListTree className="mr-2 h-4 w-4" />
                           <span>Content Index</span>
                         </Link>
                       </DropdownMenuItem>
+
+                      {/* Group Admin Specific: Direct Access to Group Permissions */}
+                      {!isAdmin && isGroupAdmin && (
+                        <DropdownMenuItem asChild>
+                          <Link to="/admin/groups">
+                            <Users className="mr-2 h-4 w-4" />
+                            <span>Group Permissions</span>
+                          </Link>
+                        </DropdownMenuItem>
+                      )}
+
+                      {/* Global Admin Only: Full System Management */}
+                      {isAdmin && (
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <Settings className="mr-2 h-4 w-4" />
+                            <span>System Management</span>
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent className="w-56">
+                            <DropdownMenuLabel className="text-xs">Access Control</DropdownMenuLabel>
+                            <DropdownMenuItem asChild>
+                              <Link to="/admin/users">
+                                <Shield className="mr-2 h-4 w-4" />
+                                <span>User Management</span>
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link to="/admin/groups">
+                                <Users className="mr-2 h-4 w-4" />
+                                <span>Group Permissions</span>
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link to="/admin/register">
+                                <UserPlus className="mr-2 h-4 w-4" />
+                                <span>Register New User</span>
+                              </Link>
+                            </DropdownMenuItem>
+                            
+                            <DropdownMenuSeparator />
+                            
+                            <DropdownMenuLabel className="text-xs">Taxonomy</DropdownMenuLabel>
+                            <DropdownMenuItem asChild>
+                              <Link to="/admin/tags">
+                                <TagIcon className="mr-2 h-4 w-4" />
+                                <span>Tag Management</span>
+                              </Link>
+                            </DropdownMenuItem>
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                      )}
                     </>
                   )}
+                  
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={logout}>
+                  
+                  <DropdownMenuItem onClick={() => logout()} className="text-red-600 focus:text-red-600 focus:bg-red-50">
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Logout</span>
                   </DropdownMenuItem>

@@ -1,4 +1,4 @@
-# In server/app/schemas/cms_schemas.py
+# server/app/schemas/cms_schemas.py
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
@@ -15,10 +15,19 @@ class AttachmentInfo(BaseModel):
 
 class PageCreate(BaseModel):
     title: str
+    description: str
     content: str
-    parent_id: str
+    parent_id: str # This is the parent's Confluence ID
     tags: List[str] = []
     attachments: List[AttachmentInfo] = []
+
+class PageUpdate(BaseModel):
+    title: str
+    description: str
+    content: str
+    parent_id: Optional[str] = None
+    tags: Optional[List[str]] = None
+    attachments: Optional[List[AttachmentInfo]] = None
     
 class PageReject(BaseModel):
     comment: Optional[str] = Field(None, min_length=1)
@@ -33,6 +42,7 @@ class ArticleSubmissionResponse(BaseModel):
     confluencePageId: str
     title: str
     status: ArticleSubmissionStatus
+    rejectionComment: Optional[str] = None
     updatedAt: datetime
 
     class Config:
@@ -46,10 +56,21 @@ class ContentNode(BaseModel):
     updatedAt: datetime
     confluenceUrl: str
     children: List['ContentNode'] = []
-    hasChildren: bool = False # <-- FIX: ADD THIS LINE
+    hasChildren: bool = False
+    canManage: bool = False 
 
 ContentNode.model_rebuild()
 
 class AttachmentResponse(BaseModel):
     temp_id: str
     file_name: str
+
+class PageDetailResponse(BaseModel):
+    title: str
+    description: str
+    content: str
+    parent_id: Optional[str] = None
+    tags: List[str] = []
+
+class BulkDeletePayload(BaseModel):
+    page_ids: List[str]
