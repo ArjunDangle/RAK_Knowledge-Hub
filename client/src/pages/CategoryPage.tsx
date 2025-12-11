@@ -6,10 +6,8 @@ import { Loader2 } from "lucide-react";
 
 import { ArticleCard } from "@/components/cards/ArticleCard";
 import { CategoryCard } from "@/components/cards/CategoryCard";
-// --- STEP 5: SKELETON IMPORT CLEANUP ---
 import { CategoryCardSkeleton } from "@/components/ui/loading-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
-// --- END OF CLEANUP ---
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -74,7 +72,6 @@ export default function CategoryPage() {
   }
   
   const info = groupInfo[currentGroup];
-  const responsiveGridClass = "grid grid-cols-[repeat(auto-fit,minmax(20rem,1fr))] gap-6";
 
   const breadcrumbs = isNestedPage 
     ? (ancestors || []).map((ancestor, index) => {
@@ -118,26 +115,63 @@ export default function CategoryPage() {
             )}
           </div>
           
-          {/* --- STEP 5: SKELETONS REDUCED --- */}
           {isLoading ? (
-            <div className={`${responsiveGridClass} mt-12`}>
-              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-48 w-full" />)}
+            // Loading Skeletons: Centered with fixed widths to prevent jumping
+            <div className="flex flex-wrap justify-center gap-6 mt-12">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="w-full max-w-[22rem]">
+                  <Skeleton className="h-48 w-full" />
+                </div>
+              ))}
             </div>
-          // --- END OF REDUCTION ---
-          
           ) : data && data.pages.length > 0 && data.pages[0].items.length > 0 ? (
             <>
-              <div className={`${responsiveGridClass} mt-12`}>
-                {data.pages.map((page, i) => (
-                  <Fragment key={i}>
-                    {page.items.map((item, index) => item.type === 'subsection' ? (
-                      <CategoryCard key={item.id} title={item.title} description={item.description} subsection={item} articleCount={item.articleCount} updatedAt={item.updatedAt} href={`/page/${item.id}`} index={index} />
-                    ) : (
-                      <ArticleCard key={item.id} article={item} pastelColor={getColorFromId(item.id)} />
+              {/* DYNAMIC ALIGNMENT LOGIC */}
+              {(() => {
+                // 1. Flatten all items to check what content we have
+                const allItems = data.pages.flatMap((p) => p.items);
+                
+                // 2. Check if ANY item is a Category (subsection)
+                const hasCategories = allItems.some((item) => item.type === "subsection");
+                
+                // 3. Define alignment: 
+                // - If categories exist (or mixed) -> Center
+                // - If ONLY articles -> Start (Left align)
+                const alignmentClass = hasCategories ? "justify-center" : "justify-start";
+
+                return (
+                  <div className={`flex flex-wrap ${alignmentClass} gap-6 mt-12`}>
+                    {data.pages.map((page, i) => (
+                      <Fragment key={i}>
+                        {page.items.map((item, index) =>
+                          item.type === "subsection" ? (
+                            <CategoryCard
+                              key={item.id}
+                              title={item.title}
+                              description={item.description}
+                              subsection={item}
+                              articleCount={item.articleCount}
+                              updatedAt={item.updatedAt}
+                              href={`/page/${item.id}`}
+                              index={index}
+                              // FIXED WIDTH CONSTRAINT
+                              className="w-full max-w-[22rem]"
+                            />
+                          ) : (
+                            <ArticleCard
+                              key={item.id}
+                              article={item}
+                              pastelColor={getColorFromId(item.id)}
+                              // FIXED WIDTH CONSTRAINT
+                              className="w-full max-w-[22rem]"
+                            />
+                          )
+                        )}
+                      </Fragment>
                     ))}
-                  </Fragment>
-                ))}
-              </div>
+                  </div>
+                );
+              })()}
 
               {hasNextPage && (
                 <div className="mt-10 text-center">
@@ -173,6 +207,7 @@ export default function CategoryPage() {
   }
 
   // This is the top-level page (e.g., /category/departments)
+  // Constraint: Top level pages always contain categories, so we always Center them.
   return (
     <KnowledgeLayout breadcrumbs={breadcrumbs}>
       <div>
@@ -181,9 +216,15 @@ export default function CategoryPage() {
           <p className="text-lg text-muted-foreground">{info.description}</p>
         </div>
         {subsectionsLoading ? (
-          <div className={responsiveGridClass}>{Array.from({ length: 6 }).map((_, i) => <CategoryCardSkeleton key={i} />)}</div>
+          <div className="flex flex-wrap justify-center gap-6">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="w-full max-w-[22rem]">
+                <CategoryCardSkeleton />
+              </div>
+            ))}
+          </div>
         ) : topLevelSubsections && topLevelSubsections.length > 0 ? (
-          <div className={responsiveGridClass}>
+          <div className="flex flex-wrap justify-center gap-6">
             {topLevelSubsections.map((subsection, index) => (
               <CategoryCard 
                 key={subsection.id} 
@@ -193,6 +234,7 @@ export default function CategoryPage() {
                 articleCount={subsection.articleCount} 
                 updatedAt={subsection.updatedAt} 
                 href={`/page/${subsection.id}`}
+                className="w-full max-w-[22rem]"
               />
             ))}
           </div>
