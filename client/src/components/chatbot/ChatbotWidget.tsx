@@ -19,7 +19,7 @@ import { DotLottiePlayer } from '@dotlottie/react-player';
 
 // --- CONFIGURATION ---
 const ROBOT_ANIMATION_SRC = "/robot.json"; 
-const LOADING_ANIMATION_SRC = "/loading.json"; // ADDED: New loading animation
+const LOADING_ANIMATION_SRC = "/loading.json"; 
 
 type Message = {
   id: number;
@@ -27,7 +27,6 @@ type Message = {
   content: string;
 };
 
-// ... (PRODUCT_CATEGORIES and SUGGESTED_QUESTIONS constants remain the same) ...
 const PRODUCT_CATEGORIES = [
   "All Categories", 
   "5G", 
@@ -53,10 +52,11 @@ const SUGGESTED_QUESTIONS = [
   "Meshtastic configuration guide"
 ];
 
-const API_URL = "http://localhost:8180/api/chat";
+// Ensure this matches your backend port (8180)
+// const API_URL = "http://localhost:8180/api/chat";
+const API_URL = "https://rak-chatbot-api-backend.rak-development.net/api/chat";
 
 const ChatbotWidget: React.FC = () => {
-  // ... (State hooks remain the same) ...
   const [isOpen, setIsOpen] = useState(false);
   const [showCallout, setShowCallout] = useState(false); 
   const [isHovered, setIsHovered] = useState(false);
@@ -71,7 +71,7 @@ const ChatbotWidget: React.FC = () => {
   
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
 
-  // ... (useEffect for auto-scroll remains the same) ...
+  // Auto-scroll to bottom
   useEffect(() => {
     if (isOpen && scrollAreaRef.current) {
         const scrollContainer = scrollAreaRef.current;
@@ -82,10 +82,19 @@ const ChatbotWidget: React.FC = () => {
     }
   }, [messages, isLoading, isExpanded, isOpen]);
 
-  // ... (handleSendMessage function remains the same) ...
+  // Show callout after 3 seconds
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowCallout(true);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // --- STREAMING LOGIC FIX ---
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
 
+    // 1. Add User Message immediately
     const userMessage: Message = { id: Date.now(), role: 'user', content: text };
     const newHistory = [...messages, userMessage];
     setMessages(newHistory);
@@ -111,20 +120,30 @@ const ChatbotWidget: React.FC = () => {
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
-      let isFirstChunk = true;
+      
       const botResponseId = Date.now() + 1;
+      let accumulatedResponse = ""; // Local variable to track full text
+      let hasAddedBotMessage = false;
 
       if (reader) {
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
+          
           const chunk = decoder.decode(value, { stream: true });
-          if (isFirstChunk) {
-            setMessages(prev => [...prev, { id: botResponseId, role: 'assistant', content: chunk }]);
-            isFirstChunk = false;
+          accumulatedResponse += chunk;
+
+          // Update State: 
+          // Use accumulatedResponse to overwrite content, avoiding React state race conditions
+          if (!hasAddedBotMessage) {
+            setMessages(prev => [
+              ...prev, 
+              { id: botResponseId, role: 'assistant', content: accumulatedResponse }
+            ]);
+            hasAddedBotMessage = true;
           } else {
             setMessages(prev => prev.map(msg => 
-              msg.id === botResponseId ? { ...msg, content: msg.content + chunk } : msg
+              msg.id === botResponseId ? { ...msg, content: accumulatedResponse } : msg
             ));
           }
         }
@@ -145,7 +164,7 @@ const ChatbotWidget: React.FC = () => {
   const lastMessage = messages[messages.length - 1];
   const isThinking = isLoading && lastMessage?.role !== 'assistant';
 
-  // ... (Variants remain the same) ...
+  // --- Animation Variants ---
   const modalVariants = {
     hidden: { 
       opacity: 0, 
@@ -384,13 +403,10 @@ const ChatbotWidget: React.FC = () => {
 
                     {isThinking && (
                         <div className="flex items-start">
-                            {/* UPDATED: Added Flex container to hold Lottie and Text together */}
                             <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 p-3 rounded-2xl rounded-tl-sm shadow-sm flex items-center gap-3">
-                                {/* New Loading Animation */}
                                 <div className="w-8 h-8 flex-shrink-0">
                                     <DotLottiePlayer src={LOADING_ANIMATION_SRC} loop autoplay />
                                 </div>
-                                {/* Existing Text Logic */}
                                 <TypingIndicator />
                             </div>
                         </div>
