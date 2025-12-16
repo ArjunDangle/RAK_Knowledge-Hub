@@ -263,16 +263,10 @@ export async function getRelatedArticles(
 ): Promise<Article[]> {
   const tagNames = tags.map((t) => t.name).slice(0, 5);
   if (tagNames.length === 0) return [];
-  
-  const searchParams = new URLSearchParams();
-  tagNames.forEach((tag) => searchParams.append("tags", tag));
-  
-  // FIX: Cast response to PaginatedResponse<Article> instead of Article[]
+  const query = tagNames.join(","); 
   const response = await apiFetch<PaginatedResponse<Article>>(
-    `/search?q=${tagNames.join(" ")}`
+    `/search?q=${encodeURIComponent(query)}&mode=tags`
   );
-
-  // FIX: Access response.items array before filtering
   return response.items
     .filter((a) => a.id !== currentId)
     .slice(0, limit);
