@@ -263,12 +263,19 @@ export async function getRelatedArticles(
 ): Promise<Article[]> {
   const tagNames = tags.map((t) => t.name).slice(0, 5);
   if (tagNames.length === 0) return [];
+  
   const searchParams = new URLSearchParams();
   tagNames.forEach((tag) => searchParams.append("tags", tag));
-  const allArticles = await apiFetch<Article[]>(
+  
+  // FIX: Cast response to PaginatedResponse<Article> instead of Article[]
+  const response = await apiFetch<PaginatedResponse<Article>>(
     `/search?q=${tagNames.join(" ")}`
   );
-  return allArticles.filter((a) => a.id !== currentId).slice(0, limit);
+
+  // FIX: Access response.items array before filtering
+  return response.items
+    .filter((a) => a.id !== currentId)
+    .slice(0, limit);
 }
 export async function searchContent(
   filters: SearchFilters,

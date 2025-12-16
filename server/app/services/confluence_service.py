@@ -339,6 +339,10 @@ class ConfluenceService:
         articles_or_none = await asyncio.gather(*article_promises)
         valid_articles = [article for article in articles_or_none if article is not None]
 
+        print(f"DEBUG: Stripping HTML from {len(valid_articles)} articles...")
+        for article in valid_articles:
+            article.html = ""
+
         total_results = start + len(valid_articles) + (1 if has_next_page else 0)
 
         return {
