@@ -1,183 +1,286 @@
-// client/src/components/editor/RichTextEditor.tsx
-import { useEditor, EditorContent, Editor } from "@tiptap/react";
+import { useCallback, useState } from "react";
+import { Editor, EditorContent, useEditor} from "@tiptap/react";
+import { BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
+import Link from "@tiptap/extension-link";
+import TextAlign from "@tiptap/extension-text-align";
+import { Table } from "@tiptap/extension-table";
+import { TableRow } from "@tiptap/extension-table-row";
+import { TableCell } from "@tiptap/extension-table-cell";
+import { TableHeader } from "@tiptap/extension-table-header";
 import {
   Bold,
   Italic,
   Strikethrough,
+  Code,
+  Heading1,
+  Heading2,
+  Heading3,
   List,
   ListOrdered,
   Quote,
-  Table2,
-  Link as LinkIcon,
-  Underline,
-  Palette,
-  Highlighter,
+  Undo,
+  Redo,
   AlignLeft,
-  ListTodo,
-  RemoveFormatting,
-  ChevronDown,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
+  Link as LinkIcon,
+  Image as ImageIcon,
+  Table as TableIcon,
+  Grid3X3,
+  Plus,
+  Trash2,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  Columns,
+  Rows,
+  Trash,
+  GripVertical,
 } from "lucide-react";
-import { Toggle } from "@/components/ui/toggle";
-import { AttachmentNode } from "./extensions/attachmentNode";
-import { Table } from "@tiptap/extension-table";
-import { TableCell } from "@tiptap/extension-table-cell";
-import { TableHeader } from "@tiptap/extension-table-header";
-import { TableRow } from "@tiptap/extension-table-row";
+
+
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { TextStyle } from "@tiptap/extension-text-style";
-import { Color } from "@tiptap/extension-color";
-import TiptapUnderline from "@tiptap/extension-underline";
-import Highlight from "@tiptap/extension-highlight";
-import Link from "@tiptap/extension-link";
-import TextAlign from "@tiptap/extension-text-align";
-import TaskList from "@tiptap/extension-task-list";
-import TaskItem from "@tiptap/extension-task-item";
-import FontFamily from "@tiptap/extension-font-family";
-import { Button } from "../ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import { Input } from "../ui/input";
-import { useCallback, useState, useEffect } from "react";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from "../ui/dropdown-menu";
-import { Plugin, PluginKey } from "prosemirror-state";
-import { Extension } from "@tiptap/core";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Toggle } from "@/components/ui/toggle";
 
 interface RichTextEditorProps {
   editor: Editor | null;
 }
 
-// Helper function to convert a base64 data URI to a File object
-function dataURItoFile(dataURI: string, filename: string): File {
-  const arr = dataURI.split(",");
-  const mimeMatch = arr[0].match(/:(.*?);/);
-  if (!mimeMatch) {
-    const bstr = atob(arr[1] || "");
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    while (n--) {
-      u8arr[n] = bstr.charCodeAt(n);
+// REPLACE YOUR EXISTING TableSelector COMPONENT WITH THIS:
+
+const TableSelector = ({ editor }: { editor: Editor }) => {
+  const [hoverRows, setHoverRows] = useState(0);
+  const [hoverCols, setHoverCols] = useState(0);
+  const [isCustomDialogOpen, setIsCustomDialogOpen] = useState(false);
+  const [customRows, setCustomRows] = useState(3);
+  const [customCols, setCustomCols] = useState(3);
+  const [isOpen, setIsOpen] = useState(false);
+
+  const insertTable = (rows: number, cols: number) => {
+    editor
+      .chain()
+      .focus()
+      .insertTable({ rows, cols, withHeaderRow: true })
+      .run();
+    setIsOpen(false);
+    setIsCustomDialogOpen(false);
+    setHoverRows(0);
+    setHoverCols(0);
+  };
+
+  const isTableActive = editor.can().deleteTable();
+
+  return (
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant={isTableActive ? "secondary" : "ghost"}
+          size="sm"
+          className="h-8 w-8 p-0"
+          title="Table Operations"
+        >
+          <TableIcon className="h-4 w-4" />
+        </Button>
+      </PopoverTrigger>
+
+      <PopoverContent className="w-64 p-3" align="start">
+        {/* SECTION 1: ALWAYS VISIBLE - INSERT TABLE */}
+        <div className={isTableActive ? "mb-3" : "mb-0"}>
+          <div className="text-xs font-medium mb-2 text-muted-foreground">
+            Insert Table {hoverRows > 0 ? `${hoverCols}x${hoverRows}` : ""}
+          </div>
+          
+          {/* 10x10 Grid */}
+          <div
+            className="grid gap-1 mb-3"
+            style={{ gridTemplateColumns: "repeat(10, 1fr)" }}
+            onMouseLeave={() => {
+              setHoverRows(0);
+              setHoverCols(0);
+            }}
+          >
+            {Array.from({ length: 100 }).map((_, i) => {
+              const row = Math.floor(i / 10) + 1;
+              const col = (i % 10) + 1;
+              const isActive = row <= hoverRows && col <= hoverCols;
+
+              return (
+                <button
+                  key={i}
+                  className={`w-4 h-4 border rounded-sm transition-colors ${
+                    isActive
+                      ? "bg-primary border-primary"
+                      : "bg-muted border-muted-foreground/20"
+                  }`}
+                  onMouseEnter={() => {
+                    setHoverRows(row);
+                    setHoverCols(col);
+                  }}
+                  onClick={() => insertTable(row, col)}
+                />
+              );
+            })}
+          </div>
+
+          {/* Custom Dialog Trigger */}
+          <Dialog
+            open={isCustomDialogOpen}
+            onOpenChange={setIsCustomDialogOpen}
+          >
+            <DialogTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-start"
+              >
+                <Grid3X3 className="mr-2 h-4 w-4" /> Insert Custom Table...
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Insert Table</DialogTitle>
+              </DialogHeader>
+              <div className="grid grid-cols-2 gap-4 py-4">
+                <div className="space-y-2">
+                  <Label>Columns</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={customCols}
+                    onChange={(e) => setCustomCols(parseInt(e.target.value))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Rows</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={customRows}
+                    onChange={(e) => setCustomRows(parseInt(e.target.value))}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={() => insertTable(customRows, customCols)}>
+                  Insert Table
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        {/* SECTION 2: EDIT EXISTING TABLE (Visible only when inside a table) */}
+        {isTableActive && (
+          <>
+            <Separator className="my-3" />
+            <div className="space-y-1">
+              <div className="text-xs font-semibold text-muted-foreground mb-1">
+                Edit Current Table
+              </div>
+
+              <div className="grid grid-cols-2 gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="justify-start h-7 px-2 text-xs"
+                  onClick={() => editor.chain().focus().addRowBefore().run()}
+                >
+                  <ArrowUp className="mr-2 h-3 w-3" /> Row Above
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="justify-start h-7 px-2 text-xs"
+                  onClick={() => editor.chain().focus().addRowAfter().run()}
+                >
+                  <ArrowDown className="mr-2 h-3 w-3" /> Row Below
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="justify-start h-7 px-2 text-xs"
+                  onClick={() => editor.chain().focus().addColumnBefore().run()}
+                >
+                  <ArrowLeft className="mr-2 h-3 w-3" /> Col Left
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="justify-start h-7 px-2 text-xs"
+                  onClick={() => editor.chain().focus().addColumnAfter().run()}
+                >
+                  <ArrowRight className="mr-2 h-3 w-3" /> Col Right
+                </Button>
+              </div>
+
+              <div className="border-t mt-2 pt-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="justify-start w-full h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => editor.chain().focus().deleteTable().run()}
+                >
+                  <Trash2 className="mr-2 h-3 w-3" /> Delete Table
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+// --- 2. TOOLBAR COMPONENT ---
+const Toolbar = ({ editor }: { editor: Editor }) => {
+  const addImage = useCallback(() => {
+    const url = window.prompt("URL");
+    if (url) {
+      editor.chain().focus().setImage({ src: url }).run();
     }
-    return new File([u8arr], filename);
-  }
-  const mime = mimeMatch[1];
-  const bstr = atob(arr[1]);
-  let n = bstr.length;
-  const u8arr = new Uint8Array(n);
-  while (n--) {
-    u8arr[n] = bstr.charCodeAt(n);
-  }
-  return new File([u8arr], filename, { type: mime });
-}
-
-const Toolbar = ({ editor }: { editor: Editor | null }) => {
-  const [isLinkPopoverOpen, setIsLinkPopoverOpen] = useState(false);
-  const [linkUrl, setLinkUrl] = useState("");
-  const [, setForceUpdate] = useState(0);
-
-  useEffect(() => {
-    if (!editor) return;
-    const updateHandler = () => setForceUpdate((val) => val + 1);
-    editor.on("transaction", updateHandler);
-    return () => {
-      editor.off("transaction", updateHandler);
-    };
   }, [editor]);
 
   const setLink = useCallback(() => {
-    if (!editor) return;
-    if (linkUrl === "") {
+    const previousUrl = editor.getAttributes("link").href;
+    const url = window.prompt("URL", previousUrl);
+
+    if (url === null) return;
+    if (url === "") {
       editor.chain().focus().extendMarkRange("link").unsetLink().run();
-      setIsLinkPopoverOpen(false);
       return;
-    }
-    let finalUrl = linkUrl;
-    if (!/^https?:\/\//i.test(linkUrl)) {
-      finalUrl = "https://" + linkUrl;
     }
     editor
       .chain()
       .focus()
       .extendMarkRange("link")
-      .setLink({ href: finalUrl })
+      .setLink({ href: url })
       .run();
-    setIsLinkPopoverOpen(false);
-    setLinkUrl("");
-  }, [editor, linkUrl]);
-
-  if (!editor) {
-    return null;
-  }
-
-  const handleLinkPopoverOpen = () => {
-    setLinkUrl(editor.getAttributes("link").href || "");
-    setIsLinkPopoverOpen(true);
-  };
-
-  const StyleDropdown = () => (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-32 justify-between text-left font-normal"
-        >
-          <span className="truncate">
-            {editor.isActive("heading", { level: 1 })
-              ? "Heading 1"
-              : editor.isActive("heading", { level: 2 })
-              ? "Heading 2"
-              : editor.isActive("heading", { level: 3 })
-              ? "Heading 3"
-              : "Normal text"}
-          </span>
-          <ChevronDown className="h-4 w-4 opacity-50" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent>
-        <DropdownMenuItem
-          onClick={() => editor.chain().focus().setParagraph().run()}
-        >
-          Normal text
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() =>
-            editor.chain().focus().toggleHeading({ level: 1 }).run()
-          }
-        >
-          Heading 1
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() =>
-            editor.chain().focus().toggleHeading({ level: 2 }).run()
-          }
-        >
-          Heading 2
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() =>
-            editor.chain().focus().toggleHeading({ level: 3 }).run()
-          }
-        >
-          Heading 3
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
+  }, [editor]);
 
   return (
-    <div className="border border-input rounded-t-md p-1 flex flex-wrap items-center gap-0.5">
-      <StyleDropdown />
-      <Separator orientation="vertical" className="h-6 mx-1" />
+    <div className="p-2 flex flex-wrap items-center gap-1 bg-background">
       <Toggle
         size="sm"
-        title="Bold"
         pressed={editor.isActive("bold")}
         onPressedChange={() => editor.chain().focus().toggleBold().run()}
       >
@@ -185,7 +288,6 @@ const Toolbar = ({ editor }: { editor: Editor | null }) => {
       </Toggle>
       <Toggle
         size="sm"
-        title="Italic"
         pressed={editor.isActive("italic")}
         onPressedChange={() => editor.chain().focus().toggleItalic().run()}
       >
@@ -193,326 +295,334 @@ const Toolbar = ({ editor }: { editor: Editor | null }) => {
       </Toggle>
       <Toggle
         size="sm"
-        title="Underline"
-        pressed={editor.isActive("underline")}
-        onPressedChange={() => editor.chain().focus().toggleUnderline().run()}
-      >
-        <Underline className="h-4 w-4" />
-      </Toggle>
-      <Toggle
-        size="sm"
-        title="Strikethrough"
         pressed={editor.isActive("strike")}
         onPressedChange={() => editor.chain().focus().toggleStrike().run()}
       >
         <Strikethrough className="h-4 w-4" />
       </Toggle>
-      <label
-        className="flex items-center cursor-pointer p-1.5 rounded-md hover:bg-muted"
-        title="Text Color"
-      >
-        <Palette className="h-4 w-4" />
-        <input
-          type="color"
-          value={editor.getAttributes("textStyle").color || "#000000"}
-          onChange={(e) =>
-            editor.chain().focus().setColor(e.target.value).run()
-          }
-          className="w-0 h-0 p-0 border-0 overflow-hidden"
-        />
-      </label>
       <Toggle
         size="sm"
-        title="Highlight"
-        pressed={editor.isActive("highlight")}
-        onPressedChange={() => editor.chain().focus().toggleHighlight().run()}
+        pressed={editor.isActive("code")}
+        onPressedChange={() => editor.chain().focus().toggleCode().run()}
       >
-        <Highlighter className="h-4 w-4" />
+        <Code className="h-4 w-4" />
       </Toggle>
+
       <Separator orientation="vertical" className="h-6 mx-1" />
-      <Popover open={isLinkPopoverOpen} onOpenChange={setIsLinkPopoverOpen}>
-        <PopoverTrigger asChild>
-          <Toggle
-            size="sm"
-            title="Link"
-            pressed={editor.isActive("link")}
-            onClick={handleLinkPopoverOpen}
-          >
-            <LinkIcon className="h-4 w-4" />
-          </Toggle>
-        </PopoverTrigger>
-        <PopoverContent className="w-80">
-          <div className="grid gap-4">
-            <div className="space-y-2">
-              <h4 className="font-medium leading-none">Set Link URL</h4>
-              <p className="text-sm text-muted-foreground">
-                Enter the full URL, including https://
-              </p>
-            </div>
-            <Input
-              value={linkUrl}
-              onChange={(e) => setLinkUrl(e.target.value)}
-              placeholder="https://example.com"
-            />
-            <Button onClick={setLink}>Set Link</Button>
-          </div>
-        </PopoverContent>
-      </Popover>
+
       <Toggle
         size="sm"
-        title="Blockquote"
+        pressed={editor.isActive("heading", { level: 1 })}
+        onPressedChange={() =>
+          editor.chain().focus().toggleHeading({ level: 1 }).run()
+        }
+      >
+        <Heading1 className="h-4 w-4" />
+      </Toggle>
+      <Toggle
+        size="sm"
+        pressed={editor.isActive("heading", { level: 2 })}
+        onPressedChange={() =>
+          editor.chain().focus().toggleHeading({ level: 2 }).run()
+        }
+      >
+        <Heading2 className="h-4 w-4" />
+      </Toggle>
+      <Toggle
+        size="sm"
+        pressed={editor.isActive("heading", { level: 3 })}
+        onPressedChange={() =>
+          editor.chain().focus().toggleHeading({ level: 3 }).run()
+        }
+      >
+        <Heading3 className="h-4 w-4" />
+      </Toggle>
+
+      <Separator orientation="vertical" className="h-6 mx-1" />
+
+      <Toggle
+        size="sm"
+        pressed={editor.isActive("bulletList")}
+        onPressedChange={() => editor.chain().focus().toggleBulletList().run()}
+      >
+        <List className="h-4 w-4" />
+      </Toggle>
+      <Toggle
+        size="sm"
+        pressed={editor.isActive("orderedList")}
+        onPressedChange={() => editor.chain().focus().toggleOrderedList().run()}
+      >
+        <ListOrdered className="h-4 w-4" />
+      </Toggle>
+      <Toggle
+        size="sm"
         pressed={editor.isActive("blockquote")}
         onPressedChange={() => editor.chain().focus().toggleBlockquote().run()}
       >
         <Quote className="h-4 w-4" />
       </Toggle>
+
+      <Separator orientation="vertical" className="h-6 mx-1" />
+
       <Toggle
         size="sm"
-        title="Clear Formatting"
-        onPressedChange={() => editor.chain().focus().unsetAllMarks().run()}
+        pressed={editor.isActive({ textAlign: "left" })}
+        onPressedChange={() =>
+          editor.chain().focus().setTextAlign("left").run()
+        }
       >
-        <RemoveFormatting className="h-4 w-4" />
+        <AlignLeft className="h-4 w-4" />
       </Toggle>
+      <Toggle
+        size="sm"
+        pressed={editor.isActive({ textAlign: "center" })}
+        onPressedChange={() =>
+          editor.chain().focus().setTextAlign("center").run()
+        }
+      >
+        <AlignCenter className="h-4 w-4" />
+      </Toggle>
+      <Toggle
+        size="sm"
+        pressed={editor.isActive({ textAlign: "right" })}
+        onPressedChange={() =>
+          editor.chain().focus().setTextAlign("right").run()
+        }
+      >
+        <AlignRight className="h-4 w-4" />
+      </Toggle>
+      <Toggle
+        size="sm"
+        pressed={editor.isActive({ textAlign: "justify" })}
+        onPressedChange={() =>
+          editor.chain().focus().setTextAlign("justify").run()
+        }
+      >
+        <AlignJustify className="h-4 w-4" />
+      </Toggle>
+
       <Separator orientation="vertical" className="h-6 mx-1" />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9"
-            title="Alignment"
-          >
-            <AlignLeft className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent>
-          <DropdownMenuItem
-            onClick={() => editor.chain().focus().setTextAlign("left").run()}
-          >
-            Align Left
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => editor.chain().focus().setTextAlign("center").run()}
-          >
-            Align Center
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => editor.chain().focus().setTextAlign("right").run()}
-          >
-            Align Right
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => editor.chain().focus().setTextAlign("justify").run()}
-          >
-            Align Justify
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-9 w-9" title="Lists">
-            <List className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent>
-          <DropdownMenuItem
-            onClick={() => editor.chain().focus().toggleBulletList().run()}
-          >
-            Bullet List
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          >
-            Numbered List
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => editor.chain().focus().toggleTaskList().run()}
-          >
-            Task List
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() =>
-              editor.chain().focus().sinkListItem("listItem").run()
-            }
-            disabled={!editor.can().sinkListItem("listItem")}
-          >
-            Indent
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() =>
-              editor.chain().focus().liftListItem("listItem").run()
-            }
-            disabled={!editor.can().liftListItem("listItem")}
-          >
-            Outdent
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-9 w-9" title="Table">
-            <Table2 className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent>
-          <DropdownMenuItem
-            onClick={() =>
-              editor
-                .chain()
-                .focus()
-                .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-                .run()
-            }
-          >
-            Insert Table
-          </DropdownMenuItem>
-          {editor.isActive("table") && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => editor.chain().focus().addColumnBefore().run()}
-              >
-                Add Column Before
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => editor.chain().focus().addColumnAfter().run()}
-              >
-                Add Column After
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => editor.chain().focus().deleteColumn().run()}
-              >
-                Delete Column
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => editor.chain().focus().addRowBefore().run()}
-              >
-                Add Row Before
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => editor.chain().focus().addRowAfter().run()}
-              >
-                Add Row After
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => editor.chain().focus().deleteRow().run()}
-              >
-                Delete Row
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => editor.chain().focus().mergeCells().run()}
-              >
-                Merge Cells
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => editor.chain().focus().splitCell().run()}
-              >
-                Split Cell
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => editor.chain().focus().deleteTable().run()}
-                className="text-red-600"
-              >
-                Delete Table
-              </DropdownMenuItem>
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+
+      <Button
+        variant={editor.isActive("link") ? "secondary" : "ghost"}
+        size="sm"
+        className="h-8 w-8 p-0"
+        onClick={setLink}
+      >
+        <LinkIcon className="h-4 w-4" />
+      </Button>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-8 w-8 p-0"
+        onClick={addImage}
+      >
+        <ImageIcon className="h-4 w-4" />
+      </Button>
+
+      <TableSelector editor={editor} />
+
+      <Separator orientation="vertical" className="h-6 mx-1" />
+
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-8 w-8 p-0"
+        onClick={() => editor.chain().focus().undo().run()}
+        disabled={!editor.can().undo()}
+      >
+        <Undo className="h-4 w-4" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-8 w-8 p-0"
+        onClick={() => editor.chain().focus().redo().run()}
+        disabled={!editor.can().redo()}
+      >
+        <Redo className="h-4 w-4" />
+      </Button>
     </div>
   );
 };
 
-export const RichTextEditor = ({ editor }: RichTextEditorProps) => (
-  <div>
-    {editor && <Toolbar editor={editor} />}
-    <EditorContent
+const TableBubbleMenu = ({ editor }: { editor: Editor }) => {
+  if (!editor) return null;
+
+  return (
+    <BubbleMenu
       editor={editor}
-      className="prose dark:prose-invert max-w-none border border-input rounded-b-md p-4 min-h-[300px] focus:outline-none"
-    />
-  </div>
-);
+      shouldShow={({ editor }) => editor.isActive('table')}
+      tippyOptions={{
+        duration: 100,
+        placement: 'bottom-end', // <--- CHANGED: Fixes it to bottom-right of the cell
+        offset: [0, 10],
+        zIndex: 999,
+      }}
+      className="bg-transparent"
+    >
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            // CHANGED:
+            // 1. Increased size (h-9 w-9)
+            // 2. Removed 'cursor-grab active:cursor-grabbing' (palm hover)
+            className="h-9 w-9 p-0 hover:bg-muted bg-background border shadow-sm rounded-sm"
+            title="Table Options"
+          >
+            {/* CHANGED: Icon slightly bigger (h-5 w-5) */}
+            <GripVertical className="h-5 w-5 text-muted-foreground" />
+          </Button>
+        </PopoverTrigger>
+        
+        <PopoverContent 
+          side="top" 
+          align="end" 
+          className="w-auto flex items-center gap-1 p-1 bg-background border border-border shadow-lg rounded-md"
+        >
+          {/* ... (The content inside PopoverContent remains the same as before) ... */}
+          <div className="flex items-center gap-1 mr-2 border-r border-border pr-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-xs hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400"
+              onClick={(e) => {
+                e.preventDefault();
+                editor.chain().focus(undefined, { scrollIntoView: false }).addColumnAfter().run();
+              }}
+              title="Add Column Right"
+            >
+              <div className="flex items-center gap-1">
+                <Plus className="h-3 w-3" />
+                <Columns className="h-3 w-3" />
+              </div>
+            </Button>
 
-const PasteHandler = Extension.create<{ onFileUpload: (file: File) => void }>({
-  name: "pasteHandler",
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-xs hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400"
+              onClick={(e) => {
+                e.preventDefault();
+                editor.chain().focus(undefined, { scrollIntoView: false }).addRowAfter().run();
+              }}
+              title="Add Row Below"
+            >
+              <div className="flex items-center gap-1">
+                <Plus className="h-3 w-3" />
+                <Rows className="h-3 w-3" />
+              </div>
+            </Button>
+          </div>
 
-  addOptions() {
-    return {
-      onFileUpload: () => {},
-    };
-  },
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-zinc-500 hover:bg-red-50 hover:text-red-600 dark:text-zinc-400 dark:hover:bg-red-900/20"
+              onClick={(e) => {
+                e.preventDefault();
+                editor.chain().focus(undefined, { scrollIntoView: false }).deleteColumn().run();
+              }}
+              title="Delete Column"
+            >
+              <div className="relative">
+                <Columns className="h-4 w-4" />
+                <span className="absolute -top-1 -right-1 text-[10px] font-bold text-red-500">×</span>
+              </div>
+            </Button>
 
-  addProseMirrorPlugins() {
-    return [
-      new Plugin({
-        key: new PluginKey("paste-handler"),
-        props: {
-          handlePaste: (view, event) => {
-            const files = event.clipboardData?.files;
-            if (!files || files.length === 0) {
-              return false; 
-            }
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-zinc-500 hover:bg-red-50 hover:text-red-600 dark:text-zinc-400 dark:hover:bg-red-900/20"
+              onClick={(e) => {
+                e.preventDefault();
+                editor.chain().focus(undefined, { scrollIntoView: false }).deleteRow().run();
+              }}
+              title="Delete Row"
+            >
+              <div className="relative">
+                <Rows className="h-4 w-4" />
+                <span className="absolute -top-1 -right-1 text-[10px] font-bold text-red-500">×</span>
+              </div>
+            </Button>
 
-            const nonImageFiles = Array.from(files).filter(
-              (file) => !file.type.startsWith("image/")
-            );
+            <div className="w-px h-4 bg-border mx-1" />
 
-            if (nonImageFiles.length === 0) {
-              return false;
-            }
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-red-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+              onClick={(e) => {
+                e.preventDefault();
+                editor.chain().focus(undefined, { scrollIntoView: false }).deleteTable().run();
+              }}
+              title="Delete Entire Table"
+            >
+              <Trash className="h-4 w-4" />
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </BubbleMenu>
+  );
+};
 
-            nonImageFiles.forEach((file) => {
-              this.options.onFileUpload(file);
-            });
+// --- 3. MAIN COMPONENT ---
+export const RichTextEditor = ({ editor }: RichTextEditorProps) => {
+  if (!editor) return null;
 
-            return true;
-          },
-        },
-      }),
-    ];
-  },
-});
+  return (
+    <div className="flex flex-col border border-input rounded-md bg-background w-full overflow-hidden">
+      {/* Sticky Toolbar */}
+      <div className="flex-none border-b z-10 bg-muted/20">
+        <Toolbar editor={editor} />
+      </div>
 
-export const useConfiguredEditor = (
-  initialContent: string = "",
-  onFileUpload: (file: File) => void,
-  onUpdate?: (editor: Editor) => void
-) => {
-  const editor = useEditor({
+      {/* --- ADD THIS: Table Floating Menu --- */}
+      <TableBubbleMenu editor={editor} />
+
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-y-auto min-h-[400px] max-h-[650px] bg-background">
+        <EditorContent
+          editor={editor}
+          className="prose dark:prose-invert max-w-none p-6 focus:outline-none"
+        />
+      </div>
+    </div>
+  );
+};
+
+// --- 4. EXPORTED HOOK FOR EDITOR CONFIGURATION ---
+// This fixes your "Uncaught SyntaxError" in CreatePage.tsx
+// and ensures Tables, Images, and Links work correctly.
+export const useConfiguredEditor = (content: string = "") => {
+  return useEditor({
     extensions: [
-      StarterKit.configure({
-        link: false,
-        underline: false,
+      StarterKit,
+      Image,
+      Link.configure({
+        openOnClick: false,
       }),
-      TiptapUnderline,
-      TextStyle,
-      FontFamily,
-      Color,
-      Highlight.configure({ multicolor: true }),
-      Link.configure({ openOnClick: false, autolink: true }),
-      TextAlign.configure({ types: ["heading", "paragraph"] }),
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      Image.configure({ inline: true, allowBase64: true }),
-      AttachmentNode,
-      Table.configure({ resizable: true }),
+      TextAlign.configure({
+        types: ['heading', 'paragraph'],
+      }),
+      Table.configure({
+        resizable: true,
+      }),
       TableRow,
       TableHeader,
       TableCell,
-      PasteHandler.configure({ onFileUpload }),
     ],
-    content: initialContent,
     editorProps: {
-      attributes: { class: "focus:outline-none" },
+      attributes: {
+        class: 'prose dark:prose-invert max-w-none focus:outline-none min-h-[150px]',
+      },
     },
-    onUpdate: ({ editor }) => {
-      onUpdate?.(editor);
-    },
+    content,
   });
-
-  return editor;
 };
