@@ -212,6 +212,8 @@ export default function CreatePage() {
     handleFileUpload
   );
 
+  const watchedTitle = form.watch("title");
+
   useEffect(() => {
     if (isEditMode && existingArticle && tagGroups && editor) {
       const defaultTagValues = tagGroups.reduce((acc, group) => {
@@ -489,7 +491,7 @@ export default function CreatePage() {
                     Write your article below. You can paste images directly into
                     the editor to upload them.
                   </p>
-                  <RichTextEditor editor={editor} />
+                  <RichTextEditor editor={editor} title={watchedTitle} />
                 </div>
 
                 <div className="space-y-4">

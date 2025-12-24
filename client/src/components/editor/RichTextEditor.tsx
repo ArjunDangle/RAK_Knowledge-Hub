@@ -1,6 +1,6 @@
-import { useCallback, useState } from "react";
-import { Editor, EditorContent, useEditor} from "@tiptap/react";
-import { BubbleMenu } from '@tiptap/react/menus'
+import React, { useCallback, useState } from "react";
+import { Editor, EditorContent, useEditor } from "@tiptap/react";
+import { BubbleMenu } from '@tiptap/react/menus';
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
@@ -40,8 +40,8 @@ import {
   Rows,
   Trash,
   GripVertical,
+  Maximize2,
 } from "lucide-react";
-
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -62,12 +62,15 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Toggle } from "@/components/ui/toggle";
 
+// Import the ExpandedEditor component
+import { ExpandedEditor } from "./ExpandedEditor";
+
 interface RichTextEditorProps {
   editor: Editor | null;
+  title?: string;
 }
 
-// REPLACE YOUR EXISTING TableSelector COMPONENT WITH THIS:
-
+// --- 1. TABLE SELECTOR COMPONENT (Logic Preserved) ---
 const TableSelector = ({ editor }: { editor: Editor }) => {
   const [hoverRows, setHoverRows] = useState(0);
   const [hoverCols, setHoverCols] = useState(0);
@@ -98,19 +101,24 @@ const TableSelector = ({ editor }: { editor: Editor }) => {
           size="sm"
           className="h-8 w-8 p-0"
           title="Table Operations"
+          // FIX: Prevent the editor from losing focus when the popover trigger is clicked
+          onMouseDown={(e) => e.preventDefault()}
         >
           <TableIcon className="h-4 w-4" />
         </Button>
       </PopoverTrigger>
 
-      <PopoverContent className="w-64 p-3" align="start">
-        {/* SECTION 1: ALWAYS VISIBLE - INSERT TABLE */}
+      <PopoverContent 
+        className="w-64 p-3 z-[110]" // Higher z-index for expanded mode
+        align="start"
+        // FIX: Keep focus in editor even when interacting with the grid
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <div className={isTableActive ? "mb-3" : "mb-0"}>
           <div className="text-xs font-medium mb-2 text-muted-foreground">
             Insert Table {hoverRows > 0 ? `${hoverCols}x${hoverRows}` : ""}
           </div>
           
-          {/* 10x10 Grid */}
           <div
             className="grid gap-1 mb-3"
             style={{ gridTemplateColumns: "repeat(10, 1fr)" }}
@@ -137,12 +145,12 @@ const TableSelector = ({ editor }: { editor: Editor }) => {
                     setHoverCols(col);
                   }}
                   onClick={() => insertTable(row, col)}
+                  onMouseDown={(e) => e.preventDefault()} // FIX
                 />
               );
             })}
           </div>
 
-          {/* Custom Dialog Trigger */}
           <Dialog
             open={isCustomDialogOpen}
             onOpenChange={setIsCustomDialogOpen}
@@ -152,11 +160,12 @@ const TableSelector = ({ editor }: { editor: Editor }) => {
                 variant="outline"
                 size="sm"
                 className="w-full justify-start"
+                onMouseDown={(e) => e.preventDefault()} // FIX
               >
                 <Grid3X3 className="mr-2 h-4 w-4" /> Insert Custom Table...
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="z-[120]"> {/* Ensure it sits above the expanded view */}
               <DialogHeader>
                 <DialogTitle>Insert Table</DialogTitle>
               </DialogHeader>
@@ -189,7 +198,6 @@ const TableSelector = ({ editor }: { editor: Editor }) => {
           </Dialog>
         </div>
 
-        {/* SECTION 2: EDIT EXISTING TABLE (Visible only when inside a table) */}
         {isTableActive && (
           <>
             <Separator className="my-3" />
@@ -203,6 +211,7 @@ const TableSelector = ({ editor }: { editor: Editor }) => {
                   variant="ghost"
                   size="sm"
                   className="justify-start h-7 px-2 text-xs"
+                  onMouseDown={(e) => e.preventDefault()} // FIX
                   onClick={() => editor.chain().focus().addRowBefore().run()}
                 >
                   <ArrowUp className="mr-2 h-3 w-3" /> Row Above
@@ -211,6 +220,7 @@ const TableSelector = ({ editor }: { editor: Editor }) => {
                   variant="ghost"
                   size="sm"
                   className="justify-start h-7 px-2 text-xs"
+                  onMouseDown={(e) => e.preventDefault()} // FIX
                   onClick={() => editor.chain().focus().addRowAfter().run()}
                 >
                   <ArrowDown className="mr-2 h-3 w-3" /> Row Below
@@ -219,6 +229,7 @@ const TableSelector = ({ editor }: { editor: Editor }) => {
                   variant="ghost"
                   size="sm"
                   className="justify-start h-7 px-2 text-xs"
+                  onMouseDown={(e) => e.preventDefault()} // FIX
                   onClick={() => editor.chain().focus().addColumnBefore().run()}
                 >
                   <ArrowLeft className="mr-2 h-3 w-3" /> Col Left
@@ -227,6 +238,7 @@ const TableSelector = ({ editor }: { editor: Editor }) => {
                   variant="ghost"
                   size="sm"
                   className="justify-start h-7 px-2 text-xs"
+                  onMouseDown={(e) => e.preventDefault()} // FIX
                   onClick={() => editor.chain().focus().addColumnAfter().run()}
                 >
                   <ArrowRight className="mr-2 h-3 w-3" /> Col Right
@@ -238,6 +250,7 @@ const TableSelector = ({ editor }: { editor: Editor }) => {
                   variant="ghost"
                   size="sm"
                   className="justify-start w-full h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onMouseDown={(e) => e.preventDefault()} // FIX
                   onClick={() => editor.chain().focus().deleteTable().run()}
                 >
                   <Trash2 className="mr-2 h-3 w-3" /> Delete Table
@@ -252,7 +265,7 @@ const TableSelector = ({ editor }: { editor: Editor }) => {
 };
 
 // --- 2. TOOLBAR COMPONENT ---
-const Toolbar = ({ editor }: { editor: Editor }) => {
+export const Toolbar = ({ editor, onExpand }: { editor: Editor; onExpand?: () => void }) => {
   const addImage = useCallback(() => {
     const url = window.prompt("URL");
     if (url) {
@@ -282,6 +295,7 @@ const Toolbar = ({ editor }: { editor: Editor }) => {
       <Toggle
         size="sm"
         pressed={editor.isActive("bold")}
+        onMouseDown={(e) => e.preventDefault()} // FIX
         onPressedChange={() => editor.chain().focus().toggleBold().run()}
       >
         <Bold className="h-4 w-4" />
@@ -289,6 +303,7 @@ const Toolbar = ({ editor }: { editor: Editor }) => {
       <Toggle
         size="sm"
         pressed={editor.isActive("italic")}
+        onMouseDown={(e) => e.preventDefault()} // FIX
         onPressedChange={() => editor.chain().focus().toggleItalic().run()}
       >
         <Italic className="h-4 w-4" />
@@ -296,6 +311,7 @@ const Toolbar = ({ editor }: { editor: Editor }) => {
       <Toggle
         size="sm"
         pressed={editor.isActive("strike")}
+        onMouseDown={(e) => e.preventDefault()} // FIX
         onPressedChange={() => editor.chain().focus().toggleStrike().run()}
       >
         <Strikethrough className="h-4 w-4" />
@@ -303,6 +319,7 @@ const Toolbar = ({ editor }: { editor: Editor }) => {
       <Toggle
         size="sm"
         pressed={editor.isActive("code")}
+        onMouseDown={(e) => e.preventDefault()} // FIX
         onPressedChange={() => editor.chain().focus().toggleCode().run()}
       >
         <Code className="h-4 w-4" />
@@ -313,6 +330,7 @@ const Toolbar = ({ editor }: { editor: Editor }) => {
       <Toggle
         size="sm"
         pressed={editor.isActive("heading", { level: 1 })}
+        onMouseDown={(e) => e.preventDefault()} // FIX
         onPressedChange={() =>
           editor.chain().focus().toggleHeading({ level: 1 }).run()
         }
@@ -322,6 +340,7 @@ const Toolbar = ({ editor }: { editor: Editor }) => {
       <Toggle
         size="sm"
         pressed={editor.isActive("heading", { level: 2 })}
+        onMouseDown={(e) => e.preventDefault()} // FIX
         onPressedChange={() =>
           editor.chain().focus().toggleHeading({ level: 2 }).run()
         }
@@ -331,6 +350,7 @@ const Toolbar = ({ editor }: { editor: Editor }) => {
       <Toggle
         size="sm"
         pressed={editor.isActive("heading", { level: 3 })}
+        onMouseDown={(e) => e.preventDefault()} // FIX
         onPressedChange={() =>
           editor.chain().focus().toggleHeading({ level: 3 }).run()
         }
@@ -343,6 +363,7 @@ const Toolbar = ({ editor }: { editor: Editor }) => {
       <Toggle
         size="sm"
         pressed={editor.isActive("bulletList")}
+        onMouseDown={(e) => e.preventDefault()} // FIX
         onPressedChange={() => editor.chain().focus().toggleBulletList().run()}
       >
         <List className="h-4 w-4" />
@@ -350,6 +371,7 @@ const Toolbar = ({ editor }: { editor: Editor }) => {
       <Toggle
         size="sm"
         pressed={editor.isActive("orderedList")}
+        onMouseDown={(e) => e.preventDefault()} // FIX
         onPressedChange={() => editor.chain().focus().toggleOrderedList().run()}
       >
         <ListOrdered className="h-4 w-4" />
@@ -357,6 +379,7 @@ const Toolbar = ({ editor }: { editor: Editor }) => {
       <Toggle
         size="sm"
         pressed={editor.isActive("blockquote")}
+        onMouseDown={(e) => e.preventDefault()} // FIX
         onPressedChange={() => editor.chain().focus().toggleBlockquote().run()}
       >
         <Quote className="h-4 w-4" />
@@ -367,6 +390,7 @@ const Toolbar = ({ editor }: { editor: Editor }) => {
       <Toggle
         size="sm"
         pressed={editor.isActive({ textAlign: "left" })}
+        onMouseDown={(e) => e.preventDefault()} // FIX
         onPressedChange={() =>
           editor.chain().focus().setTextAlign("left").run()
         }
@@ -376,6 +400,7 @@ const Toolbar = ({ editor }: { editor: Editor }) => {
       <Toggle
         size="sm"
         pressed={editor.isActive({ textAlign: "center" })}
+        onMouseDown={(e) => e.preventDefault()} // FIX
         onPressedChange={() =>
           editor.chain().focus().setTextAlign("center").run()
         }
@@ -385,6 +410,7 @@ const Toolbar = ({ editor }: { editor: Editor }) => {
       <Toggle
         size="sm"
         pressed={editor.isActive({ textAlign: "right" })}
+        onMouseDown={(e) => e.preventDefault()} // FIX
         onPressedChange={() =>
           editor.chain().focus().setTextAlign("right").run()
         }
@@ -394,6 +420,7 @@ const Toolbar = ({ editor }: { editor: Editor }) => {
       <Toggle
         size="sm"
         pressed={editor.isActive({ textAlign: "justify" })}
+        onMouseDown={(e) => e.preventDefault()} // FIX
         onPressedChange={() =>
           editor.chain().focus().setTextAlign("justify").run()
         }
@@ -407,6 +434,7 @@ const Toolbar = ({ editor }: { editor: Editor }) => {
         variant={editor.isActive("link") ? "secondary" : "ghost"}
         size="sm"
         className="h-8 w-8 p-0"
+        onMouseDown={(e) => e.preventDefault()} // FIX
         onClick={setLink}
       >
         <LinkIcon className="h-4 w-4" />
@@ -416,11 +444,13 @@ const Toolbar = ({ editor }: { editor: Editor }) => {
         variant="ghost"
         size="sm"
         className="h-8 w-8 p-0"
+        onMouseDown={(e) => e.preventDefault()} // FIX
         onClick={addImage}
       >
         <ImageIcon className="h-4 w-4" />
       </Button>
 
+      {/* Table Selector is rendered here */}
       <TableSelector editor={editor} />
 
       <Separator orientation="vertical" className="h-6 mx-1" />
@@ -429,6 +459,7 @@ const Toolbar = ({ editor }: { editor: Editor }) => {
         variant="ghost"
         size="sm"
         className="h-8 w-8 p-0"
+        onMouseDown={(e) => e.preventDefault()} // FIX
         onClick={() => editor.chain().focus().undo().run()}
         disabled={!editor.can().undo()}
       >
@@ -438,15 +469,32 @@ const Toolbar = ({ editor }: { editor: Editor }) => {
         variant="ghost"
         size="sm"
         className="h-8 w-8 p-0"
+        onMouseDown={(e) => e.preventDefault()} // FIX
         onClick={() => editor.chain().focus().redo().run()}
         disabled={!editor.can().redo()}
       >
         <Redo className="h-4 w-4" />
       </Button>
+
+      {onExpand && (
+        <>
+          <Separator orientation="vertical" className="h-6 mx-1" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 ml-auto"
+            onClick={onExpand}
+            title="Expand to Fullscreen"
+          >
+            <Maximize2 className="h-4 w-4" />
+          </Button>
+        </>
+      )}
     </div>
   );
 };
 
+// --- 3. BUBBLE MENU COMPONENT ---
 const TableBubbleMenu = ({ editor }: { editor: Editor }) => {
   if (!editor) return null;
 
@@ -456,9 +504,9 @@ const TableBubbleMenu = ({ editor }: { editor: Editor }) => {
       shouldShow={({ editor }) => editor.isActive('table')}
       tippyOptions={{
         duration: 100,
-        placement: 'bottom-end', // <--- CHANGED: Fixes it to bottom-right of the cell
+        placement: 'bottom-end',
         offset: [0, 10],
-        zIndex: 999,
+        zIndex: 110, // Higher z-index
       }}
       className="bg-transparent"
     >
@@ -467,13 +515,10 @@ const TableBubbleMenu = ({ editor }: { editor: Editor }) => {
           <Button
             variant="ghost"
             size="sm"
-            // CHANGED:
-            // 1. Increased size (h-9 w-9)
-            // 2. Removed 'cursor-grab active:cursor-grabbing' (palm hover)
             className="h-9 w-9 p-0 hover:bg-muted bg-background border shadow-sm rounded-sm"
             title="Table Options"
+            onMouseDown={(e) => e.preventDefault()} // FIX
           >
-            {/* CHANGED: Icon slightly bigger (h-5 w-5) */}
             <GripVertical className="h-5 w-5 text-muted-foreground" />
           </Button>
         </PopoverTrigger>
@@ -481,40 +526,36 @@ const TableBubbleMenu = ({ editor }: { editor: Editor }) => {
         <PopoverContent 
           side="top" 
           align="end" 
-          className="w-auto flex items-center gap-1 p-1 bg-background border border-border shadow-lg rounded-md"
+          className="w-auto flex items-center gap-1 p-1 bg-background border border-border shadow-lg rounded-md z-[115]"
+          onOpenAutoFocus={(e) => e.preventDefault()} // FIX
         >
-          {/* ... (The content inside PopoverContent remains the same as before) ... */}
           <div className="flex items-center gap-1 mr-2 border-r border-border pr-2">
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 px-2 text-xs hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400"
+              className="h-8 px-2 text-xs hover:bg-blue-50 hover:text-blue-600"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={(e) => {
                 e.preventDefault();
                 editor.chain().focus(undefined, { scrollIntoView: false }).addColumnAfter().run();
               }}
-              title="Add Column Right"
             >
-              <div className="flex items-center gap-1">
-                <Plus className="h-3 w-3" />
-                <Columns className="h-3 w-3" />
-              </div>
+              <Plus className="h-3 w-3" />
+              <Columns className="h-3 w-3" />
             </Button>
 
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 px-2 text-xs hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400"
+              className="h-8 px-2 text-xs hover:bg-blue-50 hover:text-blue-600"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={(e) => {
                 e.preventDefault();
                 editor.chain().focus(undefined, { scrollIntoView: false }).addRowAfter().run();
               }}
-              title="Add Row Below"
             >
-              <div className="flex items-center gap-1">
-                <Plus className="h-3 w-3" />
-                <Rows className="h-3 w-3" />
-              </div>
+              <Plus className="h-3 w-3" />
+              <Rows className="h-3 w-3" />
             </Button>
           </div>
 
@@ -522,46 +563,12 @@ const TableBubbleMenu = ({ editor }: { editor: Editor }) => {
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 w-8 p-0 text-zinc-500 hover:bg-red-50 hover:text-red-600 dark:text-zinc-400 dark:hover:bg-red-900/20"
-              onClick={(e) => {
-                e.preventDefault();
-                editor.chain().focus(undefined, { scrollIntoView: false }).deleteColumn().run();
-              }}
-              title="Delete Column"
-            >
-              <div className="relative">
-                <Columns className="h-4 w-4" />
-                <span className="absolute -top-1 -right-1 text-[10px] font-bold text-red-500">×</span>
-              </div>
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 text-zinc-500 hover:bg-red-50 hover:text-red-600 dark:text-zinc-400 dark:hover:bg-red-900/20"
-              onClick={(e) => {
-                e.preventDefault();
-                editor.chain().focus(undefined, { scrollIntoView: false }).deleteRow().run();
-              }}
-              title="Delete Row"
-            >
-              <div className="relative">
-                <Rows className="h-4 w-4" />
-                <span className="absolute -top-1 -right-1 text-[10px] font-bold text-red-500">×</span>
-              </div>
-            </Button>
-
-            <div className="w-px h-4 bg-border mx-1" />
-
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 text-red-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20"
+              className="h-8 w-8 p-0 text-red-500"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={(e) => {
                 e.preventDefault();
                 editor.chain().focus(undefined, { scrollIntoView: false }).deleteTable().run();
               }}
-              title="Delete Entire Table"
             >
               <Trash className="h-4 w-4" />
             </Button>
@@ -572,48 +579,58 @@ const TableBubbleMenu = ({ editor }: { editor: Editor }) => {
   );
 };
 
-// --- 3. MAIN COMPONENT ---
-export const RichTextEditor = ({ editor }: RichTextEditorProps) => {
+// --- 4. MAIN COMPONENT (Sync Fix) ---
+export const RichTextEditor = ({ editor, title }: RichTextEditorProps) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   if (!editor) return null;
 
   return (
-    <div className="flex flex-col border border-input rounded-md bg-background w-full overflow-hidden">
-      {/* Sticky Toolbar */}
-      <div className="flex-none border-b z-10 bg-muted/20">
-        <Toolbar editor={editor} />
-      </div>
+    <div className="relative">
+      {/* Logic: Only mount the small editor if not expanded. 
+         This ensures the editor instance is cleanly moved to the large view.
+      */}
+      {!isExpanded ? (
+        <div className="flex flex-col border border-input rounded-md bg-background w-full overflow-hidden">
+          <div className="flex-none border-b z-10 bg-muted/20">
+            <Toolbar editor={editor} onExpand={() => setIsExpanded(true)} />
+          </div>
 
-      {/* --- ADD THIS: Table Floating Menu --- */}
-      <TableBubbleMenu editor={editor} />
+          <TableBubbleMenu editor={editor} />
 
-      {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto min-h-[400px] max-h-[650px] bg-background">
-        <EditorContent
-          editor={editor}
-          className="prose dark:prose-invert max-w-none p-6 focus:outline-none"
+          <div className="flex-1 overflow-y-auto min-h-[400px] max-h-[650px] bg-background text-foreground">
+            <EditorContent
+              key="small"
+              editor={editor}
+              className="prose dark:prose-invert max-w-none p-6 focus:outline-none"
+            />
+          </div>
+        </div>
+      ) : (
+        <ExpandedEditor 
+          editor={editor} 
+          isOpen={isExpanded} 
+          onClose={() => {
+            setIsExpanded(false);
+            // Small delay to ensure the DOM is ready for focus
+            setTimeout(() => editor.commands.focus(), 50);
+          }} 
+          title={title || ""} 
         />
-      </div>
+      )}
     </div>
   );
 };
 
-// --- 4. EXPORTED HOOK FOR EDITOR CONFIGURATION ---
-// This fixes your "Uncaught SyntaxError" in CreatePage.tsx
-// and ensures Tables, Images, and Links work correctly.
-export const useConfiguredEditor = (content: string = "") => {
+// --- 5. EXPORTED HOOK ---
+export const useConfiguredEditor = (content: string = "", onUpload?: any, onUpdate?: (editor: Editor) => void) => {
   return useEditor({
     extensions: [
       StarterKit,
       Image,
-      Link.configure({
-        openOnClick: false,
-      }),
-      TextAlign.configure({
-        types: ['heading', 'paragraph'],
-      }),
-      Table.configure({
-        resizable: true,
-      }),
+      Link.configure({ openOnClick: false }),
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      Table.configure({ resizable: true }),
       TableRow,
       TableHeader,
       TableCell,
@@ -624,5 +641,8 @@ export const useConfiguredEditor = (content: string = "") => {
       },
     },
     content,
+    onUpdate: ({ editor }) => {
+      if (onUpdate) onUpdate(editor);
+    },
   });
 };
