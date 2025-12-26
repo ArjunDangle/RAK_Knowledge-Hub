@@ -36,10 +36,8 @@ import {
   AttachmentInfo,
 } from "@/lib/api/api-client";
 import { GroupedTag } from "@/lib/types/content";
-import {
-  RichTextEditor,
-  useConfiguredEditor,
-} from "@/components/editor/RichTextEditor";
+import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { useConfiguredEditor } from "@/components/editor/useEditorConfig"; // Direct path fix
 import { TreeSelect } from "@/components/cms/TreeSelect";
 import { MultiSelect, MultiSelectOption } from "@/components/ui/multi-select";
 import { Skeleton } from "@/components/ui/skeleton";

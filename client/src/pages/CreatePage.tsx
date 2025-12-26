@@ -38,10 +38,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { toast } from "@/components/ui/sonner";
-import {
-  RichTextEditor,
-  useConfiguredEditor,
-} from "@/components/editor/RichTextEditor";
+import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { useConfiguredEditor } from "@/components/editor/useEditorConfig"; // Direct import
 import { TreeSelect } from "@/components/cms/TreeSelect";
 import { MultiSelect, MultiSelectOption } from "@/components/ui/multi-select";
 import {
@@ -147,7 +145,11 @@ export default function CreatePage() {
     },
   });
 
-  const handleFileUpload = async (file: File) => {
+  /**
+   * FIXED: Added return type Promise<string> to satisfy RichTextEditor requirements.
+   * Returns the preview URL for the uploaded attachment.
+   */
+  const handleFileUpload = async (file: File): Promise<string> => {
     setIsUploading(true);
     try {
       const response = await uploadAttachment(file);
@@ -158,6 +160,7 @@ export default function CreatePage() {
         : file.type === "application/pdf"
         ? "pdf"
         : "file";
+      
       const newAttachment: UploadedFile = {
         file: file,
         tempId: response.temp_id,
@@ -165,52 +168,61 @@ export default function CreatePage() {
       };
       setAttachments((prev) => [...prev, newAttachment]);
 
-      if (editor) {
-        if (fileType === "image") {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            if (e.target?.result) {
-              editor
-                .chain()
-                .focus()
-                .setImage({ src: e.target.result as string })
-                .run();
-            }
-          };
-          reader.readAsDataURL(file);
-        } else {
-          editor
-            .chain()
-            .focus()
-            .setAttachment({
-              "data-file-name": file.name,
-              "data-attachment-type": fileType,
-            })
-            .run();
-        }
-      }
       toast.success("Attachment uploaded successfully.");
+      
+      // Return the URL for the editor to use
+      return `https://rak-knowledge-hub.rak-internal.net/api/cms/attachments/preview/${response.temp_id}`;
     } catch (error) {
       toast.error("Upload failed", { description: (error as Error).message });
+      throw error;
     } finally {
       setIsUploading(false);
     }
   };
 
-  const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
+  /**
+   * FIXED: handleFileSelect now handles editor insertion for the bottom "Add Attachment" button.
+   * This prevents double-insertion since the RichTextEditor toolbar calls handleFileUpload directly.
+   */
+  const handleFileSelect = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      handleFileUpload(file);
+    if (file && editor) {
+      try {
+        const url = await handleFileUpload(file);
+        const fileType = file.type.startsWith("image/")
+          ? "image"
+          : file.type.startsWith("video/")
+          ? "video"
+          : file.type === "application/pdf"
+          ? "pdf"
+          : "file";
+
+        // Logic: Since this button is outside the editor toolbar, 
+        // we manually insert the content into the editor here.
+        if (fileType === "image") {
+          editor.chain().focus().setImage({ src: url }).run();
+        } else {
+          editor.chain().focus().setAttachment({
+            "data-file-name": file.name,
+            "data-attachment-type": fileType,
+          }).run();
+        }
+      } catch (e) {
+        // Error already toasted in handleFileUpload
+      }
     }
     if (event.target) {
       event.target.value = "";
     }
   };
 
-  const editor = useConfiguredEditor(
-    existingArticle?.html || "",
-    handleFileUpload
-  );
+  /**
+   * FIXED: Replaced undefined 'initialContent' with an empty string.
+   * Content loading is handled by the useEffect for edit mode.
+   */
+  const editor = useConfiguredEditor("", (editorInstance) => {
+    console.log("Content updated");
+  });
 
   const watchedTitle = form.watch("title");
 
@@ -491,7 +503,7 @@ export default function CreatePage() {
                     Write your article below. You can paste images directly into
                     the editor to upload them.
                   </p>
-                  <RichTextEditor editor={editor} title={watchedTitle} />
+                  <RichTextEditor editor={editor} title={watchedTitle} onUpload={handleFileUpload} />
                 </div>
 
                 <div className="space-y-4">

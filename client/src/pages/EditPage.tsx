@@ -16,7 +16,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { toast } from "@/components/ui/sonner";
 import { getArticleById, updatePage, PageUpdatePayload, getAllTagsGrouped, uploadAttachment, AttachmentInfo } from "@/lib/api/api-client";
 import { GroupedTag } from "@/lib/types/content";
-import { RichTextEditor, useConfiguredEditor } from "@/components/editor/RichTextEditor";
+import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { useConfiguredEditor } from "@/components/editor/useEditorConfig";
 import { ArticleCardSkeleton } from "@/components/ui/loading-skeleton";
 import { MultiSelect, MultiSelectOption } from "@/components/ui/multi-select";
 import { Skeleton } from "@/components/ui/skeleton";
