@@ -1,4 +1,3 @@
-// client/src/components/editor/extensions/attachmentNode.ts
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import { AttachmentComponent } from './AttachmentComponent';
@@ -7,45 +6,58 @@ export const AttachmentNode = Node.create({
   name: 'attachmentNode',
   group: 'block',
   atom: true,
-  draggable: true,
+  draggable: true, // ✅ Enables Dragging behavior
 
   addAttributes() {
     return {
       'data-file-name': { default: null },
       'data-attachment-type': { default: 'file' },
-      'src': { default: null }, // ADD THIS LINE
-      'data-temp-id': { default: null }, // ADD THIS LINE
+      'data-temp-id': { default: null },
+      
+      // ✅ NEW: Stores the Base64 image data
+      src: { default: null }, 
+      
+      // ✅ NEW: Stores dimensions for resizing
+      width: { default: '100%' },
+      height: { default: 'auto' },
     };
   },
 
   parseHTML() {
     return [
+      // 1. Standard Node Parser (Used by Editor)
       {
         tag: 'div[data-attachment-type]',
-        getAttrs: el => ({
-        'data-temp-id': el.getAttribute('data-temp-id'), // ADD THIS LINE
-        'data-file-name': el.getAttribute('data-file-name'),
-        'data-attachment-type': el.getAttribute('data-attachment-type'),
-      })
-
-        
+        getAttrs: (node) => {
+          if (typeof node === 'string') return {};
+          const el = node as HTMLElement;
+          return {
+            'data-file-name': el.getAttribute('data-file-name'),
+            'data-attachment-type': el.getAttribute('data-attachment-type'),
+            'data-temp-id': el.getAttribute('data-temp-id'),
+            'src': el.getAttribute('src'),
+            // Parse dimensions from style or attributes
+            width: el.style.width || el.getAttribute('width'),
+            height: el.style.height || el.getAttribute('height'),
+          };
+        },
       },
 
+      // 2. Legacy: Confluence Video Wrapper (Preserved from your old file)
       {
         tag: 'span.confluence-embedded-file-wrapper',
-        getAttrs: (element: HTMLElement) => {
-          const link = element.querySelector('a');
+        getAttrs: (element) => {
+          if (typeof element === 'string') return false;
+          const el = element as HTMLElement;
+          const link = el.querySelector('a');
           const href = link?.getAttribute('href');
-          if (!href) {
-            return false;
-          }
+          
+          if (!href) return false;
 
           const videoExtensions = ['.mp4', '.mov', '.avi', '.webm'];
           const isVideo = videoExtensions.some(ext => href.toLowerCase().includes(ext));
 
-          if (!isVideo) {
-            return false;
-          }
+          if (!isVideo) return false;
 
           try {
             const urlParts = href.split('/');
@@ -61,10 +73,14 @@ export const AttachmentNode = Node.create({
           }
         },
       },
+
+      // 3. Legacy: Confluence PDF Macro (Preserved from your old file)
       {
         tag: 'div[data-macro-name="viewpdf"]',
-        getAttrs: (element: HTMLElement) => {
-          const attachmentElement = element.querySelector('div[data-attachment-name]');
+        getAttrs: (element) => {
+          if (typeof element === 'string') return false;
+          const el = element as HTMLElement;
+          const attachmentElement = el.querySelector('div[data-attachment-name]');
           const fileName = attachmentElement?.getAttribute('data-attachment-name');
 
           if (fileName) {
@@ -73,7 +89,6 @@ export const AttachmentNode = Node.create({
               'data-attachment-type': 'pdf',
             };
           }
-          
           return false;
         },
       },
@@ -81,12 +96,10 @@ export const AttachmentNode = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return [
-      'div', 
-      mergeAttributes(HTMLAttributes, {
-        style: 'border: 1px solid #e2e8f0; padding: 0.5rem; border-radius: 0.5rem; background-color: #f8fafc; min-height: 40px;'
-      })
-    ];
+    // ✅ Renders width/height into the style string so Tiptap saves the resized state
+    return ['div', mergeAttributes(HTMLAttributes, {
+      style: `width: ${HTMLAttributes.width}; height: ${HTMLAttributes.height};`
+    })];
   },
 
   addNodeView() {
@@ -105,10 +118,18 @@ export const AttachmentNode = Node.create({
   },
 });
 
+// TypeScript declaration to fix type errors when using editor.commands.setAttachment
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     attachmentNode: {
-      setAttachment: (options: { 'data-file-name': string; 'data-attachment-type': string }) => ReturnType;
-    }
+      setAttachment: (options: { 
+        'data-file-name': string; 
+        'data-attachment-type': string;
+        'data-temp-id'?: string;
+        'src'?: string;
+        'width'?: string;
+        'height'?: string;
+      }) => ReturnType;
+    };
   }
 }

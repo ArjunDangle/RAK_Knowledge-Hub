@@ -67,6 +67,7 @@ import {
 import { GroupedTag } from "@/lib/types/content";
 import { AttachmentNode } from "@/components/editor/extensions/attachmentNode";
 
+
 const baseSchema = z.object({
   title: z
     .string()
@@ -205,10 +206,12 @@ export default function CreatePage() {
   const API_BASE_URL_STR = "https://rak-knowledge-hub.rak-internal.net/api";
 
   // 1. Keep handleFileUpload as the "Source of Truth" for insertion
-  const handleFileUpload = async (file: File): Promise<string> => {
+const handleFileUpload = async (file: File): Promise<string> => {
     setIsUploading(true);
     try {
+      // 1. Upload to server (to get the ID for the database)
       const response = await uploadAttachment(file);
+      
       const fileType = file.type.startsWith("image/")
         ? "image"
         : file.type.startsWith("video/")
@@ -217,40 +220,48 @@ export default function CreatePage() {
         ? "pdf"
         : "file";
 
+      // 2. Add to sidebar list
       const newAttachment: EditorAttachment = {
         file: file,
-        tempId: response.temp_id,
-        type: fileType,
+        tempId: response.temp_id || crypto.randomUUID(),
+        type: fileType as any,
       };
-
       setAttachments((prev) => [...prev, newAttachment]);
 
-      const previewUrl = `${API_BASE_URL_STR}/cms/attachments/preview/${response.temp_id}`;
-
+      // 3. Insert into Editor (Using Base64 for Images)
       if (editor) {
-        // THIS IS THE ONLY PLACE INSERTION SHOULD HAPPEN
-        editor
-          .chain()
-          .focus()
-          .insertContent([
-            {
-              type: "attachmentNode",
-              attrs: {
-                "data-file-name": file.name,
-                "data-attachment-type": fileType,
-                src: previewUrl,
-                "data-temp-id": response.temp_id,
-              },
-            },
-            { type: "paragraph" },
-          ])
-          .run();
+        if (fileType === "image") {
+          // ✅ OLD LOGIC RESTORED: Read file as Base64
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            if (e.target?.result) {
+              editor.chain().focus().insertContent({
+                type: 'attachmentNode', // Still use AttachmentNode (for sidebar sync)
+                attrs: {
+                  'data-file-name': file.name,
+                  'data-attachment-type': 'image',
+                  'data-temp-id': newAttachment.tempId,
+                  'src': e.target.result as string // Pass Base64 here!
+                }
+              }).run();
+            }
+          };
+          reader.readAsDataURL(file);
+        } else {
+          // Standard logic for files
+          editor.chain().focus().setAttachment({
+            "data-file-name": file.name,
+            "data-attachment-type": fileType,
+            "data-temp-id": newAttachment.tempId,
+          }).run();
+        }
       }
 
-      return previewUrl;
+      return ""; // We don't need the return URL since we use Base64
     } catch (error) {
       toast.error(`Could not attach ${file.name}`);
-      throw error;
+      console.error(error);
+      return "";
     } finally {
       setIsUploading(false);
     }

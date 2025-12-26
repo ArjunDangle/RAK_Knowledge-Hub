@@ -5,7 +5,6 @@ import { EditorBubbleMenu } from "./EditorBubbleMenu";
 import { cn } from "@/lib/utils";
 import { 
   Minimize2, 
-  Maximize2,
   ArrowLeft, 
   CheckCircle, 
   Save, 
@@ -74,9 +73,9 @@ export const RichTextEditor = ({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // --- TOC LOGIC (From ExpandedEditor) ---
+  // --- TOC LOGIC ---
   useEffect(() => {
-    if (!editor || !isExpanded) return;
+    if (!editor) return;
 
     const updateToc = () => {
       const flatHeadings: any[] = [];
@@ -97,16 +96,21 @@ export const RichTextEditor = ({
       setToc(buildTocTree(flatHeadings));
     };
 
+    // Initial load
     updateToc();
+    
+    // Update whenever document changes
     editor.on("update", updateToc);
+    
     return () => { editor.off("update", updateToc); };
-  }, [editor, isExpanded]);
+  }, [editor]);
 
   // --- INTERSECTION OBSERVER (Spy Scroll) ---
   useEffect(() => {
-    if (!isExpanded || toc.length === 0) return;
+    if (toc.length === 0) return;
 
-    // Apply IDs to DOM elements for tracking
+    // We still try to add IDs for the Spy Scroll (highlighting) to work,
+    // but we won't rely on them for clicking anymore.
     const headingElements = document.querySelectorAll(".prose h1, .prose h2, .prose h3");
     headingElements.forEach((el, index) => {
       el.id = `heading-${index}`;
@@ -120,12 +124,12 @@ export const RichTextEditor = ({
           }
         });
       },
-      { root: scrollContainerRef.current, rootMargin: "-10% 0px -70% 0px" }
+      { root: scrollContainerRef.current, rootMargin: "-10% 0px -50% 0px" }
     );
 
     headingElements.forEach((el) => observer.observe(el));
     return () => observer.disconnect();
-  }, [toc, isExpanded]);
+  }, [toc, isExpanded]); // Re-run when TOC or layout changes
 
   // --- HELPERS ---
   const buildTocTree = (headings: {text: string, level: number, pos: number, id: string}[]) => {
@@ -144,15 +148,27 @@ export const RichTextEditor = ({
     return root;
   };
 
+  // ✅ FIXED: SCROLL LOGIC
   const scrollToHeading = (pos: number) => {
     if (!editor) return;
-    editor.commands.focus(pos);
-    const id = `heading-${pos}`; // We can also look up ID by calculating index if needed
-    // Tiptap scroll
-    editor.view.dispatch(editor.state.tr.scrollIntoView());
-    // Manual DOM scroll backup
-    const element = document.getElementById(id || ""); 
-    if(element) element.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    // 1. Select the text (moves the internal Tiptap cursor)
+    editor.commands.setTextSelection(pos);
+    
+    // 2. Direct DOM lookup using Tiptap's view engine
+    // (This works even if the IDs are missing)
+    const domNode = editor.view.nodeDOM(pos) as HTMLElement;
+
+    if (domNode && domNode.scrollIntoView) {
+      // 3. Scroll to Center
+      domNode.scrollIntoView({ 
+        behavior: "smooth", 
+        block: "center" 
+      });
+    } else {
+      // Fallback: Use Tiptap's native scroll if DOM node lookup fails
+      editor.commands.scrollIntoView();
+    }
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -190,7 +206,11 @@ export const RichTextEditor = ({
                 ? "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" 
                 : "hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-600 dark:text-slate-400"
             )}
-            onClick={() => scrollToHeading(item.pos)}
+            // ✅ CLICK HANDLER updated to use robust function
+            onClick={(e) => {
+              e.preventDefault();
+              scrollToHeading(item.pos);
+            }}
           >
             <div 
               className={cn(
@@ -224,19 +244,17 @@ export const RichTextEditor = ({
     );
   }
 
-  // --- MAIN LAYOUT ---
   return (
     <div className={cn(
       "transition-all duration-300 ease-in-out",
       isExpanded 
-        ? "fixed inset-0 z-[100] bg-[#F9FBFD] dark:bg-zinc-950 flex flex-col" // Fullscreen Mode
-        : "relative w-full group flex flex-col border border-slate-200 dark:border-zinc-800 rounded-lg bg-background overflow-hidden shadow-sm" // Normal Mode
+        ? "fixed inset-0 z-[100] bg-[#F9FBFD] dark:bg-zinc-950 flex flex-col" 
+        : "relative w-full group flex flex-col border border-slate-200 dark:border-zinc-800 rounded-lg bg-background overflow-hidden shadow-sm"
     )}>
       
-      {/* 1. HEADER / TOOLBAR AREA */}
+      {/* 1. HEADER */}
       <div className={cn("flex-none z-20 bg-white dark:bg-zinc-900 border-b", isExpanded ? "px-4 py-1.5 h-14" : "")}>
         {isExpanded ? (
-          // EXPANDED HEADER
           <div className="flex items-center justify-between h-full">
             <div className="flex items-center gap-3 flex-1">
               <Button variant="ghost" size="sm" onClick={() => setIsExpanded(false)} className="h-10 w-10 p-0 rounded-full">
@@ -260,7 +278,6 @@ export const RichTextEditor = ({
             </Button>
           </div>
         ) : (
-          // NORMAL TOOLBAR
           <div className="bg-muted/30 backdrop-blur-md">
             <EditorToolbar 
               editor={editor} 
@@ -273,10 +290,10 @@ export const RichTextEditor = ({
         )}
       </div>
 
-      {/* 2. MAIN CONTENT AREA (Flex Row in Expanded, Column in Normal) */}
+      {/* 2. BODY */}
       <div className="flex-1 flex overflow-hidden relative">
         
-        {/* SIDEBAR (Only visible in Expanded Mode) */}
+        {/* SIDEBAR */}
         {isExpanded && (
           <aside 
             className={cn(
@@ -285,7 +302,6 @@ export const RichTextEditor = ({
             )}
           >
             <div className="p-5 w-[280px] overflow-y-auto h-full scrollbar-none pb-20">
-              {/* Outline */}
               <div className="flex items-center gap-2 mb-4">
                 <ListTree className="h-4 w-4 text-blue-600" />
                 <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Outline</h2>
@@ -296,7 +312,6 @@ export const RichTextEditor = ({
                 <p className="px-3 py-4 text-xs italic text-slate-400 mb-8">Headings will appear here.</p>
               )}
 
-              {/* Attachments List */}
               {attachments && attachments.length > 0 && (
                 <>
                   <Separator className="mb-6" />
@@ -326,14 +341,13 @@ export const RichTextEditor = ({
               )}
             </div>
             
-            {/* Collapse Sidebar Button */}
             <Button variant="ghost" size="sm" className="absolute bottom-6 right-3 h-8 w-8 rounded-full border bg-white shadow-sm z-10" onClick={() => setIsSidebarOpen(false)}>
               <ChevronLeft className="h-4 w-4 text-slate-600" />
             </Button>
           </aside>
         )}
 
-        {/* EDITOR CANVAS */}
+        {/* EDITOR */}
         <main 
           ref={scrollContainerRef}
           className={cn(
@@ -341,14 +355,12 @@ export const RichTextEditor = ({
             isExpanded ? "pt-8 pb-32 px-4 relative" : "min-h-[500px] max-h-[800px]"
           )}
         >
-          {/* Sidebar Toggle Button (Floating) */}
           {isExpanded && !isSidebarOpen && (
             <Button variant="ghost" size="sm" className="fixed top-20 left-4 z-50 h-10 w-10 rounded-full border shadow-md bg-white text-blue-600" onClick={() => setIsSidebarOpen(true)}>
               <PanelLeft className="h-5 w-5" />
             </Button>
           )}
 
-           {/* Expanded Toolbar (Floating Pill) */}
            {isExpanded && (
             <div className="flex justify-center sticky top-0 z-40 mb-8 pointer-events-none">
                <div className="bg-[#edf2fa] dark:bg-zinc-800 rounded-full border shadow-sm px-4 py-0.5 pointer-events-auto">
@@ -357,23 +369,23 @@ export const RichTextEditor = ({
             </div>
            )}
 
-          {/* THE EDITOR CONTENT - NEVER UNMOUNTS */}
-          <div className={cn(
-             "transition-all duration-500 ease-in-out shadow-sm mx-auto border-x border-transparent dark:border-zinc-800/50 bg-white dark:bg-zinc-900",
-             isExpanded 
-               ? "max-w-[850px] min-h-[1056px] rounded-sm shadow-[0_1px_3px_1px_rgba(60,64,67,.15)]" 
-               : "min-h-full",
-             MARGIN_OPTIONS[margin]
-          )}>
-            <EditorBubbleMenu editor={editor} />
-            <EditorContent 
-              editor={editor} 
-              className="focus:outline-none prose prose-slate dark:prose-invert max-w-none pb-20 min-h-[400px]" 
-            />
-          </div>
+          <EditorContent 
+            editor={editor} 
+            className={cn(
+              "transition-all duration-500 ease-in-out shadow-sm mx-auto border-x border-transparent dark:border-zinc-800/50 bg-white dark:bg-zinc-900",
+              "focus:outline-none prose prose-slate dark:prose-invert max-w-none pb-20 min-h-[400px]",
+              // Keep your spacing overrides here
+              "prose-p:my-1 prose-p:leading-6 prose-headings:my-3",
+              isExpanded 
+                ? "max-w-[850px] min-h-[1056px] rounded-sm shadow-[0_1px_3px_1px_rgba(60,64,67,.15)]" 
+                : "min-h-full",
+              MARGIN_OPTIONS[margin]
+            )}
+          >
+             <EditorBubbleMenu editor={editor} />
+          </EditorContent>
         </main>
 
-        {/* STICKY FAB (Only in Expanded) */}
         {isExpanded && (
           <div className="absolute bottom-10 right-10 z-50">
             <input type="file" ref={fileInputRef} className="hidden" multiple onChange={handleFileSelect} />
