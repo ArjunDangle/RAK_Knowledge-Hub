@@ -6,9 +6,9 @@ export const AttachmentComponent = ({ node }: NodeViewProps) => {
   const { 'data-file-name': fileName, 'data-attachment-type': fileType } = node.attrs;
 
   return (
-    <NodeViewWrapper className="not-prose">
+    <NodeViewWrapper className="not-prose w-full"> {/* ✅ Added w-full */}
       <div
-        className="flex items-center gap-2 bg-muted rounded-lg p-2 my-2 border border-border cursor-default select-none"
+        className="flex items-center gap-2 bg-muted rounded-lg p-2 my-2 border border-border cursor-default select-none w-full"
         draggable="true"
         data-drag-handle
       >

@@ -132,7 +132,7 @@ export default function AdminEditPage() {
             attrs: { 
               "data-file-name": file.name, 
               "data-attachment-type": fileType,
-              "src": previewUrl // If you added src to your node schema
+              "src": previewUrl, // If you added src to your node schema
               "data-temp-id": response.temp_id
             } 
           },

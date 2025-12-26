@@ -81,7 +81,12 @@ export const AttachmentNode = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['div', mergeAttributes(HTMLAttributes)];
+    return [
+      'div', 
+      mergeAttributes(HTMLAttributes, {
+        style: 'border: 1px solid #e2e8f0; padding: 0.5rem; border-radius: 0.5rem; background-color: #f8fafc; min-height: 40px;'
+      })
+    ];
   },
 
   addNodeView() {

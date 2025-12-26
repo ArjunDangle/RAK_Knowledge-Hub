@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { API_BASE_URL } from "@/lib/api/api-client"; 
+import { API_BASE_URL } from "@/lib/api/api-client";
 import { KnowledgeLayout } from "./KnowledgeLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,8 +38,19 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { toast } from "@/components/ui/sonner";
-import { RichTextEditor } from "@/components/editor/RichTextEditor";
-import { useConfiguredEditor } from "@/components/editor/useEditorConfig"; // Direct import
+
+// --- 1. Updated Imports for Editor & Extensions ---
+import { useEditor } from "@tiptap/react"; // Replaced useConfiguredEditor
+import StarterKit from "@tiptap/starter-kit";
+import Link from "@tiptap/extension-link";
+import Underline from "@tiptap/extension-underline";
+import Image from "@tiptap/extension-image";
+import { Table } from "@tiptap/extension-table";
+import TableRow from "@tiptap/extension-table-row";
+import TableCell from "@tiptap/extension-table-cell";
+import TableHeader from "@tiptap/extension-table-header";
+
+import { RichTextEditor, EditorAttachment } from "@/components/editor/RichTextEditor"; // Added EditorAttachment type
 import { TreeSelect } from "@/components/cms/TreeSelect";
 import { MultiSelect, MultiSelectOption } from "@/components/ui/multi-select";
 import {
@@ -54,6 +65,7 @@ import {
   getMySubmissions,
 } from "@/lib/api/api-client";
 import { GroupedTag } from "@/lib/types/content";
+import { AttachmentNode } from "@/components/editor/extensions/attachmentNode";
 
 const baseSchema = z.object({
   title: z
@@ -68,13 +80,6 @@ const baseSchema = z.object({
     .min(1, { message: "You must select a parent category." }),
 });
 
-
-interface UploadedFile {
-  file: File;
-  tempId: string;
-  type: "image" | "video" | "pdf" | "file";
-}
-
 export default function CreatePage() {
   const navigate = useNavigate();
   const { pageId } = useParams<{ pageId?: string }>();
@@ -87,33 +92,61 @@ export default function CreatePage() {
     retry: false,
   });
 
-  const [attachments, setAttachments] = useState<UploadedFile[]>([]);
+  // Used strict EditorAttachment type instead of local interface
+  const [attachments, setAttachments] = useState<EditorAttachment[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showAllowedOnly, setShowAllowedOnly] = useState(false);
 
-  // client/src/pages/CreatePage.tsx (and AdminEditPage)
+  // --- 2. Initialize Editor with Extensions (Fixes Missing AttachmentNode) ---
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      Link.configure({ openOnClick: false }),
+      Underline,
+      Image,
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableHeader,
+      TableCell,
+      // ✅ FIX: This was missing in the previous config
+      AttachmentNode,
+    ],
+    content: "",
+    editorProps: {
+      attributes: {
+        class: "focus:outline-none",
+      },
+    },
+    onUpdate: () => {
+      console.log("Content updated");
+    },
+  });
 
-const handleRemoveAttachment = (tempId: string) => {
-  // 1. Remove from the bottom UI list state
-  setAttachments((prev) => prev.filter((a) => a.tempId !== tempId));
+  const handleRemoveAttachment = (tempId: string) => {
+    // 1. Remove from the bottom UI list state
+    setAttachments((prev) => prev.filter((a) => a.tempId !== tempId));
 
-  // 2. Sync with Editor: Find and delete the node with this tempId
-  if (editor) {
-    editor.state.doc.descendants((node, pos) => {
-      if (
-        node.type.name === 'attachmentNode' && 
-        node.attrs['data-temp-id'] === tempId
-      ) {
-        editor.chain()
-          .deleteRange({ from: pos, to: pos + node.nodeSize })
-          .focus()
-          .run();
-        
-        return false; // Found it, stop searching
-      }
-      return true; // Keep searching
-    });
-  }
-  toast.info("Attachment removed");
-};
+    // 2. Sync with Editor: Find and delete the node with this tempId
+    if (editor) {
+      editor.state.doc.descendants((node, pos) => {
+        if (
+          node.type.name === "attachmentNode" &&
+          node.attrs["data-temp-id"] === tempId
+        ) {
+          editor
+            .chain()
+            .deleteRange({ from: pos, to: pos + node.nodeSize })
+            .focus()
+            .run();
+
+          return false; // Found it, stop searching
+        }
+        return true; // Keep searching
+      });
+    }
+    toast.info("Attachment removed");
+  };
 
   const { data: submissionDetails } = useQuery({
     queryKey: ["mySubmissions"],
@@ -121,10 +154,6 @@ const handleRemoveAttachment = (tempId: string) => {
     enabled: isEditMode,
     select: (data) => data.find((sub) => sub.confluencePageId === pageId),
   });
-
-  const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [showAllowedOnly, setShowAllowedOnly] = useState(false);
 
   const { data: tagGroups, isLoading: isLoadingTags } = useQuery<GroupedTag[]>({
     queryKey: ["allTagsGrouped"],
@@ -173,91 +202,84 @@ const handleRemoveAttachment = (tempId: string) => {
     },
   });
 
-  /**
-   * FIXED: Added return type Promise<string> to satisfy RichTextEditor requirements.
-   * Returns the preview URL for the uploaded attachment.
-   */
-
-  const API_BASE_URL = "https://rak-knowledge-hub.rak-internal.net/api";
+  const API_BASE_URL_STR = "https://rak-knowledge-hub.rak-internal.net/api";
 
   // 1. Keep handleFileUpload as the "Source of Truth" for insertion
-const handleFileUpload = async (file: File): Promise<string> => {
-  setIsUploading(true);
-  try {
-    const response = await uploadAttachment(file);
-    const fileType = file.type.startsWith("image/") ? "image" 
-                   : file.type.startsWith("video/") ? "video" 
-                   : file.type === "application/pdf" ? "pdf" 
-                   : "file";
+  const handleFileUpload = async (file: File): Promise<string> => {
+    setIsUploading(true);
+    try {
+      const response = await uploadAttachment(file);
+      const fileType = file.type.startsWith("image/")
+        ? "image"
+        : file.type.startsWith("video/")
+        ? "video"
+        : file.type === "application/pdf"
+        ? "pdf"
+        : "file";
 
-    const newAttachment: UploadedFile = {
-      file: file,
-      tempId: response.temp_id,
-      type: fileType,
-    };
-    
-    setAttachments((prev) => [...prev, newAttachment]);
+      const newAttachment: EditorAttachment = {
+        file: file,
+        tempId: response.temp_id,
+        type: fileType,
+      };
 
-    const previewUrl = `${API_BASE_URL}/cms/attachments/preview/${response.temp_id}`;
+      setAttachments((prev) => [...prev, newAttachment]);
 
-    if (editor) {
-      // THIS IS THE ONLY PLACE INSERTION SHOULD HAPPEN
-      editor.chain()
-        .focus()
-        .insertContent([
-          {
-            type: 'attachmentNode',
-            attrs: {
-              "data-file-name": file.name,
-              "data-attachment-type": fileType,
-              "src": previewUrl ,
-              "data-temp-id": response.temp_id
-            }
-          },
-          { type: 'paragraph' } 
-        ])
-        .run();
+      const previewUrl = `${API_BASE_URL_STR}/cms/attachments/preview/${response.temp_id}`;
+
+      if (editor) {
+        // THIS IS THE ONLY PLACE INSERTION SHOULD HAPPEN
+        editor
+          .chain()
+          .focus()
+          .insertContent([
+            {
+              type: "attachmentNode",
+              attrs: {
+                "data-file-name": file.name,
+                "data-attachment-type": fileType,
+                src: previewUrl,
+                "data-temp-id": response.temp_id,
+              },
+            },
+            { type: "paragraph" },
+          ])
+          .run();
+      }
+
+      return previewUrl;
+    } catch (error) {
+      toast.error(`Could not attach ${file.name}`);
+      throw error;
+    } finally {
+      setIsUploading(false);
     }
+  };
 
-    return previewUrl;
-  } catch (error) {
-    toast.error(`Could not attach ${file.name}`);
-    throw error;
-  } finally {
-    setIsUploading(false);
-  }
-};
+  // 2. Simplified handleFileSelect (Removes the double-insertion)
+  const handleFileSelect = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files.length > 0 && editor) {
+      // Safety: Move cursor if an attachment is currently selected
+      if (editor.isActive("attachmentNode")) {
+        editor.commands.setTextSelection(editor.state.selection.to);
+        editor.commands.createParagraphNear();
+      }
 
-// 2. Simplified handleFileSelect (Removes the double-insertion)
-const handleFileSelect = async (event: ChangeEvent<HTMLInputElement>) => {
-  const files = event.target.files;
-  if (files && files.length > 0 && editor) {
-    
-    // Safety: Move cursor if an attachment is currently selected
-    if (editor.isActive('attachmentNode')) {
-      editor.commands.setTextSelection(editor.state.selection.to);
-      editor.commands.createParagraphNear();
-    }
-
-    for (const file of Array.from(files)) {
-      try {
-        // Just call handleFileUpload. It handles the list AND the editor.
-        await handleFileUpload(file); 
-      } catch (e) {
-        console.error("Selection upload failed:", e);
+      for (const file of Array.from(files)) {
+        try {
+          // Just call handleFileUpload. It handles the list AND the editor.
+          await handleFileUpload(file);
+        } catch (e) {
+          console.error("Selection upload failed:", e);
+        }
       }
     }
-  }
-  
-  if (event.target) {
-    event.target.value = "";
-  }
-};
 
-
-  const editor = useConfiguredEditor("", (editorInstance) => {
-    console.log("Content updated");
-  });
+    if (event.target) {
+      event.target.value = "";
+    }
+  };
 
   const watchedTitle = form.watch("title");
 
@@ -310,10 +332,12 @@ const handleFileSelect = async (event: ChangeEvent<HTMLInputElement>) => {
   const onSubmit = (data: z.infer<typeof dynamicSchema>) => {
     const content = editor?.getHTML() || "";
     if (content.length < 50) {
-      toast.error("Content is too short", { description: "Content must be at least 50 characters." });
+      toast.error("Content is too short", {
+        description: "Content must be at least 50 characters.",
+      });
       return;
     }
-  
+
     const allSelectedTags: string[] = [];
     if (tagGroups) {
       tagGroups.forEach((group) => {
@@ -323,12 +347,12 @@ const handleFileSelect = async (event: ChangeEvent<HTMLInputElement>) => {
         }
       });
     }
-  
+
     const attachmentPayload: AttachmentInfo[] = attachments.map((a) => ({
       temp_id: a.tempId,
       file_name: a.file.name,
     }));
-  
+
     if (isEditMode) {
       const payload: PageUpdatePayload = {
         title: data.title,
@@ -538,7 +562,14 @@ const handleFileSelect = async (event: ChangeEvent<HTMLInputElement>) => {
                     Write your article below. You can paste images directly into
                     the editor to upload them.
                   </p>
-                  <RichTextEditor editor={editor} title={watchedTitle} onUpload={handleFileUpload}  />
+                  {/* ✅ FIX: Passed new props to RichTextEditor */}
+                  <RichTextEditor
+                    editor={editor}
+                    title={watchedTitle}
+                    onUpload={handleFileUpload}
+                    attachments={attachments}
+                    onRemoveAttachment={handleRemoveAttachment}
+                  />
                 </div>
 
                 <div className="space-y-4">
