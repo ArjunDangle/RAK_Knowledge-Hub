@@ -47,42 +47,17 @@ export const EditorToolbar = ({
 
 const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
   const files = e.target.files;
-  if (!files || files.length === 0 || !onUpload || !editor) return;
+  if (!files || files.length === 0 || !onUpload) return;
 
-  // 1. Safety Check: Move cursor if an attachment is currently selected
-  if (editor.isActive('attachmentNode')) {
-      editor.commands.setTextSelection(editor.state.selection.to);
-      editor.commands.createParagraphNear();
-  }
-
+  setIsUploading(true);
   try {
-    setIsUploading(true);
-    
     for (const file of Array.from(files)) {
+      // CreatePage's handleFileUpload will take it from here 
+      // and perform the single insertion.
       await onUpload(file); 
-
-      const type = file.type.startsWith('image/') ? 'image' 
-                 : file.type.startsWith('video/') ? 'video' 
-                 : file.type === 'application/pdf' ? 'pdf' 
-                 : 'file';
-
-      // 2. Insert Node + Paragraph
-      editor.chain().focus().insertContent([
-        { 
-          type: 'attachmentNode', 
-          attrs: { 
-            "data-file-name": file.name, 
-            "data-attachment-type": type 
-          } 
-        },
-        { 
-          type: 'paragraph' 
-        }
-      ]).run();
     }
-
   } catch (error) {
-    console.error("Upload failed:", error);
+    console.error("Toolbar upload failed:", error);
   } finally {
     setIsUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = "";

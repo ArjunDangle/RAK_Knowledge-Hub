@@ -89,10 +89,31 @@ export default function CreatePage() {
 
   const [attachments, setAttachments] = useState<UploadedFile[]>([]);
 
-  const handleRemoveAttachment = (tempId: string) => {
-    setAttachments((prev) => prev.filter((a) => a.tempId !== tempId));
-    toast.info("Attachment removed from list");
-  };
+  // client/src/pages/CreatePage.tsx (and AdminEditPage)
+
+const handleRemoveAttachment = (tempId: string) => {
+  // 1. Remove from the bottom UI list state
+  setAttachments((prev) => prev.filter((a) => a.tempId !== tempId));
+
+  // 2. Sync with Editor: Find and delete the node with this tempId
+  if (editor) {
+    editor.state.doc.descendants((node, pos) => {
+      if (
+        node.type.name === 'attachmentNode' && 
+        node.attrs['data-temp-id'] === tempId
+      ) {
+        editor.chain()
+          .deleteRange({ from: pos, to: pos + node.nodeSize })
+          .focus()
+          .run();
+        
+        return false; // Found it, stop searching
+      }
+      return true; // Keep searching
+    });
+  }
+  toast.info("Attachment removed");
+};
 
   const { data: submissionDetails } = useQuery({
     queryKey: ["mySubmissions"],
@@ -159,61 +180,60 @@ export default function CreatePage() {
 
   const API_BASE_URL = "https://rak-knowledge-hub.rak-internal.net/api";
 
-  const handleFileUpload = async (file: File): Promise<string> => {
+  // 1. Keep handleFileUpload as the "Source of Truth" for insertion
+const handleFileUpload = async (file: File): Promise<string> => {
   setIsUploading(true);
   try {
-    // 1. Upload the file to the server (saves to /tmp/uploads)
     const response = await uploadAttachment(file);
+    const fileType = file.type.startsWith("image/") ? "image" 
+                   : file.type.startsWith("video/") ? "video" 
+                   : file.type === "application/pdf" ? "pdf" 
+                   : "file";
 
-    // 2. Determine the file type for the UI list
-    const fileType = file.type.startsWith("image/")
-      ? "image"
-      : file.type.startsWith("video/")
-      ? "video"
-      : file.type === "application/pdf"
-      ? "pdf"
-      : "file";
-
-    // 3. Add to the 'Attachments' list at the bottom of the page
     const newAttachment: UploadedFile = {
       file: file,
       tempId: response.temp_id,
       type: fileType,
     };
+    
     setAttachments((prev) => [...prev, newAttachment]);
 
-    toast.success("Attachment uploaded successfully.");
-
-    // 4. CRITICAL: Return the full URL to the backend preview endpoint
-    // This tells the editor exactly where to load the image from.
     const previewUrl = `${API_BASE_URL}/cms/attachments/preview/${response.temp_id}`;
-    
-    return previewUrl;
 
+    if (editor) {
+      // THIS IS THE ONLY PLACE INSERTION SHOULD HAPPEN
+      editor.chain()
+        .focus()
+        .insertContent([
+          {
+            type: 'attachmentNode',
+            attrs: {
+              "data-file-name": file.name,
+              "data-attachment-type": fileType,
+              "src": previewUrl ,
+              "data-temp-id": response.temp_id
+            }
+          },
+          { type: 'paragraph' } 
+        ])
+        .run();
+    }
+
+    return previewUrl;
   } catch (error) {
-    toast.error("Upload failed", { description: (error as Error).message });
-    throw error; // Re-throw so the editor knows the upload failed
+    toast.error(`Could not attach ${file.name}`);
+    throw error;
   } finally {
     setIsUploading(false);
   }
 };
 
-
-
-  /**
-   * FIXED: handleFileSelect now handles editor insertion for the bottom "Add Attachment" button.
-   * This prevents double-insertion since the RichTextEditor toolbar calls handleFileUpload directly.
-   */
-  // ... inside the component
-
-// ... inside CreatePage component
-
+// 2. Simplified handleFileSelect (Removes the double-insertion)
 const handleFileSelect = async (event: ChangeEvent<HTMLInputElement>) => {
   const files = event.target.files;
   if (files && files.length > 0 && editor) {
     
-    // 1. Safety Check: If an existing attachment is selected, move cursor AFTER it 
-    // so we don't overwrite it.
+    // Safety: Move cursor if an attachment is currently selected
     if (editor.isActive('attachmentNode')) {
       editor.commands.setTextSelection(editor.state.selection.to);
       editor.commands.createParagraphNear();
@@ -221,29 +241,10 @@ const handleFileSelect = async (event: ChangeEvent<HTMLInputElement>) => {
 
     for (const file of Array.from(files)) {
       try {
-        await handleFileUpload(file); // Uploads file & adds to bottom list
-
-        const type = file.type.startsWith("image/") ? "image" 
-                   : file.type.startsWith("video/") ? "video" 
-                   : file.type === "application/pdf" ? "pdf" 
-                   : "file";
-
-        // 2. Insert the Attachment Node AND an empty Paragraph immediately after
-        editor.chain().focus().insertContent([
-          {
-            type: 'attachmentNode',
-            attrs: {
-              "data-file-name": file.name,
-              "data-attachment-type": type,
-            }
-          },
-          {
-            type: 'paragraph' // This ensures the next item goes on a new line
-          }
-        ]).run();
-
+        // Just call handleFileUpload. It handles the list AND the editor.
+        await handleFileUpload(file); 
       } catch (e) {
-        console.error(e);
+        console.error("Selection upload failed:", e);
       }
     }
   }
@@ -253,10 +254,7 @@ const handleFileSelect = async (event: ChangeEvent<HTMLInputElement>) => {
   }
 };
 
-  /**
-   * FIXED: Replaced undefined 'initialContent' with an empty string.
-   * Content loading is handled by the useEffect for edit mode.
-   */
+
   const editor = useConfiguredEditor("", (editorInstance) => {
     console.log("Content updated");
   });
@@ -540,7 +538,7 @@ const handleFileSelect = async (event: ChangeEvent<HTMLInputElement>) => {
                     Write your article below. You can paste images directly into
                     the editor to upload them.
                   </p>
-                  <RichTextEditor editor={editor} title={watchedTitle} onUpload={handleFileUpload} />
+                  <RichTextEditor editor={editor} title={watchedTitle} onUpload={handleFileUpload}  />
                 </div>
 
                 <div className="space-y-4">
@@ -560,14 +558,7 @@ const handleFileSelect = async (event: ChangeEvent<HTMLInputElement>) => {
                             variant="ghost"
                             size="icon"
                             className="h-6 w-6 flex-shrink-0"
-                            onClick={() => {
-                              setAttachments((prev) =>
-                                prev.filter((a) => a.tempId !== att.tempId)
-                              );
-                              toast.info(
-                                `Removed attachment: ${att.file.name}`
-                              );
-                            }}
+                            onClick={() => handleRemoveAttachment(att.tempId)}
                           >
                             <X className="h-4 w-4" />
                           </Button>

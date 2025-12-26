@@ -69,80 +69,99 @@ export default function AdminEditPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleRemoveAttachment = (tempId: string) => {
-    setAttachments((prev) => prev.filter((a) => a.tempId !== tempId));
-  };
+  // 1. Remove from the bottom UI list
+  setAttachments((prev) => prev.filter((a) => a.tempId !== tempId));
+
+  // 2. Sync with Editor: Find and delete the node with this tempId
+  if (editor) {
+    editor.state.doc.descendants((node, pos) => {
+      // Check if it's our attachment node and the ID matches
+      if (
+        node.type.name === 'attachmentNode' && 
+        node.attrs['data-temp-id'] === tempId
+      ) {
+        // Delete the range where the node is located
+        editor.chain()
+          .deleteRange({ from: pos, to: pos + node.nodeSize })
+          .focus()
+          .run();
+        
+        return false; // Stop searching once we found and deleted it
+      }
+      return true; // Keep searching
+    });
+  }
+
+  toast.info("Attachment removed");
+};
   
   const [attachments, setAttachments] = useState<UploadedFile[]>([]);
 
-  const handleFileUpload = async (file: File) => {
-    setIsUploading(true);
-    try {
-      const response = await uploadAttachment(file);
-      const fileType = file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : file.type === "application/pdf" ? "pdf" : "file";
-      const newAttachment: UploadedFile = { file: file, tempId: response.temp_id, type: fileType };
-      setAttachments((prev) => [...prev, newAttachment]);
 
-      if (editor) {
-        if (fileType === "image") {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            if (e.target?.result) {
-              editor.chain().focus().setImage({ src: e.target.result as string }).run();
-            }
-          };
-          reader.readAsDataURL(file);
-        } else {
-          editor.chain().focus().setAttachment({ "data-file-name": file.name, "data-attachment-type": fileType }).run();
-        }
-      }
-      toast.success("Attachment uploaded successfully.");
-    } catch (error) {
-      toast.error("Upload failed", { description: (error as Error).message });
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  // ... inside the component
-
-  const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
-  const files = event.target.files;
-  
-  if (files && files.length > 0 && editor) {
+  const handleFileUpload = async (file: File): Promise<string> => {
+  setIsUploading(true);
+  try {
+    // API Call to upload the file to temporary storage
+    const response = await uploadAttachment(file);
     
-    // Safety Check
-    if (editor.isActive('attachmentNode')) {
-        editor.commands.setTextSelection(editor.state.selection.to);
-        editor.commands.createParagraphNear();
-    }
+    // Determine the type for the icons/labels
+    const fileType = file.type.startsWith("image/") ? "image" 
+                   : file.type.startsWith("video/") ? "video" 
+                   : file.type === "application/pdf" ? "pdf" 
+                   : "file";
 
-    for (const file of Array.from(files)) {
-      // Admin page logic handles upload separately in the background, 
-      // but we still need to insert the node here.
-      handleFileUpload(file); 
-      
-      const fileType = file.type.startsWith("image/") ? "image" 
-                     : file.type.startsWith("video/") ? "video" 
-                     : file.type === "application/pdf" ? "pdf" 
-                     : "file";
-      
-      // THE FIX: Chain commands
+    const newAttachment: UploadedFile = { 
+      file: file, 
+      tempId: response.temp_id, 
+      type: fileType 
+    };
+
+    // Update the bottom list UI
+    setAttachments((prev) => [...prev, newAttachment]);
+
+    // Construct the preview URL for the editor
+    const previewUrl = `https://rak-knowledge-hub.rak-internal.net/api/cms/attachments/preview/${response.temp_id}`;
+
+    // --- THE MAGIC: INSERT INTO EDITOR ---
+    if (editor) {
       editor.chain()
         .focus()
-        .setAttachment({ 
-          "data-file-name": file.name, 
-          "data-attachment-type": fileType 
-        })
-        .insertContent({ type: 'paragraph' }) // New line after
+        .insertContent([
+          { 
+            type: 'attachmentNode', 
+            attrs: { 
+              "data-file-name": file.name, 
+              "data-attachment-type": fileType,
+              "src": previewUrl // If you added src to your node schema
+              "data-temp-id": response.temp_id
+            } 
+          },
+          { type: 'paragraph' } // Moves cursor to a new line automatically
+        ])
         .run();
     }
-  }
-  
-  if (event.target) {
-    event.target.value = "";
+
+    toast.success(`Attached ${file.name}`);
+    return previewUrl;
+  } catch (error) {
+    toast.error("Upload failed", { description: (error as Error).message });
+    throw error;
+  } finally {
+    setIsUploading(false);
   }
 };
 
+// 2. The function triggered by the "Add Attachment" button at the bottom
+const handleFileSelect = async (event: ChangeEvent<HTMLInputElement>) => {
+  const files = event.target.files;
+  if (files && files.length > 0) {
+    // Handle multiple files sequentially
+    for (const file of Array.from(files)) {
+      await handleFileUpload(file);
+    }
+  }
+  if (event.target) event.target.value = "";
+};
 
   const {
     data: pageDetails,

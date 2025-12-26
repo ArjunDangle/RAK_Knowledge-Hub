@@ -13,6 +13,8 @@ export const AttachmentNode = Node.create({
     return {
       'data-file-name': { default: null },
       'data-attachment-type': { default: 'file' },
+      'src': { default: null }, // ADD THIS LINE
+      'data-temp-id': { default: null }, // ADD THIS LINE
     };
   },
 
@@ -20,6 +22,13 @@ export const AttachmentNode = Node.create({
     return [
       {
         tag: 'div[data-attachment-type]',
+        getAttrs: el => ({
+        'data-temp-id': el.getAttribute('data-temp-id'), // ADD THIS LINE
+        'data-file-name': el.getAttribute('data-file-name'),
+        'data-attachment-type': el.getAttribute('data-attachment-type'),
+      })
+
+        
       },
 
       {

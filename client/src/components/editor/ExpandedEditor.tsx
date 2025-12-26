@@ -160,47 +160,25 @@ export const ExpandedEditor = ({
    * Logic: Handles file uploads from the Sticky FAB.
    * Supports multiple files and ensures they stack vertically using paragraphs.
    */
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0 || !onUpload || !editor) return;
+  
+const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const files = e.target.files;
+  if (!files || files.length === 0 || !onUpload) return;
 
-    // Safety: Move cursor if on atomic node to prevent overwriting
-    if (editor.isActive('attachmentNode')) {
-        editor.commands.setTextSelection(editor.state.selection.to);
-        editor.commands.createParagraphNear();
-    }
-
+  setIsUploading(true);
+  try {
     for (const file of Array.from(files)) {
-      try {
-        setIsUploading(true);
-        // Calling onUpload triggers the parent's logic to update the 'attachments' list state
-        await onUpload(file); 
-
-        const type = file.type.startsWith('image/') ? 'image' 
-                   : file.type.startsWith('video/') ? 'video' 
-                   : file.type === 'application/pdf' ? 'pdf' 
-                   : 'file';
-
-        // Insert Node + Empty Paragraph for stacking
-        editor.chain().focus().insertContent([
-          {
-            type: 'attachmentNode',
-            attrs: {
-              "data-file-name": file.name,
-              "data-attachment-type": type,
-            }
-          },
-          { type: 'paragraph' }
-        ]).run();
-
-      } catch (error) {
-        console.error("Upload failed:", error);
-      }
+      // Triggers the parent function for a single insertion point
+      await onUpload(file); 
     }
-    
+  } catch (error) {
+    console.error("Fullscreen upload failed:", error);
+  } finally {
     setIsUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
-  };
+  }
+};
+
 
   const toggleSection = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
