@@ -1,3 +1,4 @@
+// client/src/components/editor/ExpandedEditor.tsx
 import React, { useState, useEffect, useRef } from "react";
 import { Editor, EditorContent } from "@tiptap/react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -11,12 +12,14 @@ import {
   ArrowLeft,
   ListTree,
   Paperclip,
-  Loader2
+  Loader2,
+  X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EditorToolbar as Toolbar } from "./EditorToolbar";
-import { MARGIN_OPTIONS, MarginType } from "./RichTextEditor";
+import { MARGIN_OPTIONS, MarginType, EditorAttachment } from "./RichTextEditor";
 import { cn } from "@/lib/utils";
+import { Separator } from "@/components/ui/separator";
 
 /**
  * Interface for the hierarchical Tree structure used in the Table of Contents.
@@ -38,6 +41,9 @@ interface ExpandedEditorProps {
   margin?: MarginType;
   onMarginChange?: (margin: MarginType) => void;
   onUpload?: (file: File) => Promise<string>;
+  // New Props for Attachment Syncing
+  attachments?: EditorAttachment[];
+  onRemoveAttachment?: (tempId: string) => void;
 }
 
 export const ExpandedEditor = ({ 
@@ -48,7 +54,9 @@ export const ExpandedEditor = ({
   isSaving,
   margin = "normal",
   onMarginChange,
-  onUpload
+  onUpload,
+  attachments = [],
+  onRemoveAttachment
 }: ExpandedEditorProps) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [toc, setToc] = useState<TocItem[]>([]);
@@ -149,40 +157,50 @@ export const ExpandedEditor = ({
   };
 
   /**
-   * Logic: Mirror the standard editor's file upload handling.
+   * Logic: Handles file uploads from the Sticky FAB.
+   * Supports multiple files and ensures they stack vertically using paragraphs.
    */
-  // Inside ExpandedEditor.tsx
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !onUpload || !editor) return;
 
-// Inside ExpandedEditor.tsx
-
-const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (!file || !onUpload || !editor) return;
-
-  try {
-    setIsUploading(true);
-    const url = await onUpload(file);
-
-    // Logic: Insert the correct node/mark based on file type
-    if (file.type.startsWith('image/')) {
-      // Use setImage to render the visual image on the current line
-      editor.chain().focus().setImage({ src: url, alt: file.name }).run();
-    } else {
-      // For PDFs or Videos, insert a styled "Attachment Chip" link on the current line
-      // This ensures it appears in the text flow, not just in the bottom list
-      editor
-        .chain()
-        .focus()
-        .insertContent(` <a href="${url}" class="attachment-chip" target="_blank">📎 ${file.name}</a> `)
-        .run();
+    // Safety: Move cursor if on atomic node to prevent overwriting
+    if (editor.isActive('attachmentNode')) {
+        editor.commands.setTextSelection(editor.state.selection.to);
+        editor.commands.createParagraphNear();
     }
-  } catch (error) {
-    console.error("Upload failed:", error);
-  } finally {
+
+    for (const file of Array.from(files)) {
+      try {
+        setIsUploading(true);
+        // Calling onUpload triggers the parent's logic to update the 'attachments' list state
+        await onUpload(file); 
+
+        const type = file.type.startsWith('image/') ? 'image' 
+                   : file.type.startsWith('video/') ? 'video' 
+                   : file.type === 'application/pdf' ? 'pdf' 
+                   : 'file';
+
+        // Insert Node + Empty Paragraph for stacking
+        editor.chain().focus().insertContent([
+          {
+            type: 'attachmentNode',
+            attrs: {
+              "data-file-name": file.name,
+              "data-attachment-type": type,
+            }
+          },
+          { type: 'paragraph' }
+        ]).run();
+
+      } catch (error) {
+        console.error("Upload failed:", error);
+      }
+    }
+    
     setIsUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
-  }
-};
+  };
 
   const toggleSection = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -274,21 +292,52 @@ const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
           </header>
 
           <div className="flex flex-1 overflow-hidden">
-            {/* OUTLINE SIDEBAR */}
+            {/* SIDEBAR (Outline + Attachments) */}
             <motion.aside
               initial={false}
               animate={{ width: isSidebarOpen ? 280 : 0 }}
               className="bg-white dark:bg-zinc-900 border-r flex flex-col overflow-hidden relative"
             >
-              <div className="p-5 w-[280px] overflow-y-auto h-full scrollbar-none">
-                <div className="flex items-center gap-2 mb-6">
+              <div className="p-5 w-[280px] overflow-y-auto h-full scrollbar-none pb-20">
+                {/* 1. Outline Section */}
+                <div className="flex items-center gap-2 mb-4">
                   <ListTree className="h-4 w-4 text-blue-600" />
                   <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Outline</h2>
                 </div>
                 {toc.length > 0 ? (
-                  <div className="space-y-1 pr-2">{renderTocItems(toc)}</div>
+                  <div className="space-y-1 pr-2 mb-8">{renderTocItems(toc)}</div>
                 ) : (
-                  <p className="px-3 py-4 text-xs italic text-slate-400">Headings will appear here.</p>
+                  <p className="px-3 py-4 text-xs italic text-slate-400 mb-8">Headings will appear here.</p>
+                )}
+
+                {/* 2. Attachments Section (Visible if files exist) */}
+                {attachments && attachments.length > 0 && (
+                  <>
+                    <Separator className="mb-6" />
+                    <div className="flex items-center gap-2 mb-4">
+                      <Paperclip className="h-4 w-4 text-blue-600" />
+                      <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Attachments</h2>
+                    </div>
+                    <div className="space-y-2">
+                      {attachments.map((att) => (
+                        <div key={att.tempId} className="flex items-start gap-2 text-xs p-2 rounded-md bg-slate-50 dark:bg-zinc-800 border border-slate-100 dark:border-zinc-700 group">
+                          <Paperclip className="h-3 w-3 mt-0.5 text-slate-400 flex-shrink-0" />
+                          <span className="flex-1 truncate text-slate-600 dark:text-slate-300" title={att.file.name}>
+                            {att.file.name}
+                          </span>
+                          {onRemoveAttachment && (
+                            <button 
+                              onClick={() => onRemoveAttachment(att.tempId)}
+                              className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition-opacity"
+                              title="Remove attachment"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
               <Button variant="ghost" size="sm" className="absolute bottom-6 right-3 h-8 w-8 rounded-full border bg-white shadow-sm" onClick={() => setIsSidebarOpen(false)}>
@@ -307,7 +356,7 @@ const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
               {/* FLOATING PILL TOOLBAR */}
               <div className="flex justify-center bg-[#F9FBFD] dark:bg-zinc-950 border-b py-2.5 px-4 shrink-0">
                 <div className="max-w-[1000px] w-full bg-[#edf2fa] dark:bg-zinc-800 rounded-full border shadow-sm px-4 py-0.5">
-                  <Toolbar editor={editor} currentMargin={margin} onMarginChange={onMarginChange} />
+                  <Toolbar editor={editor} currentMargin={margin} onMarginChange={onMarginChange} onUpload={onUpload} />
                 </div>
               </div>
 
@@ -325,7 +374,13 @@ const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
 
               {/* STICKY ATTACHMENT FAB */}
               <div className="absolute bottom-10 right-10 z-50">
-                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileSelect} />
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  className="hidden" 
+                  multiple // Supports multiple files
+                  onChange={handleFileSelect} 
+                />
                 <Button
                   size="icon"
                   className="h-14 w-14 rounded-full shadow-2xl bg-blue-600 hover:bg-blue-700 text-white transition-transform active:scale-90"

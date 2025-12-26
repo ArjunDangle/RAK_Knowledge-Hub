@@ -9,6 +9,7 @@ import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TextStyle } from '@tiptap/extension-text-style'
 import { Extension } from "@tiptap/core";
+import { AttachmentNode } from "./extensions/attachmentNode";
 
 /**
  * Custom Extension to handle manual font sizes.
@@ -59,6 +60,8 @@ export const useConfiguredEditor = (content: string = "", onUpdate?: (editor: Ed
   return useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+      
+      AttachmentNode,
       
       // FIX: Enable Base64 to show uploaded images immediately
       Image.configure({

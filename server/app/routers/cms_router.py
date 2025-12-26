@@ -1,8 +1,8 @@
-# server/app/routers/cms_router.py
-import os
-import uuid
+# server/app/routers/cms_router.pyimport uuid
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 from typing import List, Optional
+from fastapi.responses import FileResponse
+import os
 
 from app.services.confluence_service import ConfluenceService
 from app.services.permission_service import PermissionService
@@ -111,6 +111,33 @@ async def create_page(
             detail="Failed to create page in Confluence."
         )
     return created_page
+
+@router.get("/attachments/preview/{temp_id}", dependencies=[Depends(get_current_user)])
+async def preview_attachment(temp_id: str):
+    """
+    Serves a temporary uploaded file for preview within the editor.
+    """
+    UPLOAD_DIR = "/tmp/uploads"
+    file_path = os.path.join(UPLOAD_DIR, temp_id)
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Temporary file not found.")
+    
+    # FileResponse automatically handles content-type based on extension
+    return FileResponse(file_path)
+
+@router.get("/attachments/preview/{temp_id}")
+async def preview_attachment(temp_id: str):
+    """
+    Serves the temporary uploaded file so the editor can display images.
+    """
+    UPLOAD_DIR = "/tmp/uploads"
+    file_path = os.path.join(UPLOAD_DIR, temp_id)
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    return FileResponse(file_path)
 
 @router.get(
     "/admin/edit-details/{page_id}",

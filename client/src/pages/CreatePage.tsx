@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-
+import { API_BASE_URL } from "@/lib/api/api-client"; 
 import { KnowledgeLayout } from "./KnowledgeLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,6 +68,7 @@ const baseSchema = z.object({
     .min(1, { message: "You must select a parent category." }),
 });
 
+
 interface UploadedFile {
   file: File;
   tempId: string;
@@ -86,6 +87,13 @@ export default function CreatePage() {
     retry: false,
   });
 
+  const [attachments, setAttachments] = useState<UploadedFile[]>([]);
+
+  const handleRemoveAttachment = (tempId: string) => {
+    setAttachments((prev) => prev.filter((a) => a.tempId !== tempId));
+    toast.info("Attachment removed from list");
+  };
+
   const { data: submissionDetails } = useQuery({
     queryKey: ["mySubmissions"],
     queryFn: getMySubmissions,
@@ -93,7 +101,6 @@ export default function CreatePage() {
     select: (data) => data.find((sub) => sub.confluencePageId === pageId),
   });
 
-  const [attachments, setAttachments] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showAllowedOnly, setShowAllowedOnly] = useState(false);
@@ -149,72 +156,102 @@ export default function CreatePage() {
    * FIXED: Added return type Promise<string> to satisfy RichTextEditor requirements.
    * Returns the preview URL for the uploaded attachment.
    */
-  const handleFileUpload = async (file: File): Promise<string> => {
-    setIsUploading(true);
-    try {
-      const response = await uploadAttachment(file);
-      const fileType = file.type.startsWith("image/")
-        ? "image"
-        : file.type.startsWith("video/")
-        ? "video"
-        : file.type === "application/pdf"
-        ? "pdf"
-        : "file";
-      
-      const newAttachment: UploadedFile = {
-        file: file,
-        tempId: response.temp_id,
-        type: fileType,
-      };
-      setAttachments((prev) => [...prev, newAttachment]);
 
-      toast.success("Attachment uploaded successfully.");
-      
-      // Return the URL for the editor to use
-      return `https://rak-knowledge-hub.rak-internal.net/api/cms/attachments/preview/${response.temp_id}`;
-    } catch (error) {
-      toast.error("Upload failed", { description: (error as Error).message });
-      throw error;
-    } finally {
-      setIsUploading(false);
-    }
-  };
+  const API_BASE_URL = "https://rak-knowledge-hub.rak-internal.net/api";
+
+  const handleFileUpload = async (file: File): Promise<string> => {
+  setIsUploading(true);
+  try {
+    // 1. Upload the file to the server (saves to /tmp/uploads)
+    const response = await uploadAttachment(file);
+
+    // 2. Determine the file type for the UI list
+    const fileType = file.type.startsWith("image/")
+      ? "image"
+      : file.type.startsWith("video/")
+      ? "video"
+      : file.type === "application/pdf"
+      ? "pdf"
+      : "file";
+
+    // 3. Add to the 'Attachments' list at the bottom of the page
+    const newAttachment: UploadedFile = {
+      file: file,
+      tempId: response.temp_id,
+      type: fileType,
+    };
+    setAttachments((prev) => [...prev, newAttachment]);
+
+    toast.success("Attachment uploaded successfully.");
+
+    // 4. CRITICAL: Return the full URL to the backend preview endpoint
+    // This tells the editor exactly where to load the image from.
+    const previewUrl = `${API_BASE_URL}/cms/attachments/preview/${response.temp_id}`;
+    
+    return previewUrl;
+
+  } catch (error) {
+    toast.error("Upload failed", { description: (error as Error).message });
+    throw error; // Re-throw so the editor knows the upload failed
+  } finally {
+    setIsUploading(false);
+  }
+};
+
+
 
   /**
    * FIXED: handleFileSelect now handles editor insertion for the bottom "Add Attachment" button.
    * This prevents double-insertion since the RichTextEditor toolbar calls handleFileUpload directly.
    */
-  const handleFileSelect = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file && editor) {
-      try {
-        const url = await handleFileUpload(file);
-        const fileType = file.type.startsWith("image/")
-          ? "image"
-          : file.type.startsWith("video/")
-          ? "video"
-          : file.type === "application/pdf"
-          ? "pdf"
-          : "file";
+  // ... inside the component
 
-        // Logic: Since this button is outside the editor toolbar, 
-        // we manually insert the content into the editor here.
-        if (fileType === "image") {
-          editor.chain().focus().setImage({ src: url }).run();
-        } else {
-          editor.chain().focus().setAttachment({
-            "data-file-name": file.name,
-            "data-attachment-type": fileType,
-          }).run();
-        }
+// ... inside CreatePage component
+
+const handleFileSelect = async (event: ChangeEvent<HTMLInputElement>) => {
+  const files = event.target.files;
+  if (files && files.length > 0 && editor) {
+    
+    // 1. Safety Check: If an existing attachment is selected, move cursor AFTER it 
+    // so we don't overwrite it.
+    if (editor.isActive('attachmentNode')) {
+      editor.commands.setTextSelection(editor.state.selection.to);
+      editor.commands.createParagraphNear();
+    }
+
+    for (const file of Array.from(files)) {
+      try {
+        await handleFileUpload(file); // Uploads file & adds to bottom list
+
+        const type = file.type.startsWith("image/") ? "image" 
+                   : file.type.startsWith("video/") ? "video" 
+                   : file.type === "application/pdf" ? "pdf" 
+                   : "file";
+
+        // 2. Insert the Attachment Node AND an empty Paragraph immediately after
+        editor.chain().focus().insertContent([
+          {
+            type: 'attachmentNode',
+            attrs: {
+              "data-file-name": file.name,
+              "data-attachment-type": type,
+            }
+          },
+          {
+            type: 'paragraph' // This ensures the next item goes on a new line
+          }
+        ]).run();
+
       } catch (e) {
-        // Error already toasted in handleFileUpload
+        console.error(e);
       }
     }
-    if (event.target) {
-      event.target.value = "";
-    }
-  };
+  }
+  
+  if (event.target) {
+    event.target.value = "";
+  }
+};
 
   /**
    * FIXED: Replaced undefined 'initialContent' with an empty string.
@@ -557,6 +594,7 @@ export default function CreatePage() {
                       ref={fileInputRef}
                       onChange={handleFileSelect}
                       className="hidden"
+                      multiple
                     />
                   </div>
                 </div>

@@ -46,26 +46,41 @@ export const EditorToolbar = ({
 // Inside ExpandedEditor.tsx
 
 const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (!file || !onUpload || !editor) return;
+  const files = e.target.files;
+  if (!files || files.length === 0 || !onUpload || !editor) return;
+
+  // 1. Safety Check: Move cursor if an attachment is currently selected
+  if (editor.isActive('attachmentNode')) {
+      editor.commands.setTextSelection(editor.state.selection.to);
+      editor.commands.createParagraphNear();
+  }
 
   try {
     setIsUploading(true);
-    const url = await onUpload(file);
+    
+    for (const file of Array.from(files)) {
+      await onUpload(file); 
 
-    // Logic: Insert the correct node/mark based on file type
-    if (file.type.startsWith('image/')) {
-      // Use setImage to render the visual image on the current line
-      editor.chain().focus().setImage({ src: url, alt: file.name }).run();
-    } else {
-      // For PDFs or Videos, insert a styled "Attachment Chip" link on the current line
-      // This ensures it appears in the text flow, not just in the bottom list
-      editor
-        .chain()
-        .focus()
-        .insertContent(` <a href="${url}" class="attachment-chip" target="_blank">📎 ${file.name}</a> `)
-        .run();
+      const type = file.type.startsWith('image/') ? 'image' 
+                 : file.type.startsWith('video/') ? 'video' 
+                 : file.type === 'application/pdf' ? 'pdf' 
+                 : 'file';
+
+      // 2. Insert Node + Paragraph
+      editor.chain().focus().insertContent([
+        { 
+          type: 'attachmentNode', 
+          attrs: { 
+            "data-file-name": file.name, 
+            "data-attachment-type": type 
+          } 
+        },
+        { 
+          type: 'paragraph' 
+        }
+      ]).run();
     }
+
   } catch (error) {
     console.error("Upload failed:", error);
   } finally {
@@ -180,7 +195,7 @@ const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
           {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
         </Button>
         <TableSelector editor={editor} />
-        <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileSelect} />
+        <input type="file" ref={fileInputRef} className="hidden" multiple onChange={handleFileSelect} />
       </div>
 
       {/* 8. LAYOUT & FULLSCREEN */}

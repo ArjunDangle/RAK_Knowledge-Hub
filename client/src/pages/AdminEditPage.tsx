@@ -65,10 +65,14 @@ export default function AdminEditPage() {
   const { pageId } = useParams<{ pageId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-
-  const [attachments, setAttachments] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleRemoveAttachment = (tempId: string) => {
+    setAttachments((prev) => prev.filter((a) => a.tempId !== tempId));
+  };
+  
+  const [attachments, setAttachments] = useState<UploadedFile[]>([]);
 
   const handleFileUpload = async (file: File) => {
     setIsUploading(true);
@@ -99,15 +103,46 @@ export default function AdminEditPage() {
     }
   };
 
+  // ... inside the component
+
   const handleFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      handleFileUpload(file);
+  const files = event.target.files;
+  
+  if (files && files.length > 0 && editor) {
+    
+    // Safety Check
+    if (editor.isActive('attachmentNode')) {
+        editor.commands.setTextSelection(editor.state.selection.to);
+        editor.commands.createParagraphNear();
     }
-    if (event.target) {
-      event.target.value = "";
+
+    for (const file of Array.from(files)) {
+      // Admin page logic handles upload separately in the background, 
+      // but we still need to insert the node here.
+      handleFileUpload(file); 
+      
+      const fileType = file.type.startsWith("image/") ? "image" 
+                     : file.type.startsWith("video/") ? "video" 
+                     : file.type === "application/pdf" ? "pdf" 
+                     : "file";
+      
+      // THE FIX: Chain commands
+      editor.chain()
+        .focus()
+        .setAttachment({ 
+          "data-file-name": file.name, 
+          "data-attachment-type": fileType 
+        })
+        .insertContent({ type: 'paragraph' }) // New line after
+        .run();
     }
-  };
+  }
+  
+  if (event.target) {
+    event.target.value = "";
+  }
+};
+
 
   const {
     data: pageDetails,
@@ -369,8 +404,17 @@ export default function AdminEditPage() {
 
                 <div>
                   <FormLabel>Content</FormLabel>
-                  <RichTextEditor editor={editor} />
-                </div>
+
+                  <RichTextEditor 
+                    editor={editor} 
+                    // Pass title if you want it in expanded mode
+                    title={form.getValues("title")} 
+                    onUpload={handleFileUpload}
+                    // Sync Props
+                    attachments={attachments}
+                    onRemoveAttachment={handleRemoveAttachment}
+                  />
+                  </div>
 
                 <div className="space-y-4">
                   <FormLabel>Attachments</FormLabel>
@@ -397,7 +441,7 @@ export default function AdminEditPage() {
                       {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
                       Add Attachment
                     </Button>
-                    <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" />
+                    <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" multiple />
                   </div>
                 </div>
 
