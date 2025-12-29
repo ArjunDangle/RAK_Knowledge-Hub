@@ -15,7 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from "@/components/ui/sonner";
 import { getArticleById, updatePage, PageUpdatePayload, uploadAttachment, AttachmentInfo } from "@/lib/api/api-client";
-import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { RichTextEditor, EditorAttachment } from "@/components/editor/RichTextEditor";
 import { useConfiguredEditor } from "@/components/editor/useEditorConfig";
 import { ArticleCardSkeleton } from "@/components/ui/loading-skeleton";
 
@@ -23,10 +23,11 @@ const baseSchema = z.object({
   title: z.string().min(5, { message: "Title must be at least 5 characters long." }),
   description: z.string().min(10, "Description must be at least 10 characters.").max(150, "Description must be 10-15 words (max 150 chars)."),
   content: z.string().min(50, { message: "Content must be at least 50 characters." }),
+  parent_id: z.string().optional(),
 });
 
 interface UploadedFile {
-  file: File;
+  file?: File;
   tempId: string;
   type: "image" | "video" | "pdf" | "file";
 }
@@ -71,7 +72,8 @@ export default function EditPage() {
     queryFn: () => getArticleById(pageId!),
     // 4. BLOCKER: If isSubmitted is true, this query CANNOT run.
     enabled: !!pageId && !isSubmitted && !mutation.isPending, 
-    staleTime: 0, 
+    staleTime: Infinity, // Keep data fresh indefinitely during edit session
+    refetchOnWindowFocus: false, // Fix: Prevent losing state when switching tabs
     retry: false, // Don't retry if it fails
   });
 
@@ -87,26 +89,60 @@ export default function EditPage() {
   const editor = useConfiguredEditor(article?.html || "", (editor) => {
     const html = editor.getHTML();
     form.setValue("content", html, { shouldDirty: true });
+
+    // Sync sidebar list with editor content (Fix for Backspace bug)
+    const currentAttachmentIdsInDoc = new Set<string>();
+    editor.state.doc.descendants((node) => {
+      if (node.type.name === "attachmentNode") {
+        const id = node.attrs["data-temp-id"] || node.attrs["data-file-name"];
+        if (id) currentAttachmentIdsInDoc.add(id);
+      }
+    });
+
+    setAttachments((prev) => {
+      const filtered = prev.filter((a) => currentAttachmentIdsInDoc.has(a.tempId));
+      return filtered.length === prev.length ? prev : filtered;
+    });
   });
 
   useEffect(() => {
-    if (article) {
+    // Only initialize if we have article data and the attachments list is currently empty
+    if (article && attachments.length === 0) {
       form.reset({
         title: article.title,
         description: article.description || article.excerpt,
         content: article.html,
+        parent_id: article.parentId || undefined,
       });
+
+      // Detection Logic for existing attachments
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(article.html, 'text/html');
+      const existingNodes = doc.querySelectorAll('div[data-attachment-type]');
+      const detectedAttachments: UploadedFile[] = [];
+      existingNodes.forEach((node) => {
+        const fileName = node.getAttribute('data-file-name');
+        const type = node.getAttribute('data-attachment-type') as EditorAttachment['type'];
+        if (fileName && type) {
+          detectedAttachments.push({
+            tempId: fileName, // Use filename as key for existing attachments
+            type: type,
+          });
+        }
+      });
+      setAttachments(detectedAttachments);
+
       if (editor && !editor.getText()) {
         editor.commands.setContent(article.html);
       }
     }
-  }, [article, form, editor]);
+  }, [article, form, editor, attachments.length]);
 
   const handleFileUpload = async (file: File) => {
     setIsUploading(true);
     try {
       const response = await uploadAttachment(file);
-      const fileType = file.type.startsWith("image/") ? "image" : 
+      const fileType: EditorAttachment['type'] = file.type.startsWith("image/") ? "image" : 
                        file.type.startsWith("video/") ? "video" : 
                        file.type === "application/pdf" ? "pdf" : "file";
 
@@ -191,16 +227,20 @@ export default function EditPage() {
 
     const cleanedContent = cleanContent(values.content);
 
-    const payloadAttachments: AttachmentInfo[] = attachments.map((a) => ({
-      temp_id: a.tempId,
-      file_name: a.file.name,
-    }));
+    // Only send NEW attachments (those that have a file object) to the server
+    const payloadAttachments: AttachmentInfo[] = attachments
+      .filter(a => !!a.file)
+      .map((a) => ({
+        temp_id: a.tempId,
+        file_name: a.file!.name,
+      }));
 
     mutation.mutate({
       pageId,
       title: values.title,
       description: values.description,
       content: cleanedContent,
+      parent_id: values.parent_id,
       attachments: payloadAttachments,
     });
   };
@@ -285,8 +325,19 @@ export default function EditPage() {
                         await handleFileUpload(file);
                         return "";
                       }}
-                      attachments={attachments.map(a => ({...a, file: a.file}))} 
-                      onRemoveAttachment={(tempId) => setAttachments(prev => prev.filter(p => p.tempId !== tempId))}
+                      attachments={attachments.map(a => ({...a}))} 
+                      onRemoveAttachment={(id) => {
+                        setAttachments(prev => prev.filter(p => p.tempId !== id));
+                        if (editor) {
+                          editor.state.doc.descendants((node, pos) => {
+                            if (node.type.name === "attachmentNode" && (node.attrs["data-temp-id"] === id || node.attrs["data-file-name"] === id)) {
+                              editor.chain().deleteRange({ from: pos, to: pos + node.nodeSize }).run();
+                              return false;
+                            }
+                            return true;
+                          });
+                        }
+                      }}
                     />
                   </div>
                   {form.formState.errors.content && (
@@ -298,20 +349,32 @@ export default function EditPage() {
 
                 <div className="flex flex-col gap-3 p-4 bg-muted/30 rounded-lg border border-border/50">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-muted-foreground">New Attachments Queue</span>
-                    <span className="text-xs text-muted-foreground">{attachments.length} files ready</span>
+                    <span className="text-sm font-medium text-muted-foreground">Attachments Sidebar</span>
+                    <span className="text-xs text-muted-foreground">{attachments.length} files total</span>
                   </div>
                   {attachments.length > 0 && (
                     <div className="flex flex-wrap gap-2">
                       {attachments.map((att) => (
                         <div key={att.tempId} className="flex items-center gap-2 bg-background border px-3 py-1.5 rounded-full text-xs shadow-sm animate-in fade-in zoom-in duration-300">
                           <Paperclip className="h-3 w-3 text-primary" />
-                          <span className="max-w-[150px] truncate">{att.file.name}</span>
+                          <span className="max-w-[150px] truncate">{att.file?.name || att.tempId}</span>
                           <Button 
                             variant="ghost" 
                             size="icon" 
                             className="h-5 w-5 rounded-full hover:bg-destructive/10 hover:text-destructive -mr-1" 
-                            onClick={() => setAttachments(prev => prev.filter(a => a.tempId !== att.tempId))}
+                            onClick={() => {
+                              const id = att.tempId;
+                              setAttachments(prev => prev.filter(a => a.tempId !== id));
+                              if (editor) {
+                                editor.state.doc.descendants((node, pos) => {
+                                  if (node.type.name === "attachmentNode" && (node.attrs["data-temp-id"] === id || node.attrs["data-file-name"] === id)) {
+                                    editor.chain().deleteRange({ from: pos, to: pos + node.nodeSize }).run();
+                                    return false;
+                                  }
+                                  return true;
+                                });
+                              }
+                            }}
                             type="button"
                           >
                             <X className="h-3 w-3" />
@@ -329,7 +392,7 @@ export default function EditPage() {
                       disabled={isUploading}
                     >
                       {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                      Add Attachment
+                      Add New Attachment
                     </Button>
                     <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" />
                   </div>

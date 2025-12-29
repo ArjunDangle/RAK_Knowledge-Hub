@@ -8,14 +8,10 @@ import { TableRow } from "@tiptap/extension-table-row";
 import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TextStyle } from '@tiptap/extension-text-style'
-import { Extension } from "@tiptap/core";
+import { Extension, CommandProps } from "@tiptap/core";
 import { AttachmentNode } from "./extensions/attachmentNode";
 
-/**
- * Custom Extension to handle manual font sizes.
- * It hooks into the TextStyle extension to apply inline styles.
- */
-const FontSize = Extension.create({
+export const FontSize = Extension.create({
   name: 'fontSize',
   addOptions() {
     return {
@@ -41,9 +37,9 @@ const FontSize = Extension.create({
   },
   addCommands() {
     return {
-      setFontSize: (fontSize: string) => ({ chain }: any) => 
+      setFontSize: (fontSize: string) => ({ chain }: CommandProps) => 
         chain().setMark('textStyle', { fontSize }).run(),
-      unsetFontSize: () => ({ chain }: any) => 
+      unsetFontSize: () => ({ chain }: CommandProps) => 
         chain().setMark('textStyle', { fontSize: null }).run(),
     };
   },

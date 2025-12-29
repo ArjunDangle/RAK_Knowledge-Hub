@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from typing import List, Optional
 from fastapi.responses import FileResponse
 import os
+import uuid
 
 from app.services.confluence_service import ConfluenceService
 from app.services.permission_service import PermissionService

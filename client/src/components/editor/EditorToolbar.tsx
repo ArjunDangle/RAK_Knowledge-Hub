@@ -19,7 +19,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MarginType } from "./RichTextEditor";
-import { TableSelector } from "./TableSelector"; // FIXED: Ensure this file exists in the same folder
+import { TableSelector } from "./TableSelector";
+
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    fontSize: {
+      /** Set the font size */
+      setFontSize: (size: string) => ReturnType;
+      /** Unset the font size */
+      unsetFontSize: () => ReturnType;
+    }
+  }
+}
 
 interface EditorToolbarProps {
   editor: Editor;
@@ -41,28 +52,22 @@ export const EditorToolbar = ({
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Inside ExpandedEditor.tsx
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !onUpload) return;
 
-// Inside ExpandedEditor.tsx
-
-const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const files = e.target.files;
-  if (!files || files.length === 0 || !onUpload) return;
-
-  setIsUploading(true);
-  try {
-    for (const file of Array.from(files)) {
-      // CreatePage's handleFileUpload will take it from here 
-      // and perform the single insertion.
-      await onUpload(file); 
+    setIsUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        await onUpload(file); 
+      }
+    } catch (error) {
+      console.error("Toolbar upload failed:", error);
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  } catch (error) {
-    console.error("Toolbar upload failed:", error);
-  } finally {
-    setIsUploading(false);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }
-};
+  };
 
   const getTextTypeLabel = () => {
     if (editor.isActive("heading", { level: 1 })) return "h1";
@@ -88,8 +93,8 @@ const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
       
       {/* 1. HISTORY GROUP */}
       <div className="flex items-center">
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()}><Undo className="h-4 w-4" /></Button>
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()}><Redo className="h-4 w-4" /></Button>
+        <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()}><Undo className="h-4 w-4" /></Button>
+        <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()}><Redo className="h-4 w-4" /></Button>
       </div>
 
       <Separator orientation="vertical" className="h-6 mx-1" />
@@ -121,7 +126,7 @@ const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
 
       {/* 3. MANUAL FONT SIZE */}
       <Select
-        onValueChange={(size) => (editor as any).chain().focus().setFontSize(size).run()}
+        onValueChange={(size) => editor.chain().focus().setFontSize(size).run()}
       >
         <SelectTrigger className="h-8 w-[70px] text-xs border-none hover:bg-muted focus:ring-0">
           <SelectValue placeholder="16px" />
@@ -155,18 +160,18 @@ const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
 
       {/* 6. ALIGNMENT */}
       <div className="flex items-center gap-0.5">
-        <Button variant={editor.isActive({ textAlign: 'left' }) ? "secondary" : "ghost"} size="sm" className="h-8 w-8 p-0" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setTextAlign('left').run()}><AlignLeft className="h-4 w-4" /></Button>
-        <Button variant={editor.isActive({ textAlign: 'center' }) ? "secondary" : "ghost"} size="sm" className="h-8 w-8 p-0" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setTextAlign('center').run()}><AlignCenter className="h-4 w-4" /></Button>
-        <Button variant={editor.isActive({ textAlign: 'right' }) ? "secondary" : "ghost"} size="sm" className="h-8 w-8 p-0" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setTextAlign('right').run()}><AlignRight className="h-4 w-4" /></Button>
-        <Button variant={editor.isActive({ textAlign: 'justify' }) ? "secondary" : "ghost"} size="sm" className="h-8 w-8 p-0" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setTextAlign('justify').run()}><AlignJustify className="h-4 w-4" /></Button>
+        <Button type="button" variant={editor.isActive({ textAlign: 'left' }) ? "secondary" : "ghost"} size="sm" className="h-8 w-8 p-0" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setTextAlign('left').run()}><AlignLeft className="h-4 w-4" /></Button>
+        <Button type="button" variant={editor.isActive({ textAlign: 'center' }) ? "secondary" : "ghost"} size="sm" className="h-8 w-8 p-0" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setTextAlign('center').run()}><AlignCenter className="h-4 w-4" /></Button>
+        <Button type="button" variant={editor.isActive({ textAlign: 'right' }) ? "secondary" : "ghost"} size="sm" className="h-8 w-8 p-0" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setTextAlign('right').run()}><AlignRight className="h-4 w-4" /></Button>
+        <Button type="button" variant={editor.isActive({ textAlign: 'justify' }) ? "secondary" : "ghost"} size="sm" className="h-8 w-8 p-0" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().setTextAlign('justify').run()}><AlignJustify className="h-4 w-4" /></Button>
       </div>
 
       <Separator orientation="vertical" className="h-6 mx-1" />
 
       {/* 7. INSERTS */}
       <div className="flex items-center gap-0.5">
-        <Button variant={editor.isActive("link") ? "secondary" : "ghost"} size="sm" className="h-8 w-8 p-0" onMouseDown={(e) => e.preventDefault()} onClick={setLink} title="Link"><LinkIcon className="h-4 w-4" /></Button>
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onMouseDown={(e) => e.preventDefault()} onClick={() => fileInputRef.current?.click()}>
+        <Button type="button" variant={editor.isActive("link") ? "secondary" : "ghost"} size="sm" className="h-8 w-8 p-0" onMouseDown={(e) => e.preventDefault()} onClick={setLink} title="Link"><LinkIcon className="h-4 w-4" /></Button>
+        <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" onMouseDown={(e) => e.preventDefault()} onClick={() => fileInputRef.current?.click()}>
           {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
         </Button>
         <TableSelector editor={editor} />
@@ -178,7 +183,7 @@ const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         {currentMargin && onMarginChange && (
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 px-2 gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground border-l rounded-none ml-1">
+              <Button type="button" variant="ghost" size="sm" className="h-8 px-2 gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground border-l rounded-none ml-1">
                 <FoldHorizontal className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">{currentMargin}</span>
               </Button>
@@ -186,7 +191,7 @@ const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
             <PopoverContent className="w-32 p-1 z-[200]" align="end">
               <div className="flex flex-col">
                 {(['narrow', 'normal', 'medium', 'wide'] as MarginType[]).map((m) => (
-                  <Button key={m} variant="ghost" size="sm" className="justify-between font-normal capitalize h-8 text-xs" onClick={() => onMarginChange(m)}>
+                  <Button type="button" key={m} variant="ghost" size="sm" className="justify-between font-normal capitalize h-8 text-xs" onClick={() => onMarginChange(m)}>
                     {m} {currentMargin === m && <Check className="h-3 w-3 text-primary" />}
                   </Button>
                 ))}
@@ -196,7 +201,7 @@ const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         )}
         
         {onExpand && (
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary transition-colors" onClick={onExpand} title="Fullscreen">
+          <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary transition-colors" onClick={onExpand} title="Fullscreen">
             <Maximize2 className="h-4 w-4" />
           </Button>
         )}

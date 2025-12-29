@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
 // --- Types ---
+// eslint-disable-next-line react-refresh/only-export-components
 export const MARGIN_OPTIONS = {
   narrow: "p-4",
   normal: "p-8",
@@ -30,7 +31,7 @@ export const MARGIN_OPTIONS = {
 export type MarginType = keyof typeof MARGIN_OPTIONS;
 
 export interface EditorAttachment {
-  file: File;
+  file?: File;
   tempId: string;
   type: "image" | "video" | "pdf" | "file";
 }
@@ -60,7 +61,6 @@ export const RichTextEditor = ({
   attachments = [], 
   onRemoveAttachment
 }: RichTextEditorProps) => {
-  // --- STATE ---
   const [isExpanded, setIsExpanded] = useState(false);
   const [margin, setMargin] = useState<MarginType>("normal");
   const [toc, setToc] = useState<TocItem[]>([]);
@@ -69,16 +69,14 @@ export const RichTextEditor = ({
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [isUploading, setIsUploading] = useState(false);
 
-  // --- REFS ---
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // --- TOC LOGIC ---
   useEffect(() => {
     if (!editor) return;
 
     const updateToc = () => {
-      const flatHeadings: any[] = [];
+      const flatHeadings: Omit<TocItem, "children">[] = [];
       let headingIndex = 0;
       
       editor.state.doc.descendants((node, pos) => {
@@ -96,21 +94,14 @@ export const RichTextEditor = ({
       setToc(buildTocTree(flatHeadings));
     };
 
-    // Initial load
     updateToc();
-    
-    // Update whenever document changes
     editor.on("update", updateToc);
-    
     return () => { editor.off("update", updateToc); };
   }, [editor]);
 
-  // --- INTERSECTION OBSERVER (Spy Scroll) ---
   useEffect(() => {
     if (toc.length === 0) return;
 
-    // We still try to add IDs for the Spy Scroll (highlighting) to work,
-    // but we won't rely on them for clicking anymore.
     const headingElements = document.querySelectorAll(".prose h1, .prose h2, .prose h3");
     headingElements.forEach((el, index) => {
       el.id = `heading-${index}`;
@@ -129,10 +120,9 @@ export const RichTextEditor = ({
 
     headingElements.forEach((el) => observer.observe(el));
     return () => observer.disconnect();
-  }, [toc, isExpanded]); // Re-run when TOC or layout changes
+  }, [toc, isExpanded]);
 
-  // --- HELPERS ---
-  const buildTocTree = (headings: {text: string, level: number, pos: number, id: string}[]) => {
+  const buildTocTree = (headings: Omit<TocItem, "children">[]) => {
     const root: TocItem[] = [];
     const stack: TocItem[] = [];
 
@@ -148,25 +138,13 @@ export const RichTextEditor = ({
     return root;
   };
 
-  // ✅ FIXED: SCROLL LOGIC
   const scrollToHeading = (pos: number) => {
     if (!editor) return;
-
-    // 1. Select the text (moves the internal Tiptap cursor)
     editor.commands.setTextSelection(pos);
-    
-    // 2. Direct DOM lookup using Tiptap's view engine
-    // (This works even if the IDs are missing)
     const domNode = editor.view.nodeDOM(pos) as HTMLElement;
-
     if (domNode && domNode.scrollIntoView) {
-      // 3. Scroll to Center
-      domNode.scrollIntoView({ 
-        behavior: "smooth", 
-        block: "center" 
-      });
+      domNode.scrollIntoView({ behavior: "smooth", block: "center" });
     } else {
-      // Fallback: Use Tiptap's native scroll if DOM node lookup fails
       editor.commands.scrollIntoView();
     }
   };
@@ -190,7 +168,6 @@ export const RichTextEditor = ({
     setCollapsedSections(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // --- RENDERERS ---
   const renderTocItems = (items: TocItem[]) => {
     return items.map((item) => {
       const isCollapsed = collapsedSections[item.id];
@@ -206,7 +183,6 @@ export const RichTextEditor = ({
                 ? "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" 
                 : "hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-600 dark:text-slate-400"
             )}
-            // ✅ CLICK HANDLER updated to use robust function
             onClick={(e) => {
               e.preventDefault();
               scrollToHeading(item.pos);
@@ -236,13 +212,7 @@ export const RichTextEditor = ({
     });
   };
 
-  if (!editor) {
-    return (
-      <div className="w-full h-[450px] border rounded-md bg-muted/5 animate-pulse flex items-center justify-center">
-        <span className="text-muted-foreground text-sm font-medium italic tracking-wide">Initializing Editor...</span>
-      </div>
-    );
-  }
+  if (!editor) return null;
 
   return (
     <div className={cn(
@@ -257,7 +227,7 @@ export const RichTextEditor = ({
         {isExpanded ? (
           <div className="flex items-center justify-between h-full">
             <div className="flex items-center gap-3 flex-1">
-              <Button variant="ghost" size="sm" onClick={() => setIsExpanded(false)} className="h-10 w-10 p-0 rounded-full">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setIsExpanded(false)} className="h-10 w-10 p-0 rounded-full">
                 <ArrowLeft className="h-5 w-5 text-slate-600" />
               </Button>
               <div className="flex flex-col">
@@ -273,7 +243,7 @@ export const RichTextEditor = ({
                 </div>
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={() => setIsExpanded(false)} className="rounded-full px-6 gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => setIsExpanded(false)} className="rounded-full px-6 gap-2">
               <Minimize2 className="h-4 w-4" /> Exit Fullscreen
             </Button>
           </div>
@@ -302,10 +272,23 @@ export const RichTextEditor = ({
             )}
           >
             <div className="p-5 w-[280px] overflow-y-auto h-full scrollbar-none pb-20">
-              <div className="flex items-center gap-2 mb-4">
-                <ListTree className="h-4 w-4 text-blue-600" />
-                <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Outline</h2>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2">
+                  <ListTree className="h-4 w-4 text-blue-600" />
+                  <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Outline</h2>
+                </div>
+                {/* ✅ IMPROVED UX: Toggle button is now here at the top left */}
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8 hover:bg-slate-100 dark:hover:bg-zinc-800" 
+                  onClick={() => setIsSidebarOpen(false)}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
               </div>
+
               {toc.length > 0 ? (
                 <div className="space-y-1 pr-2 mb-8">{renderTocItems(toc)}</div>
               ) : (
@@ -323,11 +306,12 @@ export const RichTextEditor = ({
                     {attachments.map((att) => (
                       <div key={att.tempId} className="flex items-start gap-2 text-xs p-2 rounded-md bg-slate-50 dark:bg-zinc-800 border border-slate-100 dark:border-zinc-700 group">
                         <Paperclip className="h-3 w-3 mt-0.5 text-slate-400 flex-shrink-0" />
-                        <span className="flex-1 truncate text-slate-600 dark:text-slate-300" title={att.file.name}>
-                          {att.file.name}
+                        <span className="flex-1 truncate text-slate-600 dark:text-slate-300" title={att.file?.name || att.tempId}>
+                          {att.file?.name || att.tempId}
                         </span>
                         {onRemoveAttachment && (
                           <button 
+                            type="button"
                             onClick={() => onRemoveAttachment(att.tempId)}
                             className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition-opacity"
                           >
@@ -340,10 +324,6 @@ export const RichTextEditor = ({
                 </>
               )}
             </div>
-            
-            <Button variant="ghost" size="sm" className="absolute bottom-6 right-3 h-8 w-8 rounded-full border bg-white shadow-sm z-10" onClick={() => setIsSidebarOpen(false)}>
-              <ChevronLeft className="h-4 w-4 text-slate-600" />
-            </Button>
           </aside>
         )}
 
@@ -356,7 +336,13 @@ export const RichTextEditor = ({
           )}
         >
           {isExpanded && !isSidebarOpen && (
-            <Button variant="ghost" size="sm" className="fixed top-20 left-4 z-50 h-10 w-10 rounded-full border shadow-md bg-white text-blue-600" onClick={() => setIsSidebarOpen(true)}>
+            <Button 
+              type="button" 
+              variant="ghost" 
+              size="sm" 
+              className="fixed top-20 left-4 z-50 h-10 w-10 rounded-full border shadow-md bg-white text-blue-600" 
+              onClick={() => setIsSidebarOpen(true)}
+            >
               <PanelLeft className="h-5 w-5" />
             </Button>
           )}
@@ -374,7 +360,6 @@ export const RichTextEditor = ({
             className={cn(
               "transition-all duration-500 ease-in-out shadow-sm mx-auto border-x border-transparent dark:border-zinc-800/50 bg-white dark:bg-zinc-900",
               "focus:outline-none prose prose-slate dark:prose-invert max-w-none pb-20 min-h-[400px]",
-              // Keep your spacing overrides here
               "prose-p:my-1 prose-p:leading-6 prose-headings:my-3",
               isExpanded 
                 ? "max-w-[850px] min-h-[1056px] rounded-sm shadow-[0_1px_3px_1px_rgba(60,64,67,.15)]" 
@@ -390,6 +375,7 @@ export const RichTextEditor = ({
           <div className="absolute bottom-10 right-10 z-50">
             <input type="file" ref={fileInputRef} className="hidden" multiple onChange={handleFileSelect} />
             <Button
+              type="button"
               size="icon"
               className="h-14 w-14 rounded-full shadow-2xl bg-blue-600 hover:bg-blue-700 text-white transition-transform active:scale-90"
               onClick={() => fileInputRef.current?.click()}

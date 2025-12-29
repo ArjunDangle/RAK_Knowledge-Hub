@@ -49,6 +49,10 @@ import { Table } from "@tiptap/extension-table";
 import TableRow from "@tiptap/extension-table-row";
 import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
+import TextAlign from "@tiptap/extension-text-align";
+import { TextStyle } from "@tiptap/extension-text-style";
+// ✅ IMPORT FONTSIZE
+import { FontSize } from "@/components/editor/useEditorConfig";
 
 import { RichTextEditor, EditorAttachment } from "@/components/editor/RichTextEditor"; // Added EditorAttachment type
 import { TreeSelect } from "@/components/cms/TreeSelect";
@@ -90,6 +94,8 @@ export default function CreatePage() {
     queryKey: ["articleForEdit", pageId],
     queryFn: () => getArticleById(pageId!),
     enabled: isEditMode,
+    staleTime: Infinity, // ✅ Keep data fresh during session
+    refetchOnWindowFocus: false, // ✅ Prevent tab-switch data loss
     retry: false,
   });
 
@@ -110,8 +116,13 @@ export default function CreatePage() {
       TableRow,
       TableHeader,
       TableCell,
-      // ✅ FIX: This was missing in the previous config
       AttachmentNode,
+      // ✅ ADDED TEXTSTYLE, FONTSIZE, AND TEXTALIGN
+      TextStyle,
+      FontSize,
+      TextAlign.configure({
+        types: ['heading', 'paragraph'],
+      }),
     ],
     content: "",
     editorProps: {
@@ -119,8 +130,21 @@ export default function CreatePage() {
         class: "focus:outline-none",
       },
     },
-    onUpdate: () => {
-      console.log("Content updated");
+    onUpdate: ({ editor }) => {
+      // Sync sidebar list with editor content (Fix for Backspace bug)
+      const currentAttachmentIdsInDoc = new Set<string>();
+      editor.state.doc.descendants((node) => {
+        if (node.type.name === "attachmentNode") {
+          const id = node.attrs["data-temp-id"] || node.attrs["data-file-name"];
+          if (id) currentAttachmentIdsInDoc.add(id);
+        }
+        return true;
+      });
+
+      setAttachments((prev) => {
+        const filtered = prev.filter((a) => currentAttachmentIdsInDoc.has(a.tempId));
+        return filtered.length === prev.length ? prev : filtered;
+      });
     },
   });
 
@@ -130,10 +154,12 @@ export default function CreatePage() {
 
     // 2. Sync with Editor: Find and delete the node with this tempId
     if (editor) {
+      let nodeFound = false;
       editor.state.doc.descendants((node, pos) => {
         if (
+          !nodeFound &&
           node.type.name === "attachmentNode" &&
-          node.attrs["data-temp-id"] === tempId
+          (node.attrs["data-temp-id"] === tempId || node.attrs["data-file-name"] === tempId)
         ) {
           editor
             .chain()
@@ -141,6 +167,7 @@ export default function CreatePage() {
             .focus()
             .run();
 
+          nodeFound = true; 
           return false; // Found it, stop searching
         }
         return true; // Keep searching
@@ -212,7 +239,7 @@ const handleFileUpload = async (file: File): Promise<string> => {
       // 1. Upload to server (to get the ID for the database)
       const response = await uploadAttachment(file);
       
-      const fileType = file.type.startsWith("image/")
+      const fileType: EditorAttachment['type'] = file.type.startsWith("image/")
         ? "image"
         : file.type.startsWith("video/")
         ? "video"
@@ -224,7 +251,7 @@ const handleFileUpload = async (file: File): Promise<string> => {
       const newAttachment: EditorAttachment = {
         file: file,
         tempId: response.temp_id || crypto.randomUUID(),
-        type: fileType as any,
+        type: fileType,
       };
       setAttachments((prev) => [...prev, newAttachment]);
 
@@ -295,7 +322,7 @@ const handleFileUpload = async (file: File): Promise<string> => {
   const watchedTitle = form.watch("title");
 
   useEffect(() => {
-    if (isEditMode && existingArticle && tagGroups && editor) {
+    if (isEditMode && existingArticle && tagGroups && editor && attachments.length === 0) {
       const defaultTagValues = tagGroups.reduce((acc, group) => {
         const groupKey = group.name.replace(/\s+/g, "_");
         const groupTagNames = new Set(group.tags.map((t) => t.name));
@@ -312,11 +339,28 @@ const handleFileUpload = async (file: File): Promise<string> => {
         ...defaultTagValues,
       });
 
+      // Detection Logic for existing attachments
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(existingArticle.html, 'text/html');
+      const existingNodes = doc.querySelectorAll('div[data-attachment-type]');
+      const detectedAttachments: EditorAttachment[] = [];
+      existingNodes.forEach((node) => {
+        const fileName = node.getAttribute('data-file-name');
+        const type = node.getAttribute('data-attachment-type') as EditorAttachment['type'];
+        if (fileName && type) {
+          detectedAttachments.push({
+            tempId: fileName, // Use filename as key for existing
+            type: type,
+          });
+        }
+      });
+      setAttachments(detectedAttachments);
+
       if (!editor.isDestroyed && editor.getHTML() !== existingArticle.html) {
         editor.commands.setContent(existingArticle.html);
       }
     }
-  }, [isEditMode, existingArticle, tagGroups, form, editor]);
+  }, [isEditMode, existingArticle, tagGroups, form, editor, attachments.length]);
 
   const createMutation = useMutation({
     mutationFn: (data: PageCreatePayload) => createPage(data),
@@ -359,10 +403,13 @@ const handleFileUpload = async (file: File): Promise<string> => {
       });
     }
 
-    const attachmentPayload: AttachmentInfo[] = attachments.map((a) => ({
-      temp_id: a.tempId,
-      file_name: a.file.name,
-    }));
+    // Only send NEW attachments (those that have a file object)
+    const attachmentPayload: AttachmentInfo[] = attachments
+      .filter(a => !!a.file)
+      .map((a) => ({
+        temp_id: a.tempId,
+        file_name: a.file!.name,
+      }));
 
     if (isEditMode) {
       const payload: PageUpdatePayload = {
@@ -584,7 +631,7 @@ const handleFileUpload = async (file: File): Promise<string> => {
                 </div>
 
                 <div className="space-y-4">
-                  <FormLabel>Attachments</FormLabel>
+                  <FormLabel>Attachments Sidebar</FormLabel>
                   {attachments.length > 0 && (
                     <div className="rounded-md border p-4 space-y-2">
                       {attachments.map((att) => (
@@ -594,13 +641,14 @@ const handleFileUpload = async (file: File): Promise<string> => {
                         >
                           <span className="flex items-center gap-2 truncate text-muted-foreground">
                             <Paperclip className="h-4 w-4 flex-shrink-0" />
-                            <span className="truncate">{att.file.name}</span>
+                            <span className="truncate">{att.file?.name || att.tempId}</span>
                           </span>
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-6 w-6 flex-shrink-0"
                             onClick={() => handleRemoveAttachment(att.tempId)}
+                            type="button"
                           >
                             <X className="h-4 w-4" />
                           </Button>

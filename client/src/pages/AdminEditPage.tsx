@@ -50,6 +50,10 @@ import { Table } from "@tiptap/extension-table";
 import TableRow from "@tiptap/extension-table-row";
 import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
+import TextAlign from "@tiptap/extension-text-align";
+import { TextStyle } from "@tiptap/extension-text-style";
+// ✅ IMPORT FONTSIZE
+import { FontSize } from "@/components/editor/useEditorConfig";
 
 // ✅ CUSTOM EDITOR EXTENSIONS
 import { AttachmentNode } from "@/components/editor/extensions/attachmentNode";
@@ -61,6 +65,8 @@ const formSchema = z.object({
   description: z.string().optional(),
   parent_id: z.string().min(1, "Category is required"),
 });
+
+type AdminEditFormValues = z.infer<typeof formSchema> & Record<string, string[]>;
 
 export default function AdminEditPage() {
   const { pageId } = useParams<{ pageId: string }>();
@@ -77,6 +83,9 @@ export default function AdminEditPage() {
     queryKey: ["adminPageEdit", pageId],
     queryFn: () => getPageDetailsForEdit(pageId!),
     enabled: !!pageId,
+    // Fix: Prevent losing state when switching tabs
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   });
 
   const { data: tagGroups } = useQuery({
@@ -118,6 +127,12 @@ export default function AdminEditPage() {
       TableCell,
       // ✅ Register AttachmentNode to handle our custom Files/Images
       AttachmentNode,
+      // ✅ ADDED TEXTSTYLE, FONTSIZE, AND TEXTALIGN
+      TextStyle,
+      FontSize,
+      TextAlign.configure({
+        types: ['heading', 'paragraph'],
+      }),
     ],
     content: "", 
     editorProps: {
@@ -125,11 +140,29 @@ export default function AdminEditPage() {
         class: "focus:outline-none",
       },
     },
+    onUpdate: ({ editor }) => {
+      // Sync sidebar list with editor content (Fix for Backspace bug)
+      const currentAttachmentIdsInDoc = new Set<string>();
+      editor.state.doc.descendants((node) => {
+        if (node.type.name === "attachmentNode") {
+          // Track by temp-id OR filename for existing ones
+          const id = node.attrs["data-temp-id"] || node.attrs["data-file-name"];
+          if (id) currentAttachmentIdsInDoc.add(id);
+        }
+        return true;
+      });
+
+      setAttachments((prev) => {
+        const filtered = prev.filter((a) => currentAttachmentIdsInDoc.has(a.tempId));
+        return filtered.length === prev.length ? prev : filtered;
+      });
+    },
   });
 
   // --- SYNC DATA: API -> FORM & EDITOR ---
   useEffect(() => {
-    if (pageDetails && tagGroups && editor) {
+    // Initial Load Guard: Only populate if data exists and attachments list is empty
+    if (pageDetails && tagGroups && editor && attachments.length === 0) {
       // 1. Map API Tags to Form Fields
       const defaultTagValues = tagGroups.reduce((acc, group) => {
         const groupKey = group.name.replace(/\s+/g, "_");
@@ -150,16 +183,30 @@ export default function AdminEditPage() {
         ...defaultTagValues,
       });
 
+      // ✅ Detection Logic for existing attachments
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(pageDetails.content, 'text/html');
+      const existingNodes = doc.querySelectorAll('div[data-attachment-type]');
+      
+      const detectedAttachments: EditorAttachment[] = [];
+      existingNodes.forEach((node) => {
+        const fileName = node.getAttribute('data-file-name');
+        const type = node.getAttribute('data-attachment-type') as EditorAttachment['type'];
+        if (fileName && type) {
+          detectedAttachments.push({
+            tempId: fileName, // Use filename as key for existing
+            type: type,
+          });
+        }
+      });
+      setAttachments(detectedAttachments);
+
       // 3. Set Editor Content (Only if editor is empty/fresh)
       if (!editor.isDestroyed && editor.isEmpty) {
         editor.commands.setContent(pageDetails.content);
       }
-      
-      // Note: If you have existing attachments in 'pageDetails', you might want to 
-      // map them to 'attachments' state here so they show in the sidebar list.
-      // For now, we assume 'attachments' state tracks *new* uploads for this session.
     }
-  }, [pageDetails, tagGroups, form, editor]);
+  }, [pageDetails, tagGroups, form, editor, attachments.length]);
 
   // --- FILE UPLOAD LOGIC (With Base64 Injection) ---
   const handleFileUpload = async (file: File): Promise<string> => {
@@ -169,7 +216,7 @@ export default function AdminEditPage() {
       const response = await uploadAttachment(file);
       
       // 2. Determine Type
-      const fileType = file.type.startsWith("image/")
+      const fileType: EditorAttachment['type'] = file.type.startsWith("image/")
         ? "image"
         : file.type.startsWith("video/")
         ? "video"
@@ -180,7 +227,7 @@ export default function AdminEditPage() {
       const newAttachment: EditorAttachment = {
         file: file,
         tempId: response.temp_id || crypto.randomUUID(),
-        type: fileType as any,
+        type: fileType,
       };
 
       // 3. Update State (Sidebar)
@@ -247,8 +294,31 @@ export default function AdminEditPage() {
   };
 
   const handleRemoveAttachment = (tempId: string) => {
+    // 1. Remove from the sidebar list state
     setAttachments((prev) => prev.filter((a) => a.tempId !== tempId));
-    // Optional: Logic to remove the specific node from editor by ID could go here
+
+    // 2. Sync with Editor: Find the specific node and delete it
+    if (editor) {
+      let nodeFound = false;
+      editor.state.doc.descendants((node, pos) => {
+        if (
+          !nodeFound &&
+          node.type.name === "attachmentNode" &&
+          (node.attrs["data-temp-id"] === tempId || node.attrs["data-file-name"] === tempId)
+        ) {
+          editor
+            .chain()
+            .deleteRange({ from: pos, to: pos + node.nodeSize })
+            .focus()
+            .run();
+          
+          nodeFound = true;
+          return false; // stop iteration
+        }
+        return true;
+      });
+    }
+    toast.info("Attachment removed");
   };
 
   // --- FORM SUBMISSION ---
@@ -257,14 +327,15 @@ export default function AdminEditPage() {
     onSuccess: () => {
       toast.success("Page updated successfully");
       queryClient.invalidateQueries({ queryKey: ["adminPageEdit"] });
-      navigate("/admin/content");
+      // ✅ FIXED: Changed route from "/admin/dashboard" to "/admin/content-index"
+      navigate("/admin/content-index");
     },
     onError: (err) => {
       toast.error("Failed to update page: " + err.message);
     },
   });
 
-  const onSubmit = (values: any) => {
+  const onSubmit = (values: z.infer<typeof dynamicSchema>) => {
     if (!editor) return;
     const content = editor.getHTML();
 
@@ -273,17 +344,20 @@ export default function AdminEditPage() {
     if (tagGroups) {
       tagGroups.forEach((group) => {
         const groupKey = group.name.replace(/\s+/g, "_");
-        if (Array.isArray(values[groupKey])) {
-          allSelectedTags.push(...values[groupKey]);
+        const val = (values as AdminEditFormValues)[groupKey];
+        if (Array.isArray(val)) {
+          allSelectedTags.push(...val);
         }
       });
     }
 
-    // Map new attachments
-    const attachmentPayload: AttachmentInfo[] = attachments.map((a) => ({
-      temp_id: a.tempId,
-      file_name: a.file.name,
-    }));
+    // Map only NEWLY uploaded attachments to avoid server errors
+    const attachmentPayload: AttachmentInfo[] = attachments
+      .filter(a => !!a.file) // Only those with a 'file' object are new
+      .map((a) => ({
+        temp_id: a.tempId,
+        file_name: a.file!.name,
+      }));
 
     const payload: PageUpdatePayload = {
       title: values.title,
@@ -321,7 +395,7 @@ export default function AdminEditPage() {
               Update content, tags, and settings.
             </p>
           </div>
-          <Button variant="ghost" onClick={() => navigate(-1)} className="gap-2">
+          <Button type="button" variant="ghost" onClick={() => navigate(-1)} className="gap-2">
             <ArrowLeft className="h-4 w-4" /> Back
           </Button>
         </div>
@@ -416,14 +490,14 @@ export default function AdminEditPage() {
                         <FormField
                           key={group.id}
                           control={form.control}
-                          name={fieldName as any}
+                          name={fieldName as "title"}
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>{group.name}</FormLabel>
                               <FormControl>
                                 <MultiSelect
                                   options={options}
-                                  selected={field.value || []}
+                                  selected={(field.value as unknown as string[]) || []}
                                   onChange={field.onChange}
                                   placeholder={`Select ${group.name}...`}
                                 />
@@ -438,17 +512,17 @@ export default function AdminEditPage() {
                     {/* ATTACHMENT LIST (Sidebar Sync) */}
                     {attachments.length > 0 && (
                       <div className="space-y-3 pt-4 border-t">
-                         <FormLabel>New Attachments</FormLabel>
+                         <FormLabel>Attachments Sidebar</FormLabel>
                          <div className="space-y-2">
                            {attachments.map((att) => (
                              <div key={att.tempId} className="flex items-center gap-2 text-sm p-2 bg-slate-50 dark:bg-zinc-900 rounded-md border">
                                <Paperclip className="h-3.5 w-3.5 text-blue-500" />
-                               <span className="truncate flex-1">{att.file.name}</span>
+                               <span className="truncate flex-1">{att.file?.name || att.tempId}</span>
                                <button 
                                  type="button"
                                  onClick={() => handleRemoveAttachment(att.tempId)}
                                  className="text-slate-400 hover:text-red-500"
-                               >
+                                >
                                  <X className="h-3.5 w-3.5" />
                                </button>
                              </div>
@@ -471,7 +545,7 @@ export default function AdminEditPage() {
                         ) : (
                           <Upload className="mr-2 h-4 w-4" />
                         )}
-                        Add Attachment
+                        Add New Attachment
                       </Button>
                       <input
                         type="file"
@@ -493,9 +567,9 @@ export default function AdminEditPage() {
                         Save Changes
                       </Button>
                       <Button
-                        variant="outline"
                         type="button"
-                        onClick={() => navigate("/admin/content")}
+                        variant="outline"
+                        onClick={() => navigate("/admin/content-index")}
                       >
                         Cancel
                       </Button>
